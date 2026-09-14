@@ -1,48 +1,40 @@
 /**
- * AceMods -- UI mod loader for Assetto Corsa EVO.
+ * AceMods.loader -- finds and loads the installed UI mods.
  *
- * Appended to the stock `uiresources/js/cohtml.js` at build time (tools/build_loader.py),
- * so it runs first on every Gameface page the game loads (intro, menu, ingame, hud,
- * ...). Once the page's DOM exists it reads `acemods/manifest.json`, then each listed
- * mod's `acemods/<name>/mod.json`, and injects that mod's stylesheets and scripts, in
- * order, on the pages the mod asked for. Mods are plain folders under
- * `Saved Games\ACE\mods\uiresources\acemods\` (a loose-file search directory of the
- * game); only this loader is a package. See ACEUIModLoader/docs/design.md.
+ * Last of the library files appended to the stock `uiresources/js/cohtml.js`.
+ * Once the page's DOM exists it reads `acemods/manifest.json`, then each listed
+ * mod's `acemods/<name>/mod.json`, and injects that mod's stylesheets and
+ * scripts, in order, on the pages the mod asked for. Mods are plain folders
+ * under `Saved Games\ACE\mods\uiresources\acemods\` (a loose-file search
+ * directory of the game); only the loader is a package. See docs/design.md.
  *
  * Manifest (`acemods/manifest.json`, maintained by tools/install_mod.py):
- *     { "mods": ["pedalgraph", "debugconsole"] }
+ *     { "mods": ["pedalgraph", "devconsole"] }
  *
  * Per mod (`acemods/<name>/mod.json`):
- *     { "name": "pedalgraph", "version": "0.3.0", "pages": ["hud.html"],
+ *     { "name": "pedalgraph", "version": "0.4.0", "pages": ["hud.html"],
  *       "styles": ["pedalgraph.css"], "scripts": ["pedalgraph.js", "mod.js"] }
  *
  * Everything the loader logs starts with "[AceMods]" so the game log (and
  * tools/check_ingame_log.py) can follow it.
  */
-const AceMods = (function () {
+AceMods.loader = (function () {
 
-    const VERSION = "0.1.0";
-    const LOG_PREFIX = "[AceMods]";
     /** Folder, relative to the page, that holds the manifest and the mod folders. */
     const ROOT = "acemods/";
     const MANIFEST_URL = ROOT + "manifest.json";
     const MOD_FILE = "mod.json";
     /** Fallback when a mod.json lists no pages: only the HUD. */
     const DEFAULT_PAGES = ["hud.html"];
+    /** A mod.json page list containing this loads the mod on every page. */
+    const ANY_PAGE = "*";
+    const HTTP_OK = 200;
+
+    const log = AceMods.log;
 
     const state = {
-        page: location.pathname.split("/").pop() || "",
         mods: [],           // { name, info, status }
         readyCallbacks: []
-    };
-
-    const log = function (message) {
-        console.log(LOG_PREFIX + " " + message);
-    };
-
-    /** Prefixed logger for mods: AceMods.logger("[PedalGraph]")("hello"). */
-    const logger = function (prefix) {
-        return function (message) { console.log(prefix + " " + message); };
     };
 
     /** GET a text resource relative to the page; onDone(text|null). Missing => null. */
@@ -51,7 +43,7 @@ const AceMods = (function () {
 
         xhr.open("GET", url);
         xhr.onload = function () {
-            const ok = xhr.status === 200 || (xhr.status === 0 && xhr.responseText);
+            const ok = xhr.status === HTTP_OK || (xhr.status === 0 && xhr.responseText);
 
             onDone(ok ? xhr.responseText : null);
         };
@@ -62,7 +54,7 @@ const AceMods = (function () {
     const parseJson = function (text, what) {
         try {
             return JSON.parse(text);
-        } catch (ignore) { /* reported by the caller */ }
+        } catch (ignore) { /* reported below */ }
 
         log(what + ": invalid JSON");
 
@@ -108,7 +100,7 @@ const AceMods = (function () {
     const wantsPage = function (info) {
         const pages = Array.isArray(info.pages) && info.pages.length ? info.pages : DEFAULT_PAGES;
 
-        return pages.indexOf(state.page) >= 0 || pages.indexOf("*") >= 0;
+        return pages.indexOf(AceMods.page) >= 0 || pages.indexOf(ANY_PAGE) >= 0;
     };
 
     const loadMod = function (name, onDone) {
@@ -159,7 +151,7 @@ const AceMods = (function () {
     };
 
     const start = function () {
-        log("loader " + VERSION + " on /" + state.page);
+        log("loader " + AceMods.VERSION + " on /" + AceMods.page);
         fetchText(MANIFEST_URL, function (text) {
             const manifest = text === null ? null : parseJson(text, MANIFEST_URL);
 
@@ -174,7 +166,7 @@ const AceMods = (function () {
         });
     };
 
-    /** Runs after all mods for this page have been processed (or immediately if done). */
+    /** Runs after all mods for this page have been processed. */
     const ready = function (callback) {
         state.readyCallbacks.push(callback);
     };
@@ -186,18 +178,19 @@ const AceMods = (function () {
     }
 
     return {
-        VERSION: VERSION,
-        LOG_PREFIX: LOG_PREFIX,
         ROOT: ROOT,
-        page: state.page,
+        MOD_FILE: MOD_FILE,
+        DEFAULT_PAGES: DEFAULT_PAGES,
         mods: state.mods,
-        log: log,
-        logger: logger,
+        ready: ready,
         addStylesheet: addStylesheet,
-        addScript: addScript,
-        ready: ready
+        addScript: addScript
     };
 }());
 
-/* A top-level const is not a window property; mods test `window.AceMods` to detect the loader. */
-window.AceMods = AceMods;
+/* Convenience aliases so mods can stay on the flat `AceMods.*` API. */
+AceMods.ROOT = AceMods.loader.ROOT;
+AceMods.mods = AceMods.loader.mods;
+AceMods.ready = AceMods.loader.ready;
+AceMods.addStylesheet = AceMods.loader.addStylesheet;
+AceMods.addScript = AceMods.loader.addScript;

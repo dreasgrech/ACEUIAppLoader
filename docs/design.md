@@ -277,3 +277,38 @@ version; UI mods as loose folders with no packaging and no padding.
 - Toggle key for the console: the stock HUD routes input actions through
   `engine.on("UIExInputsAction", ...)`; a keyboard shortcut needs either that
   event or a plain `keydown` listener, to be tested in Cohtml.
+
+## 9. Implemented (2026-09-14, loader 0.2.0)
+
+The library exists and both mods run on it; this section records what was
+built against sections 4 and 5, and where it deviates.
+
+- **Where the library lives.** Not as loose files: all six `src/acemods.*.js`
+  files are appended to the stock `js/cohtml.js` inside the loader package, in
+  `LIB_ORDER` (core, console, persist, panel, loop, loader). Reason: the
+  console hook must run before `components.js`, which only the host can
+  guarantee, and mods may then rely on `AceMods.*` existing synchronously.
+  The cost is a rebuild + reinstall for library changes (padding unchanged,
+  it depends only on paths).
+- **Namespaces** as planned: `AceMods` (core), `.console`, `.persist`,
+  `.panel`, `.loop`, `.loader`; flat aliases `AceMods.ready/mods/addScript/
+  addStylesheet/ROOT` keep the 0.1.0 surface.
+- **Hidden-until-placed** is an inline `visibility` style set by the panel,
+  not a CSS class, so the library needs no stylesheet.
+- **`data-nodrag`** on descendants (prompt, buttons) excludes them from
+  starting a drag; needed by the console.
+- **Persistence API** ended up lower-level than section 4's
+  `persist.load(id, onReady)`: `readHud/readLocal/save` plus the polling done
+  by `panel.update(panel, now)` in the mod's frame. Simpler, same behaviour.
+- **Console buffer** is per page (section 6, first option): lost on the
+  Escape/resume reload, but the hook runs on every page so menu-page logs are
+  captured too; only the HUD shows them today.
+- **PedalGraph 0.4.0** shrank from 627 to ~330 lines and is only the graph.
+  **DevConsole 0.1.0** (repo `ACEDevConsole`) is the second mod: row pool of
+  200 recycled elements, filters, prompt with expression-then-statement
+  compilation, backquote toggle. Open question left for the first launch:
+  whether keyboard focus reaches the prompt while driving.
+- **Tests.** Library behaviour is tested in the loader repo
+  (`tests/lib/harness.html`, 17 cases); each mod tests its own logic plus its
+  integration with the panel. The headless runner moved to
+  `tools/headless.py` and is shared.

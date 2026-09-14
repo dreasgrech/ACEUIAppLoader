@@ -1,0 +1,324 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<title>AceMods library tests</title>
+<style>
+  body { margin: 0; background: #222; color: #ddd; font: 12px monospace; }
+  /* stand-in for the game's HUD container */
+  .absolutecenter { position: relative; width: 1600px; height: 900px; overflow: hidden; }
+  .panel { position: absolute; left: 2rem; bottom: 2rem; width: 200px; height: 100px; background: #444; }
+  #results { white-space: pre; }
+</style>
+<script>
+// ---- test doubles, installed before the library loads ---------------------------------
+
+// Manual animation-frame clock: tests call __clock.step(t) to run queued callbacks.
+window.__clock = {
+    queue: [], nextId: 1, cancelled: 0,
+    step: function (t) {
+        const run = this.queue; this.queue = [];
+        run.forEach(function (q) { q[1](t); });
+    }
+};
+window.requestAnimationFrame = function (cb) { const id = window.__clock.nextId++; window.__clock.queue.push([id, cb]); return id; };
+window.cancelAnimationFrame = function (id) {
+    const n = window.__clock.queue.length;
+    window.__clock.queue = window.__clock.queue.filter(function (q) { return q[0] !== id; });
+    if (window.__clock.queue.length !== n) { window.__clock.cancelled++; }
+};
+
+// In-memory localStorage so file:// origin quirks cannot affect the tests.
+const __store = {};
+Object.defineProperty(window, "localStorage", { value: {
+    getItem: function (k) { return (k in __store) ? __store[k] : null; },
+    setItem: function (k, v) { __store[k] = String(v); },
+    removeItem: function (k) { delete __store[k]; },
+    clear: function () { Object.keys(__store).forEach(function (k) { delete __store[k]; }); }
+}});
+
+// Capture what reaches the *original* console, to prove the hook chains to it.
+window.__log = [];
+const __origLog = console.log.bind(console);
+console.log = function () { const a = Array.prototype.slice.call(arguments); window.__log.push(a.join(" ")); __origLog.apply(null, a); };
+window.__warn = [];
+console.warn = function () { window.__warn.push(Array.prototype.slice.call(arguments).join(" ")); };
+console.error = function () { window.__warn.push(Array.prototype.slice.call(arguments).join(" ")); };
+</script>
+<!-- the library exactly as build_loader.py appends it to cohtml.js, same order -->
+<script src="../../src/acemods.core.js"></script>
+<script src="../../src/acemods.console.js"></script>
+<script src="../../src/acemods.persist.js"></script>
+<script src="../../src/acemods.panel.js"></script>
+<script src="../../src/acemods.loop.js"></script>
+<script src="../../src/acemods.loader.js"></script>
+</head>
+<body>
+<div class="absolutecenter" id="center"></div>
+<pre id="results"></pre>
+<div id="done" hidden></div>
+
+<script>
+// Runs on DOMContentLoaded: the loader registered its own listener first, so its
+// boot line is logged before the cases run, exactly as on a game page.
+document.addEventListener("DOMContentLoaded", function () {
+    const results = [];
+    const t = function (name, fn) {
+        try { fn(); results.push({ name: name, pass: true }); }
+        catch (e) { results.push({ name: name, pass: false, msg: String(e && e.message || e) }); }
+    };
+    const eq = function (a, b, what) { if (a !== b) { throw new Error((what || "") + " expected " + JSON.stringify(b) + " got " + JSON.stringify(a)); } };
+    const ok = function (c, what) { if (!c) { throw new Error(what || "assertion failed"); } };
+    const near = function (a, b, eps, what) { if (Math.abs(a - b) > eps) { throw new Error((what || "") + " expected ~" + b + " got " + a); } };
+    const last = function (arr) { return arr[arr.length - 1]; };
+
+    const clock = window.__clock;
+    const center = document.getElementById("center");
+    const mouse = function (type, x, y, target) {
+        (target || window).dispatchEvent(new MouseEvent(type, { clientX: x, clientY: y, bubbles: true }));
+    };
+    const makeHud = function (elements) {
+        const hud = { currentLayout: "default", StoredData: { lastLayout: "default", layouts: { default: { elements: elements || {} } } } };
+        hud.elementModified = function (id, props) { hud.StoredData.layouts.default.elements[id] = props; };
+        return hud;
+    };
+    const makePanel = function (opts) {
+        const root = document.createElement("div");
+        root.className = "panel";
+        center.appendChild(root);
+        const panel = AceMods.panel.attach(root, Object.assign({ hudId: "hud_test", storageKey: "acetest.pos", log: function () {} }, opts || {}));
+        return { root: root, panel: panel };
+    };
+    const HUD_ID = "hud_test", KEY = "acetest.pos", WAIT = AceMods.panel.RESTORE_WAIT_MS;
+
+    // ---- core ---------------------------------------------------------------------------
+
+    t("core: namespace, version, page, window property", function () {
+        eq(typeof AceMods, "object"); eq(window.AceMods, AceMods, "window.AceMods");
+        ok(/^\d+\.\d+\.\d+$/.test(AceMods.VERSION), "semver"); eq(AceMods.page, "harness.html", "page");
+        eq(AceMods.LOG_PREFIX, "[AceMods]"); eq(AceMods.HUD_HIDDEN_CLASS, "hide-hud");
+        ["console", "persist", "panel", "loop", "loader"].forEach(function (ns) { eq(typeof AceMods[ns], "object", ns); });
+    });
+
+    t("core: helpers", function () {
+        eq(AceMods.clamp(5, 0, 1), 1); eq(AceMods.clamp(-1, 0, 1), 0); eq(AceMods.clamp(0.5, 0, 1), 0.5);
+        eq(AceMods.el("div", "a", { "data-x": 1 }) + AceMods.close("div"), '<div class="a" data-x="1"></div>');
+        eq(AceMods.percentText(0.499), "50%"); eq(AceMods.percentText(0), "0%");
+        eq(AceMods.toArray(document.querySelectorAll("div")).length >= 1, true);
+        eq(AceMods.hudHidden(), false); document.body.classList.add("hide-hud"); eq(AceMods.hudHidden(), true); document.body.classList.remove("hide-hud");
+        AceMods.logger("[T]")("hi"); eq(last(window.__log), "[T] hi", "logger prefix"); AceMods.log("x"); eq(last(window.__log), "[AceMods] x");
+        const outer = document.createElement("div"), inner = document.createElement("span"); inner.setAttribute("data-nodrag", ""); outer.appendChild(inner);
+        const deep = document.createElement("b"); inner.appendChild(deep);
+        eq(AceMods.closestWithAttribute(deep, "data-nodrag", outer), inner, "closest finds ancestor"); eq(AceMods.closestWithAttribute(outer, "data-nodrag", outer), null, "stops at root");
+    });
+
+    // ---- console ------------------------------------------------------------------------
+
+    t("console: hook captures levels and text, still calls the original", function () {
+        AceMods.console.clear();
+        console.log("hello", 42, true, null);
+        console.warn("careful");
+        console.error(new Error("boom"));
+        const e = AceMods.console.entries();
+        eq(e.length, 3, "entries"); eq(e[0].level, "log"); eq(e[0].text, "hello 42 true null"); eq(e[1].level, "warn"); eq(e[1].text, "careful");
+        eq(e[2].level, "error"); eq(e[2].text, "Error: boom");
+        eq(last(window.__log).indexOf("hello 42 true"), 0, "original console.log reached"); eq(window.__warn.length >= 2, true, "original warn/error reached");
+        ok(e[0].seq < e[1].seq && e[1].seq < e[2].seq, "seq increases"); eq(typeof e[0].t, "number");
+    });
+
+    t("console: objects are formatted compactly and bounded", function () {
+        AceMods.console.clear();
+        console.log({ a: 1, b: "x", c: [1, 2, { d: 3 }], f: function named() {} });
+        eq(AceMods.console.entries()[0].text, '{a: 1, b: "x", c: [1, 2, {...}], f: [function named]}');
+        const big = {}; let i; for (i = 0; i < 30; i += 1) { big["k" + i] = i; }
+        console.log(big);
+        ok(AceMods.console.entries()[1].text.indexOf("...}") > 0, "key cap");
+        console.log("x".repeat(1000));
+        eq(AceMods.console.entries()[2].text.length, 403, "text cap");
+        eq(AceMods.console.format([1, [2, [3]]]), "[1, [2, [...]]]", "format export");
+    });
+
+    t("console: ring buffer keeps the last MAX_ENTRIES", function () {
+        AceMods.console.clear();
+        let i; for (i = 0; i < AceMods.console.MAX_ENTRIES + 10; i += 1) { console.log("n" + i); }
+        eq(AceMods.console.entries().length, AceMods.console.MAX_ENTRIES);
+        eq(AceMods.console.entries()[0].text, "n10", "oldest dropped");
+    });
+
+    t("console: subscribe / unsubscribe / capture / errors", function () {
+        AceMods.console.clear();
+        const seen = [];
+        const off = AceMods.console.subscribe(function (entry) { seen.push(entry.level + ":" + entry.text); });
+        eq(AceMods.console.listenerCount(), 1);
+        console.log("a"); AceMods.console.capture("input", "> 1+1");
+        eq(seen.join("|"), "log:a|input:> 1+1");
+        eq(window.__log.indexOf("> 1+1"), -1, "capture does not reach console");
+        window.dispatchEvent(new ErrorEvent("error", { message: "kaboom", filename: "x.js", lineno: 7 }));
+        eq(last(seen), "error:uncaught: kaboom at x.js:7");
+        off(); eq(AceMods.console.listenerCount(), 0);
+        console.log("b"); eq(seen.length, 3, "no notification after unsubscribe");
+        // a listener that logs must not recurse
+        const off2 = AceMods.console.subscribe(function () { console.log("from listener"); });
+        console.log("trigger"); off2();
+        eq(last(AceMods.console.entries()).text, "from listener", "stored once, no infinite loop");
+    });
+
+    // ---- persist -------------------------------------------------------------------------
+
+    t("persist: local round trip, hud store when present", function () {
+        window.HUD = null; localStorage.clear();
+        eq(AceMods.persist.hudAvailable(), false); eq(AceMods.persist.readHud("hud_x"), null);
+        eq(AceMods.persist.writeHud("hud_x", { a: 1 }), false, "no HUD object");
+        eq(AceMods.persist.writeLocal("k", { a: 1 }), true); eq(AceMods.persist.readLocal("k").a, 1);
+        AceMods.persist.removeLocal("k"); eq(AceMods.persist.readLocal("k"), null);
+        eq(AceMods.persist.save("hud_x", "k", { b: 2 }).join(","), "localStorage");
+        window.HUD = makeHud({});
+        eq(AceMods.persist.hudAvailable(), true);
+        eq(AceMods.persist.save("hud_x", "k", { b: 3 }).join(","), "hud layout,localStorage");
+        eq(AceMods.persist.readHud("hud_x").b, 3); eq(AceMods.persist.readLocal("k").b, 3);
+        window.HUD = null; localStorage.clear();
+    });
+
+    // ---- panel ------------------------------------------------------------------------------
+
+    t("panel: attach hides until placed; drag moves, clamps and saves fractions", function () {
+        window.HUD = null; localStorage.clear();
+        const p = makePanel(); const root = p.root;
+        eq(root.style.visibility, "hidden", "hidden while positioning");
+        root.style.left = "100px"; root.style.top = "100px"; root.style.bottom = "auto";
+        const r = root.getBoundingClientRect();
+        mouse("mousedown", r.left + 10, r.top + 10, root);
+        ok(root.classList.contains("dragging"), "dragging class");
+        mouse("mousemove", r.left + 210, r.top + 60);
+        eq(root.style.left, "300px", "left"); eq(root.style.top, "150px", "top"); eq(root.style.right, "auto", "right reset");
+        mouse("mousemove", 99999, 99999);
+        const c = center.getBoundingClientRect();
+        eq(parseInt(root.style.left, 10), Math.round(c.width - root.offsetWidth), "clamped right");
+        eq(parseInt(root.style.top, 10), Math.round(c.height - root.offsetHeight), "clamped bottom");
+        mouse("mousemove", -99999, -99999); eq(root.style.left, "0px"); eq(root.style.top, "0px");
+        mouse("mousemove", r.left + 410, r.top + 260); mouse("mouseup", 0, 0);
+        ok(!root.classList.contains("dragging"));
+        const saved = JSON.parse(localStorage.getItem(KEY));
+        near(saved.fx, 500 / c.width, 0.001, "fx"); near(saved.fy, 350 / c.height, 0.001, "fy"); eq(saved.x, "500px"); eq(saved.y, "350px");
+        AceMods.panel.detach(p.panel); root.remove();
+    });
+
+    t("panel: data-nodrag descendants do not start a drag; onSaved fires with the HUD store written", function () {
+        window.HUD = makeHud(); localStorage.clear();
+        let savedPos = null;
+        const p = makePanel({ onSaved: function (pos) { savedPos = pos; } }); const root = p.root;
+        const input = document.createElement("input"); input.setAttribute("data-nodrag", ""); root.appendChild(input);
+        root.style.left = "100px"; root.style.top = "100px"; root.style.bottom = "auto";
+        mouse("mousedown", 105, 105, input);
+        ok(!root.classList.contains("dragging"), "input must not start a drag");
+        mouse("mousemove", 400, 400); eq(root.style.left, "100px", "did not move");
+        mouse("mousedown", 105, 105, root); mouse("mousemove", 125, 115); mouse("mouseup", 0, 0);
+        const entry = window.HUD.StoredData.layouts.default.elements[HUD_ID];
+        ok(entry, "HUD store entry"); eq(entry.x, "120px"); eq(entry.y, "110px"); ok(savedPos && savedPos.x === "120px", "onSaved");
+        AceMods.panel.detach(p.panel); root.remove(); window.HUD = null;
+    });
+
+    t("panel: localStorage position applied synchronously at attach, HUD store keeps the last word", function () {
+        window.HUD = null; localStorage.setItem(KEY, JSON.stringify({ fx: 0.2, fy: 0.3 }));
+        const p = makePanel(); const c = center.getBoundingClientRect();
+        eq(p.root.style.left, Math.round(0.2 * c.width) + "px", "placed immediately"); eq(p.root.style.visibility, "", "visible right away");
+        ok(!p.panel.restored, "not settled yet");
+        window.HUD = makeHud({}); window.HUD.StoredData.layouts.default.elements[HUD_ID] = { fx: 0.5, fy: 0.5 };
+        AceMods.panel.update(p.panel, 1000);
+        eq(p.root.style.left, Math.round(0.5 * c.width) + "px", "HUD store wins"); ok(p.panel.restored);
+        AceMods.panel.detach(p.panel); p.root.remove(); localStorage.clear(); window.HUD = null;
+    });
+
+    t("panel: nothing stored: hidden until the HUD store was consulted, then default", function () {
+        window.HUD = null; localStorage.clear();
+        const p = makePanel();
+        eq(p.root.style.visibility, "hidden"); eq(p.root.style.left, "", "nothing applied");
+        AceMods.panel.update(p.panel, 1000); eq(p.panel.restored, false, "waiting for HUD");
+        window.HUD = makeHud({}); AceMods.panel.update(p.panel, 1016);
+        eq(p.root.style.left, "", "stylesheet default kept"); ok(p.panel.restored); eq(p.root.style.visibility, "", "shown");
+        AceMods.panel.detach(p.panel); p.root.remove(); window.HUD = null;
+    });
+
+    t("panel: no HUD object at all: localStorage fallback after the wait window", function () {
+        window.HUD = null; localStorage.clear();
+        const p = makePanel();
+        localStorage.setItem(KEY, JSON.stringify({ fx: 0.3, fy: 0.4 }));   // saved later in the session
+        AceMods.panel.update(p.panel, 5000); AceMods.panel.update(p.panel, 5000 + WAIT - 1);
+        eq(p.root.style.left, "", "not yet"); AceMods.panel.update(p.panel, 5000 + WAIT);
+        const c = center.getBoundingClientRect(); eq(p.root.style.left, Math.round(0.3 * c.width) + "px", "fallback applied"); ok(p.panel.restored);
+        AceMods.panel.detach(p.panel); p.root.remove(); localStorage.clear();
+    });
+
+    t("panel: legacy/invalid stored positions are ignored; zero-size parent defers", function () {
+        window.HUD = makeHud({}); localStorage.setItem(KEY, JSON.stringify({ left: "5px" }));
+        const p = makePanel(); eq(p.root.style.left, "", "nothing applied synchronously");
+        AceMods.panel.update(p.panel, 100); eq(p.root.style.left, ""); ok(p.panel.restored, "gave up cleanly");
+        AceMods.panel.detach(p.panel); p.root.remove(); localStorage.clear();
+        window.HUD.StoredData.layouts.default.elements[HUD_ID] = { fx: 0.5, fy: 0.5 };
+        const hidden = document.createElement("div"); hidden.className = "absolutecenter"; hidden.style.display = "none"; document.body.appendChild(hidden);
+        const root = document.createElement("div"); root.className = "panel"; hidden.appendChild(root);
+        const panel = AceMods.panel.attach(root, { hudId: HUD_ID, storageKey: KEY, log: function () {} });
+        AceMods.panel.update(panel, 200); AceMods.panel.update(panel, 200 + WAIT + 100);
+        eq(root.style.left, "", "nothing while the container has no size"); ok(!panel.restored);
+        hidden.style.display = "block"; AceMods.panel.update(panel, 200 + WAIT + 200);
+        eq(root.style.left, Math.round(0.5 * hidden.getBoundingClientRect().width) + "px", "applied once laid out"); ok(panel.restored);
+        AceMods.panel.detach(panel); hidden.remove(); window.HUD = null;
+    });
+
+    t("panel: detach releases listeners and shows the root", function () {
+        window.HUD = null; localStorage.clear();
+        const p = makePanel(); p.root.style.left = "10px"; p.root.style.top = "10px";
+        AceMods.panel.detach(p.panel);
+        eq(p.root.style.visibility, "", "shown");
+        mouse("mousedown", 15, 15, p.root); mouse("mousemove", 500, 500); mouse("mouseup", 0, 0);
+        eq(p.root.style.left, "10px", "listeners released"); eq(localStorage.getItem(KEY), null, "nothing saved");
+        p.root.remove();
+    });
+
+    // ---- loop ----------------------------------------------------------------------------
+
+    t("loop: start schedules frames before the callback, stop cancels", function () {
+        const seen = [];
+        const h = AceMods.loop.start(function (now) { seen.push(now); if (now === 2) { throw new Error("frame error"); } });
+        eq(clock.queue.length, 1, "first frame queued");
+        clock.step(1); eq(seen.join(","), "1"); eq(clock.queue.length, 1, "next frame queued");
+        try { clock.step(2); } catch (ignore) { /* the throw escapes the fake clock; the loop must survive */ }
+        eq(clock.queue.length, 1, "loop survived a throwing frame");
+        const cancelled = clock.cancelled;
+        AceMods.loop.stop(h);
+        eq(clock.cancelled, cancelled + 1); eq(clock.queue.length, 0); eq(h.rafId, 0); eq(h.running, false);
+        clock.step(3); eq(seen.length, 2, "no frames after stop");
+    });
+
+    t("loop: sampler commits at the fixed rate, catches up, resets after a stall", function () {
+        const s = AceMods.loop.sampler(50, 5000);   // 20 ms period, 5 s max gap
+        let commits = 0; const commit = function () { commits += 1; };
+        near(AceMods.loop.advance(s, 1000, commit), 0, 1e-9, "first call starts the clock"); eq(commits, 0);
+        near(AceMods.loop.advance(s, 1010, commit), 0.5, 1e-9, "half way"); eq(commits, 0);
+        near(AceMods.loop.advance(s, 1020, commit), 0, 1e-9); eq(commits, 1, "one sample due");
+        AceMods.loop.advance(s, 1020 + 20 * 5, commit); eq(commits, 6, "catch up after a hitch");
+        AceMods.loop.advance(s, 1120 + 20000, commit); eq(commits, 6, "stall restarts the clock instead of replaying");
+        AceMods.loop.advance(s, 21120 + 20, commit); eq(commits, 7);
+        AceMods.loop.reset(s); eq(s.lastSampleAt, 0);
+        near(AceMods.loop.advance(s, 50000, commit), 0, 1e-9); eq(commits, 7, "reset: fresh start");
+    });
+
+    // ---- loader ---------------------------------------------------------------------------
+
+    t("loader: constants, aliases, and it announced itself", function () {
+        eq(AceMods.loader.ROOT, "acemods/"); eq(AceMods.ROOT, "acemods/"); eq(AceMods.loader.MOD_FILE, "mod.json");
+        eq(AceMods.loader.DEFAULT_PAGES.join(","), "hud.html");
+        eq(AceMods.ready, AceMods.loader.ready); eq(AceMods.mods, AceMods.loader.mods); eq(typeof AceMods.addScript, "function");
+        ok(window.__log.some(function (l) { return l === "[AceMods] loader " + AceMods.VERSION + " on /harness.html"; }), "boot line");
+    });
+
+    const passed = results.filter(function (r) { return r.pass; }).length;
+    document.getElementById("results").textContent =
+        results.map(function (r) { return (r.pass ? "PASS " : "FAIL ") + r.name + (r.msg ? "  -- " + r.msg : ""); }).join("\n") +
+        "\nSUMMARY " + passed + "/" + results.length;
+    document.getElementById("done").hidden = false;
+    document.getElementById("done").textContent = "DONE";
+});
+</script>
+</body>
+</html>

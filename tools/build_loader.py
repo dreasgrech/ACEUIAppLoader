@@ -4,7 +4,10 @@ build_loader.py - build the AceMods loader package.
 
 1. Extract the stock `uiresources/js/cohtml.js` from the installed content.kspkg
    (never committed; it is Kunos'/Coherent's file).
-2. Append src/acemods.loader.js to it -> build/uiresources/js/cohtml.js.
+2. Append the library files in LIB_ORDER (src/acemods.*.js) to it
+   -> build/uiresources/js/cohtml.js. The order matters: core defines the
+   namespace, console hooks console.* before the stock bundle runs, loader
+   comes last and starts loading mods once the DOM exists.
 3. Pack build/ with tools/pack_kspkg.py (which adds the padding that makes this
    single override win the game's lookup) -> dist/acemods_loader.kspkg.
 4. --install copies it to the game's mods folder.
@@ -23,7 +26,15 @@ import kspkg  # noqa: E402
 import pack_kspkg as pk  # noqa: E402
 
 HOST_PATH = "uiresources/js/cohtml.js"
-LOADER_SRC = os.path.join(_repos.REPO, "src", "acemods.loader.js")
+SRC_DIR = os.path.join(_repos.REPO, "src")
+LIB_ORDER = [
+    "acemods.core.js",
+    "acemods.console.js",
+    "acemods.persist.js",
+    "acemods.panel.js",
+    "acemods.loop.js",
+    "acemods.loader.js",
+]
 BUILD_DIR = os.path.join(_repos.REPO, "build")
 OUT = os.path.join(_repos.REPO, "dist", "acemods_loader.kspkg")
 
@@ -33,26 +44,48 @@ def read_version():
         return f.read().strip()
 
 
+def marker(name):
+    return f"\n\n/* ---- {name} (AceMods {read_version()}, appended by ACEUIModLoader/tools/build_loader.py) ---- */\n"
+
+
+def library_sources():
+    """[(file name, text)] in load order; checks the version constant and that nothing is missing."""
+    version = read_version()
+    out = []
+    for name in LIB_ORDER:
+        path = os.path.join(SRC_DIR, name)
+        if not os.path.exists(path):
+            raise SystemExit(f"missing library file {path}")
+        with open(path, encoding="utf-8") as f:
+            out.append((name, f.read()))
+    core = dict(out)["acemods.core.js"]
+    if f'const VERSION = "{version}";' not in core:
+        raise SystemExit(f"src/acemods.core.js VERSION does not match VERSION file ({version})")
+    unlisted = sorted(n for n in os.listdir(SRC_DIR) if n.endswith(".js") and n not in LIB_ORDER)
+    if unlisted:
+        raise SystemExit(f"src/ has files not in LIB_ORDER: {unlisted}")
+    return out
+
+
 def assemble(build_dir=BUILD_DIR, game_dir=None):
     base_pkg = os.path.join(game_dir or _repos.game_dir(), "content.kspkg")
     if not os.path.exists(base_pkg):
         raise SystemExit(f"content.kspkg not found at {base_pkg} (set ACE_GAME_DIR)")
     stock = kspkg.extract(base_pkg, HOST_PATH)
-    with open(LOADER_SRC, encoding="utf-8") as f:
-        loader = f.read()
-    version = read_version()
-    if f'const VERSION = "{version}";' not in loader:
-        raise SystemExit(f"src/acemods.loader.js VERSION does not match VERSION file ({version})")
+    sources = library_sources()
 
     if os.path.isdir(build_dir):
         shutil.rmtree(build_dir)
     target = os.path.join(build_dir, *HOST_PATH.split("/"))
     os.makedirs(os.path.dirname(target), exist_ok=True)
+    appended = 0
     with open(target, "wb") as f:
         f.write(stock)
-        f.write(b"\n\n/* ---- AceMods loader appended by ACEUIModLoader/tools/build_loader.py ---- */\n")
-        f.write(loader.encode("utf-8"))
-    print(f"assembled {HOST_PATH}: stock {len(stock)} bytes + loader {len(loader)} chars (v{version})")
+        for name, text in sources:
+            f.write(marker(name).encode("utf-8"))
+            f.write(text.encode("utf-8"))
+            appended += len(text)
+    print(f"assembled {HOST_PATH}: stock {len(stock)} bytes + {len(sources)} library files, {appended} chars (v{read_version()})")
     return build_dir
 
 
