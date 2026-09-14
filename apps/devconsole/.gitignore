@@ -1,4 +1,7 @@
+# python
 __pycache__/
 *.pyc
+
+# editor swap / temp files (install_mod.py skips them too)
 *.swp
 *~
