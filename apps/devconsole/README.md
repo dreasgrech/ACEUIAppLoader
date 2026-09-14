@@ -1,6 +1,6 @@
 # ACE DevConsole
 
-In-game debug console for Assetto Corsa EVO's HUD. Version 0.1.0, for game
+In-game debug console for Assetto Corsa EVO's HUD. Version 0.2.0, for game
 version 0.9.1+release.6.
 
 A draggable panel that shows everything the UI logs, including the stock
@@ -29,7 +29,9 @@ and the tests load the library from `../ACEUIModLoader/src/`.
   the toggle key and the close/clear buttons.
 - `src/mod.js` - loader entry point: creates `<div id="devconsole">` inside
   the HUD's positioning container and calls `DevConsole.attach`.
-- `src/devconsole.css` - all styling; line colours keyed by `data-level`.
+- `src/devconsole.css` - all styling, in the stock HUD widgets' language (black
+  75 % panel, solid `#1c1e1f` header bar, flat buttons that turn `#bd0000` on
+  hover, the stock scrollbar look); line colours keyed by `data-level`.
 - `VERSION` - the mod version, single source of truth.
 - `dev/preview.html` - runs the console outside the game (see below).
 - `tools/install.py` - thin wrapper around the loader's `install_mod.py`.
@@ -54,10 +56,21 @@ Edits to `src/` need only a re-run of `install.py` and a HUD reload in game
 ## Using it
 
 - **Backquote** (`` ` ``) opens and closes the panel; the state is remembered
-  for the session. The `x` button closes it too.
+  for the session. The `×` button closes it too.
 - **LOG / WARN / ERR** toggle those levels; the number is how many lines of
   that level the buffer holds. Prompt echo and results are always shown.
-- **clear** empties the shared buffer (for every consumer of it).
+- **CLEAR** empties the shared buffer (for every consumer of it).
+- **Filter text**: the field in the header hides every line that does not
+  contain what you type (case-insensitive); Escape clears it. Level filters
+  and the counts are unaffected.
+- **Scrolling**: the wheel moves the list (a quarter of the visible height per
+  notch; Cohtml reports the wheel with the opposite sign to a browser, so the
+  direction is flipped in game), the thumb can be dragged, a click on the
+  scrollbar track jumps there. The newest line is
+  followed until you scroll away; a **LATEST** chip then appears and brings you
+  back. Cohtml scrolls nothing by itself, so the console owns all of this and
+  draws the stock-style scrollbar (thumb height set on content change, position
+  as a transform).
 - **Prompt**: type an expression and press Enter. It is compiled as an
   expression first so its value is printed (`ModelCurrentCar.speed`); if that
   is not valid syntax it runs as statements (`window.x = 1`). Errors are shown
@@ -88,7 +101,7 @@ fake `ModelCurrentCar` to inspect from the prompt.
 ## Versioning
 
 `VERSION` holds the semantic version; `devconsole.js` repeats it in
-`const VERSION` and in its first log line (`script loaded, version=0.1.0,
+`const VERSION` and in its first log line (`script loaded, version=0.2.0,
 source=ACEUIModLoader, lib=<loader version>`), `src/mod.json` repeats it for the
 loader, and this README must mention it. A test fails if they disagree.
 
@@ -115,10 +128,11 @@ python -m unittest discover -s tests -v
   the JavaScript style rules.
 - `tests/test_console_browser.py` - runs `tests/console/harness.html` in a
   headless Edge or Chrome with a fake animation clock and fake `localStorage`:
-  12 behavioural cases covering pre-attach buffering, rendering and its skip
+  20 behavioural cases covering pre-attach buffering, rendering and its skip
   of unchanged rows, filters, the prompt (results, statements, errors,
-  history), clear, the row cap, the toggle key, hidden HUD, drag exclusions
-  and lifecycle. Skipped if no browser is found (`ACE_BROWSER=<path>`
+  history), clear, the row cap, the scrollbar and wheel scrolling with the
+  follow/LATEST behaviour, thumb dragging, the text filter, the toggle key, hidden HUD, drag exclusions and
+  lifecycle. Skipped if no browser is found (`ACE_BROWSER=<path>`
   overrides). The runner, shared from `ACEUIModLoader/tools/headless.py`,
   uses a throwaway profile, kills the process tree on timeout and verifies no
   browser process is left behind.
@@ -126,7 +140,7 @@ python -m unittest discover -s tests -v
 ## Verifying in game
 
 Run `python ..\ACEUIModLoader\tools\check_ingame_log.py` after playing:
-`[ACEUIModLoader] mod devconsole 0.1.0: loading` followed by
+`[ACEUIModLoader] mod devconsole 0.2.0: loading` followed by
 `[DevConsole] script loaded, ... source=ACEUIModLoader` and `console attached, N
 buffered line(s)` means the loader served the mod. Lines typed into the prompt
 never reach the game log; only what other code logs does.

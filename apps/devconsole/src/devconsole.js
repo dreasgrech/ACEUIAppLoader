@@ -27,7 +27,7 @@
 const DevConsole = (function () {
 
     /** Mod version -- keep in step with the VERSION file and mod.json. */
-    const VERSION = "0.1.0";
+    const VERSION = "0.2.0";
 
     /** Prefix of every log line; the game log and the tests grep for it. */
     const LOG_PREFIX = "[DevConsole]";
@@ -59,10 +59,30 @@ const DevConsole = (function () {
     const TIME_DIGITS = 2;
 
     const TITLE_TEXT = "CONSOLE";
-    const CLEAR_TEXT = "clear";
-    const CLOSE_TEXT = "x";
+    const CLEAR_TEXT = "CLEAR";
+    const CLOSE_TEXT = "×";
+    const FOLLOW_TEXT = "LATEST";
+    const PROMPT_GLYPH = ">";
     const PROMPT_TEXT = "js expression, Enter to run";
     const ECHO_PREFIX = "> ";
+
+    /**
+     * Scrolling. Cohtml does not scroll an overflowing box by itself, so the console
+     * owns it: the wheel moves the body by a fraction of its visible height per
+     * notch, a click on the track jumps, and the newest line is followed until the
+     * user scrolls away (the LATEST chip brings them back).
+     */
+    const WHEEL_STEP = 0.25;
+    const MIN_THUMB_PX = 12;
+    /**
+     * Cohtml reports the wheel with the opposite sign to a browser (the stock bundle
+     * treats a positive deltaY as "up"), so the direction is flipped in game.
+     */
+    const COHTML = /Cohtml/.test(navigator.userAgent);
+    const WHEEL_SIGN = COHTML ? -1 : 1;
+
+    /** Text filter: rows whose text does not contain the query (case-insensitive) are hidden. */
+    const SEARCH_TEXT = "filter text";
 
     /** Class names shared with devconsole.css. */
     const CLASS = {
@@ -71,18 +91,27 @@ const DevConsole = (function () {
         closed: "dc-closed",
         header: "dc-header",
         title: "dc-title",
+        version: "dc-version",
         filters: "dc-filters",
         filter: "dc-filter",
         on: "on",
         count: "dc-count",
+        search: "dc-search",
         tools: "dc-tools",
         button: "dc-btn",
+        closeButton: "dc-close",
+        scroll: "dc-scroll",
         body: "dc-body",
         row: "dc-row",
         time: "dc-time",
         text: "dc-text",
         hidden: "dc-hidden",
+        scrollbar: "dc-scrollbar",
+        thumb: "dc-thumb",
+        nofit: "dc-nofit",
+        follow: "dc-follow",
         footer: "dc-footer",
+        prompt: "dc-prompt",
         input: "dc-input"
     };
 
@@ -92,6 +121,7 @@ const DevConsole = (function () {
     const ACTION_ATTR = "data-action";
     const ACTION_CLEAR = "clear";
     const ACTION_CLOSE = "close";
+    const ACTION_FOLLOW = "follow";
 
     /** Filter toggles and the entry levels each covers; echo/result lines are always shown. */
     const FILTERS = [
@@ -106,6 +136,7 @@ const DevConsole = (function () {
     const ERROR_LEVEL = "error";
 
     const NO_DRAG_ATTR = ACEUIModLoader.panel.NO_DRAG_ATTR;
+    const clamp = ACEUIModLoader.clamp;
     const el = ACEUIModLoader.el;
     const close = ACEUIModLoader.close;
     const toArray = ACEUIModLoader.toArray;
@@ -168,12 +199,20 @@ const DevConsole = (function () {
             + close("div");
     };
 
-    const actionMarkup = function (action, text) {
+    const actionMarkup = function (action, text, extraClass) {
         const attrs = noDrag({});
 
         attrs[ACTION_ATTR] = action;
 
-        return el("div", CLASS.button, attrs) + text + close("div");
+        return el("div", CLASS.button + (extraClass ? " " + extraClass : ""), attrs) + text + close("div");
+    };
+
+    const followMarkup = function () {
+        const attrs = noDrag({});
+
+        attrs[ACTION_ATTR] = ACTION_FOLLOW;
+
+        return el("div", CLASS.follow + " " + CLASS.hidden, attrs) + FOLLOW_TEXT + close("div");
     };
 
     const markup = function () {
@@ -188,12 +227,20 @@ const DevConsole = (function () {
         }
 
         return el("div", CLASS.header)
-            + el("div", CLASS.title) + TITLE_TEXT + " " + VERSION + close("div")
+            + el("div", CLASS.title) + TITLE_TEXT + el("span", CLASS.version) + VERSION + close("span") + close("div")
             + el("div", CLASS.filters) + FILTERS.map(filterMarkup).join("") + close("div")
-            + el("div", CLASS.tools) + actionMarkup(ACTION_CLEAR, CLEAR_TEXT) + actionMarkup(ACTION_CLOSE, CLOSE_TEXT) + close("div")
+            + el("input", CLASS.search, noDrag({ type: "text", placeholder: SEARCH_TEXT }))
+            + el("div", CLASS.tools)
+            + actionMarkup(ACTION_CLEAR, CLEAR_TEXT) + actionMarkup(ACTION_CLOSE, CLOSE_TEXT, CLASS.closeButton)
             + close("div")
+            + close("div")
+            + el("div", CLASS.scroll)
             + el("div", CLASS.body) + rows.join("") + close("div")
+            + el("div", CLASS.scrollbar, noDrag({})) + el("div", CLASS.thumb) + close("div") + close("div")
+            + followMarkup()
+            + close("div")
             + el("div", CLASS.footer)
+            + el("span", CLASS.prompt) + PROMPT_GLYPH + close("span")
             + el("input", CLASS.input, noDrag({ type: "text", placeholder: PROMPT_TEXT }))
             + close("div");
     };
@@ -222,7 +269,16 @@ const DevConsole = (function () {
         return {
             root: root,
             body: root.querySelector("." + CLASS.body),
+            track: root.querySelector("." + CLASS.scrollbar),
+            thumb: root.querySelector("." + CLASS.thumb),
+            followButton: root.querySelector("." + CLASS.follow),
             input: root.querySelector("." + CLASS.input),
+            search: root.querySelector("." + CLASS.search),
+            query: "",                  // lower-cased text filter, "" for none
+            drag: null,                 // thumb drag in progress: { startY, startTop }
+            follow: true,               // keep the newest line in view
+            thumbHeight: -1,            // last applied thumb geometry, so frames only touch it on change
+            thumbY: -1,
             rows: toArray(root.querySelectorAll("." + CLASS.row)).map(function (row) {
                 return { el: row, time: row.querySelector("." + CLASS.time), text: row.querySelector("." + CLASS.text), seq: -1, level: "" };
             }),
@@ -245,7 +301,9 @@ const DevConsole = (function () {
     const isVisible = function (state, entry) {
         const filter = filterOf(entry.level);
 
-        return filter === null || state.filters[filter];
+        if (filter !== null && !state.filters[filter]) { return false; }
+
+        return state.query === "" || entry.text.toLowerCase().indexOf(state.query) >= 0;
     };
 
     const hideRow = function (row) {
@@ -309,7 +367,9 @@ const DevConsole = (function () {
             }
         });
 
-        state.body.scrollTop = state.body.scrollHeight;
+        if (state.follow) { state.body.scrollTop = state.body.scrollHeight; }
+
+        syncScrollbar(state);
     };
 
     /** One animation frame: settle the position, then redraw if anything changed. */
@@ -341,7 +401,137 @@ const DevConsole = (function () {
 
     const clearLines = function (state) {
         lines.clear();
+        setFollow(state, true);
         state.dirty = true;
+    };
+
+    // ---- scrollbar -----------------------------------------------------------------------
+
+    /** Size and place the thumb from the body's scroll geometry; touches style only on change. */
+    const syncScrollbar = function (state) {
+        const body = state.body;
+        const visible = body.clientHeight;
+        const total = body.scrollHeight;
+        const trackHeight = state.track.clientHeight;
+        const fits = total <= visible || trackHeight === 0;
+        let thumbHeight;
+        let y;
+
+        setClass(state.track, CLASS.nofit, fits);
+
+        if (fits) { return; }
+
+        thumbHeight = Math.min(trackHeight, Math.max(MIN_THUMB_PX, Math.round(trackHeight * visible / total)));
+        y = Math.round((trackHeight - thumbHeight) * clamp(body.scrollTop / (total - visible), 0, 1));
+
+        if (thumbHeight !== state.thumbHeight) {
+            state.thumbHeight = thumbHeight;
+            state.thumb.style.height = thumbHeight + "px";
+        }
+
+        if (y !== state.thumbY) {
+            state.thumbY = y;
+            state.thumb.style.transform = "translateY(" + y + "px)";
+        }
+    };
+
+    /** Follow the newest line (true) or hold the current scroll position (false). */
+    const setFollow = function (state, on) {
+        state.follow = on;
+        setClass(state.followButton, CLASS.hidden, on);
+
+        if (on) { state.dirty = true; }
+    };
+
+    /** Scroll the body by `dy` pixels; following resumes when the bottom is reached. */
+    const scrollBy = function (state, dy) {
+        const body = state.body;
+        const max = Math.max(0, body.scrollHeight - body.clientHeight);
+        const top = clamp(body.scrollTop + dy, 0, max);
+
+        body.scrollTop = top;
+        setFollow(state, top >= max);
+        syncScrollbar(state);
+    };
+
+    const onWheel = function (state, e) {
+        const direction = e.deltaY > 0 ? 1 : (e.deltaY < 0 ? -1 : 0);
+
+        if (direction === 0) { return; }
+
+        scrollBy(state, direction * WHEEL_SIGN * state.body.clientHeight * WHEEL_STEP);
+        e.preventDefault();
+    };
+
+    /** Drag start on the thumb: remember where, and follow the mouse on the window until release. */
+    const onThumbDown = function (state, e) {
+        state.drag = { startY: e.clientY, startTop: state.body.scrollTop };
+        setClass(state.track, CLASS.dragging, true);
+        window.addEventListener("mousemove", state.handlers.thumbMove);
+        window.addEventListener("mouseup", state.handlers.thumbUp);
+        e.preventDefault();
+    };
+
+    const onThumbMove = function (state, e) {
+        const body = state.body;
+        const travel = state.track.clientHeight - state.thumbHeight;
+        const max = Math.max(0, body.scrollHeight - body.clientHeight);
+
+        if (!state.drag || travel <= 0) { return; }
+
+        scrollBy(state, state.drag.startTop + (e.clientY - state.drag.startY) * max / travel - body.scrollTop);
+    };
+
+    const onThumbUp = function (state) {
+        if (!state.drag) { return; }
+
+        state.drag = null;
+        setClass(state.track, CLASS.dragging, false);
+        window.removeEventListener("mousemove", state.handlers.thumbMove);
+        window.removeEventListener("mouseup", state.handlers.thumbUp);
+    };
+
+    /** A click on the track centres the thumb on the click point; on the thumb it starts a drag. */
+    const onTrackDown = function (state, e) {
+        const body = state.body;
+        const travel = state.track.clientHeight - state.thumbHeight;
+        const max = Math.max(0, body.scrollHeight - body.clientHeight);
+        let ratio = 1;
+
+        if (e.target === state.thumb) {
+            onThumbDown(state, e);
+
+            return;
+        }
+
+        if (typeof e.offsetY === "number" && travel > 0) { ratio = clamp((e.offsetY - state.thumbHeight / 2) / travel, 0, 1); }
+
+        scrollBy(state, ratio * max - body.scrollTop);
+        e.preventDefault();
+    };
+
+    // ---- text filter ---------------------------------------------------------------------
+
+    /** Apply a text filter; matching is case-insensitive on the line text. */
+    const setQuery = function (state, text) {
+        const query = String(text || "").trim().toLowerCase();
+
+        if (query === state.query) { return; }
+
+        state.query = query;
+        state.dirty = true;
+    };
+
+    const onSearchChange = function (state) {
+        setQuery(state, state.search.value);
+    };
+
+    const onSearchKey = function (state, e) {
+        if (keyIs(e, BLUR_KEY)) {
+            state.search.value = "";
+            setQuery(state, "");
+            state.search.blur();
+        }
     };
 
     // ---- prompt -----------------------------------------------------------------------
@@ -419,7 +609,7 @@ const DevConsole = (function () {
     };
 
     const onWindowKey = function (state, e) {
-        if (e.target === state.input || !isToggleKey(e)) { return; }
+        if (e.target === state.input || e.target === state.search || !isToggleKey(e)) { return; }
 
         setOpen(state, !state.open);
         e.preventDefault();
@@ -442,6 +632,8 @@ const DevConsole = (function () {
         if (name === ACTION_CLEAR) { clearLines(state); }
 
         if (name === ACTION_CLOSE) { setOpen(state, false); }
+
+        if (name === ACTION_FOLLOW) { setFollow(state, true); }
     };
 
     // ---- lifecycle ---------------------------------------------------------------
@@ -457,11 +649,22 @@ const DevConsole = (function () {
         state.handlers = {
             key: function (e) { onWindowKey(state, e); },
             inputKey: function (e) { onInputKey(state, e); },
-            click: function (e) { onClick(state, e); }
+            click: function (e) { onClick(state, e); },
+            wheel: function (e) { onWheel(state, e); },
+            trackDown: function (e) { onTrackDown(state, e); },
+            thumbMove: function (e) { onThumbMove(state, e); },
+            thumbUp: function () { onThumbUp(state); },
+            searchChange: function () { onSearchChange(state); },
+            searchKey: function (e) { onSearchKey(state, e); }
         };
         window.addEventListener("keydown", state.handlers.key);
         state.input.addEventListener("keydown", state.handlers.inputKey);
         root.addEventListener("click", state.handlers.click);
+        state.body.addEventListener("wheel", state.handlers.wheel);
+        state.track.addEventListener("mousedown", state.handlers.trackDown);
+        state.search.addEventListener("input", state.handlers.searchChange);
+        state.search.addEventListener("keyup", state.handlers.searchChange);
+        state.search.addEventListener("keydown", state.handlers.searchKey);
 
         state.open = storedOpen === null ? true : Boolean(storedOpen);
         setClass(root, CLASS.closed, !state.open);
@@ -488,6 +691,12 @@ const DevConsole = (function () {
             window.removeEventListener("keydown", state.handlers.key);
             state.input.removeEventListener("keydown", state.handlers.inputKey);
             state.root.removeEventListener("click", state.handlers.click);
+            state.body.removeEventListener("wheel", state.handlers.wheel);
+            state.track.removeEventListener("mousedown", state.handlers.trackDown);
+            state.search.removeEventListener("input", state.handlers.searchChange);
+            state.search.removeEventListener("keyup", state.handlers.searchChange);
+            state.search.removeEventListener("keydown", state.handlers.searchKey);
+            onThumbUp(state);
             state.handlers = null;
         }
     };
@@ -506,6 +715,9 @@ const DevConsole = (function () {
         TOGGLE_KEY: TOGGLE_KEY,
         KEY_CODES: KEY_CODES,
         MAX_ROWS: MAX_ROWS,
+        WHEEL_STEP: WHEEL_STEP,
+        WHEEL_SIGN: WHEEL_SIGN,
+        MIN_THUMB_PX: MIN_THUMB_PX,
         CLASS: CLASS,
         FILTERS: FILTERS,
         create: create,
@@ -513,6 +725,10 @@ const DevConsole = (function () {
         evaluate: evaluate,
         setOpen: setOpen,
         setFilter: setFilter,
+        setFollow: setFollow,
+        setQuery: setQuery,
+        scrollBy: scrollBy,
+        syncScrollbar: syncScrollbar,
         tick: tick,
         attach: attach,
         detach: detach

@@ -128,7 +128,9 @@ class ConsoleSourceTests(unittest.TestCase):
         self.assertIn("return new Function(code);", self.js)
         self.assertIn('const ECHO_LEVEL = "input";', self.js)
         self.assertIn('const RESULT_LEVEL = "result";', self.js)
-        self.assertIn("if (e.target === state.input || !isToggleKey(e)) { return; }", self.js, "typing in the prompt must not toggle")
+        self.assertIn("if (e.target === state.input || e.target === state.search || !isToggleKey(e)) { return; }", self.js,
+                      "typing in the prompt or the filter field must not toggle")
+        self.assertIn("const WHEEL_SIGN = COHTML ? -1 : 1;", self.js, "Cohtml reports the wheel with the opposite sign")
         # the game's engine reports legacy keyCode only (the stock bundle checks `keyCode == 13`), so every key check must accept it
         self.assertIn("const KEY_CODES = { Backquote: 192, Enter: 13, ArrowUp: 38, ArrowDown: 40, Escape: 27 };", self.js)
         self.assertIn("e.keyCode === KEY_CODES[name]", self.js)

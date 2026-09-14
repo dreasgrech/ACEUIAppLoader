@@ -105,7 +105,12 @@ console.warn("early warning");
     t("attach builds header, 3 filters, MAX_ROWS rows and the prompt; open by default; panel and loop wired", function () {
         eq(root.querySelectorAll(".dc-filter").length, 3, "filters"); eq(root.querySelectorAll(".dc-row").length, MAX, "row pool");
         ok(input, "prompt input"); eq(input.getAttribute("data-nodrag"), "", "prompt does not drag");
-        eq(root.querySelector(".dc-title").textContent, "CONSOLE " + DevConsole.VERSION, "title");
+        eq(root.querySelector(".dc-title").textContent, "CONSOLE" + DevConsole.VERSION, "title + version span");
+        eq(root.querySelector(".dc-version").textContent, DevConsole.VERSION, "version span");
+        ok(root.querySelector(".dc-scrollbar") && root.querySelector(".dc-thumb"), "scrollbar markup");
+        eq(root.querySelector(".dc-scrollbar").getAttribute("data-nodrag"), "", "scrollbar does not drag the panel");
+        ok(root.querySelector(".dc-follow").classList.contains("dc-hidden"), "follow chip hidden while following");
+        eq(root.querySelector('[data-action="close"]').textContent, "×", "close glyph");
         eq(state.open, true, "open by default"); ok(!root.classList.contains("dc-closed"));
         eq(state.panel.hudId, DevConsole.HUD_ELEMENT_ID); eq(state.panel.storageKey, DevConsole.STORAGE_KEY);
         eq(root.style.visibility, "hidden", "hidden until positioned"); ok(state.loop.running, "loop running");
@@ -198,6 +203,93 @@ console.warn("early warning");
         eq(root.querySelector('[data-filter="log"] .dc-count').textContent, String(MAX + 30), "count is the buffer's, not the rows'");
     });
 
+    const body = root.querySelector(".dc-body");
+    const track = root.querySelector(".dc-scrollbar");
+    const thumb = root.querySelector(".dc-thumb");
+    const followChip = root.querySelector(".dc-follow");
+    const atBottom = function () { return Math.abs(body.scrollTop - (body.scrollHeight - body.clientHeight)) <= 1; };
+    const wheel = function (deltaY) { body.dispatchEvent(new WheelEvent("wheel", { deltaY: deltaY, bubbles: true, cancelable: true })); };
+
+    t("scrollbar: with overflowing content the thumb is shown, sized to the visible fraction, and the newest line is followed", function () {
+        ok(body.scrollHeight > body.clientHeight, "content overflows in the harness");
+        ok(!track.classList.contains("dc-nofit"), "track visible");
+        const h = parseFloat(thumb.style.height);
+        ok(h >= DevConsole.MIN_THUMB_PX && h < track.clientHeight, "thumb height " + h);
+        ok(Math.abs(h - Math.max(DevConsole.MIN_THUMB_PX, Math.round(track.clientHeight * body.clientHeight / body.scrollHeight))) <= 1, "thumb proportional");
+        ok(atBottom(), "scrolled to the newest line"); eq(state.follow, true); ok(followChip.classList.contains("dc-hidden"));
+        ok(thumb.style.transform.indexOf("translateY(") === 0, "thumb placed with a transform");
+    });
+
+    t("wheel up scrolls back by a quarter view, stops following and shows LATEST; new lines do not yank the view", function () {
+        const before = body.scrollTop;
+        const yBefore = thumb.style.transform;
+        wheel(-100);
+        ok(Math.abs((before - body.scrollTop) - body.clientHeight * DevConsole.WHEEL_STEP) <= 1, "one notch = WHEEL_STEP of the view");
+        eq(state.follow, false, "not following"); ok(!followChip.classList.contains("dc-hidden"), "LATEST shown");
+        ok(thumb.style.transform !== yBefore, "thumb moved");
+        const held = body.scrollTop;
+        console.log("arrives while scrolled up"); nextFrame();
+        eq(body.scrollTop, held, "view held"); eq(state.follow, false);
+    });
+
+    t("wheel down to the bottom resumes following; the LATEST chip does the same; clear resets to following", function () {
+        wheel(100); wheel(100); wheel(100); wheel(100);
+        ok(atBottom(), "back at the bottom"); eq(state.follow, true); ok(followChip.classList.contains("dc-hidden"));
+        wheel(-100); eq(state.follow, false);
+        followChip.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+        eq(state.follow, true, "chip resumes"); nextFrame(); ok(atBottom(), "rendered at the bottom");
+        wheel(-100); eq(state.follow, false);
+        root.querySelector('[data-action="clear"]').dispatchEvent(new MouseEvent("click", { bubbles: true })); nextFrame();
+        eq(state.follow, true, "clear follows again"); ok(track.classList.contains("dc-nofit"), "no thumb when nothing overflows");
+        let i; for (i = 0; i < MAX; i += 1) { console.log("refill " + i); }
+        nextFrame(); ok(!track.classList.contains("dc-nofit"), "thumb back with content");
+    });
+
+    t("thumb never leaves the track and is red while dragged; dragging it scrolls proportionally and releases on mouseup", function () {
+        eq(DevConsole.WHEEL_SIGN, 1, "browser wheel sign (Cohtml flips it)");
+        DevConsole.setFollow(state, true); nextFrame(); ok(atBottom());
+        const y = parseFloat(thumb.style.transform.replace(/[^0-9.-]/g, ""));
+        ok(y + parseFloat(thumb.style.height) <= track.clientHeight + 0.5, "thumb end within the track: " + (y + parseFloat(thumb.style.height)) + " <= " + track.clientHeight);
+        const rect = thumb.getBoundingClientRect();
+        thumb.dispatchEvent(new MouseEvent("mousedown", { clientX: rect.left + 2, clientY: rect.top + 2, bubbles: true }));
+        ok(track.classList.contains("dragging"), "dragging class"); ok(state.drag, "drag state");
+        ok(!root.classList.contains("dragging"), "panel itself not dragging");
+        const startTop = body.scrollTop;
+        mouse("mousemove", rect.left + 2, rect.top + 2 - 40);
+        ok(body.scrollTop < startTop, "dragging up scrolled up: " + body.scrollTop + " < " + startTop); eq(state.follow, false);
+        const travel = track.clientHeight - parseFloat(thumb.style.height);
+        const expected = startTop - 40 * (body.scrollHeight - body.clientHeight) / travel;
+        ok(Math.abs(body.scrollTop - Math.max(0, expected)) <= 1, "proportional: " + body.scrollTop + " vs " + expected);
+        mouse("mouseup", 0, 0);
+        ok(!track.classList.contains("dragging")); eq(state.drag, null);
+        const held = body.scrollTop; mouse("mousemove", 0, 0); eq(body.scrollTop, held, "released");
+    });
+
+    t("text filter hides non-matching lines case-insensitively, keeps counts, Escape clears it, typing there does not toggle", function () {
+        const search = root.querySelector(".dc-search");
+        ok(search && search.getAttribute("data-nodrag") === "", "search field, no drag");
+        DevConsole.setFollow(state, true);
+        console.warn("Needle in the haystack"); console.log("plain line"); nextFrame();
+        const logCount = root.querySelector('[data-filter="log"] .dc-count').textContent;
+        search.value = "NEEDLE"; search.dispatchEvent(new Event("input", { bubbles: true })); nextFrame();
+        eq(texts(root).join("|"), "Needle in the haystack", "only the match is shown");
+        eq(root.querySelector('[data-filter="log"] .dc-count').textContent, logCount, "counts are the buffer's");
+        key(search, { code: "Backquote", key: "`" }); eq(state.open, true, "backquote in the filter field does not toggle");
+        search.value = "nomatchxyz"; search.dispatchEvent(new Event("keyup", { bubbles: true })); nextFrame();
+        eq(visibleRows(root).length, 0, "no match, nothing shown"); ok(track.classList.contains("dc-nofit"), "no thumb when nothing is shown");
+        key(search, { key: "Escape" }); nextFrame();
+        eq(search.value, "", "Escape clears"); eq(state.query, ""); ok(texts(root).length > 2, "all lines back");
+    });
+
+    t("a click on the scrollbar track jumps to that fraction; the top holds, the bottom follows", function () {
+        const rect = track.getBoundingClientRect();
+        track.dispatchEvent(new MouseEvent("mousedown", { clientX: rect.left + 2, clientY: rect.top + 1, bubbles: true }));
+        ok(body.scrollTop < body.clientHeight * 0.1, "near the top (1 px into the track): " + body.scrollTop); eq(state.follow, false);
+        ok(!root.classList.contains("dragging"), "track click does not drag the panel");
+        track.dispatchEvent(new MouseEvent("mousedown", { clientX: rect.left + 2, clientY: rect.bottom - 1, bubbles: true }));
+        ok(atBottom(), "at the bottom"); eq(state.follow, true);
+    });
+
     t("toggle key closes and opens, persists, is ignored while typing in the prompt; the x button closes", function () {
         key(window, { code: "Backquote", key: "`" });
         eq(state.open, false); ok(root.classList.contains("dc-closed")); eq(localStorage.getItem(DevConsole.OPEN_KEY), "false");
@@ -236,11 +328,14 @@ console.warn("early warning");
         ok(JSON.parse(localStorage.getItem(DevConsole.STORAGE_KEY)).x === "150px", "saved under acedevconsole.pos");
     });
 
-    t("detach stops the loop, unsubscribes and releases the key and click listeners", function () {
+    t("detach stops the loop, unsubscribes and releases the key, click, wheel and track listeners", function () {
         const listeners = ACEUIModLoader.console.listenerCount();
         const cancelled = clock.cancelled;
         DevConsole.detach(state);
         eq(clock.cancelled, cancelled + 1); eq(state.loop.running, false); eq(ACEUIModLoader.console.listenerCount(), listeners - 1, "unsubscribed");
+        const follow = state.follow; wheel(-100); eq(state.follow, follow, "wheel released");
+        const search = root.querySelector(".dc-search"); search.value = "zzz"; search.dispatchEvent(new Event("input", { bubbles: true }));
+        eq(state.query, "", "search released"); search.value = "";
         const open = state.open;
         key(window, { code: "Backquote", key: "`" }); eq(state.open, open, "toggle key released");
         state.dirty = false;

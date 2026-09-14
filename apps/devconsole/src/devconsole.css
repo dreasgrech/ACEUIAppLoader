@@ -2,32 +2,36 @@
  * DevConsole -- console stylesheet.
  *
  * Linked into hud.html by the ACEUIModLoader after the stock ui.css /
- * uicomponents.css, so the font variable below is the game's. Line colours are
- * keyed by the data-level attribute the script puts on each row.
+ * uicomponents.css, so the font variable below is the game's. The look follows
+ * the stock HUD widgets (chat, MFD): a black 75 % panel with a solid #1c1e1f
+ * header bar, flat text buttons that turn #bd0000 on hover, thin white
+ * scrollbar thumb on a dark track, hairline row separators.
  *
  * Cohtml notes: no var() fallbacks (unsupported); the script only ever changes
- * textContent, one attribute and classes on a fixed set of rows.
+ * textContent, one attribute and classes on a fixed set of rows, plus the
+ * scrollbar thumb's height (when the content size changes) and transform.
  */
 
 .ace-devconsole {
     position: absolute;
     right: 2rem;
     top: 5rem;
-    width: 44rem;
-    height: 20rem;
+    width: 46rem;
+    height: 22rem;
     display: flex;
     flex-direction: column;
-    background: rgba(0, 0, 0, 0.72);
-    border: 1px solid rgba(255, 255, 255, 0.15);
-    border-radius: 0.25rem;
-    color: #ddd;
+    background: rgba(0, 0, 0, 0.75);
+    border: 2px solid transparent;
+    color: rgba(255, 255, 255, 0.8);
     font-family: var(--font-family-main);
-    font-size: 0.65rem;
+    font-size: 0.7rem;
+    font-weight: 400;
     cursor: pointer;
 }
 
 .ace-devconsole.dragging {
-    border-color: #bd0000;
+    border-color: #fff;
+    background: rgba(0, 0, 0, 0.5);
 }
 
 /* closed by the toggle key or the x button; visibility keeps the layout so restores still measure it */
@@ -44,67 +48,143 @@ body.hide-hud .ace-devconsole {
 .ace-devconsole .dc-header {
     display: flex;
     flex-direction: row;
-    align-items: center;
-    padding: 0.25rem 0.5rem;
-    border-bottom: 1px solid rgba(255, 255, 255, 0.12);
-    font-weight: 700;
-    letter-spacing: 0.05em;
+    align-items: stretch;
+    height: 1.65rem;
+    padding: 0 0 0 0.75rem;
+    background: #1c1e1f;
+    font-size: 0.75rem;
+    letter-spacing: 0.05rem;
 }
 
 .ace-devconsole .dc-title {
     flex: 1 1 auto;
-    font-size: 0.7rem;
+    display: flex;
+    align-items: center;
+    font-weight: 600;
+    color: #fff;
+}
+
+.ace-devconsole .dc-version {
+    margin-left: 0.4rem;
+    font-weight: 400;
+    color: #666;
 }
 
 .ace-devconsole .dc-filters,
 .ace-devconsole .dc-tools {
     display: flex;
     flex-direction: row;
+    align-items: stretch;
 }
 
+/* flat text buttons, stock style: no border, red on hover */
 .ace-devconsole .dc-filter,
 .ace-devconsole .dc-btn {
-    margin-left: 0.4rem;
-    padding: 0.1rem 0.4rem;
-    border: 1px solid rgba(255, 255, 255, 0.2);
-    border-radius: 0.2rem;
-    background: rgba(255, 255, 255, 0.06);
+    display: flex;
+    align-items: center;
+    padding: 0 0.6rem;
+    color: #999;
     cursor: pointer;
+    transition: background-color 0.15s, color 0.15s;
 }
 
-.ace-devconsole .dc-filter {
-    opacity: 0.4;
+.ace-devconsole .dc-filter:hover,
+.ace-devconsole .dc-btn:hover {
+    background: #bd0000;
+    color: #fff;
 }
 
 .ace-devconsole .dc-filter.on {
-    opacity: 1;
+    color: #fff;
 }
 
 .ace-devconsole .dc-count {
-    margin-left: 0.3rem;
-    opacity: 0.7;
+    min-width: 1.4rem;
+    margin-left: 0.35rem;
+    padding: 0 0.3rem;
+    border-radius: 0.2rem;
+    background: rgba(255, 255, 255, 0.12);
+    color: #ccc;
+    font-size: 0.65rem;
+    text-align: center;
+}
+
+.ace-devconsole .dc-filter.on .dc-count {
+    background: #fff;
+    color: #000;
+}
+
+.ace-devconsole .dc-filter:hover .dc-count {
+    background: rgba(0, 0, 0, 0.35);
+    color: #fff;
+}
+
+/* text filter: a dark inset field; Cohtml gives inputs their own padding, so every box property is explicit */
+.ace-devconsole .dc-search {
+    flex: 0 0 auto;
+    width: 9rem;
+    height: 1.15rem;
+    min-height: 0;
+    box-sizing: border-box;
+    align-self: center;
+    margin: 0 0 0 0.6rem;
+    padding: 0 0.4rem;
+    border: none;
+    border-radius: 0.2rem;
+    background: rgba(0, 0, 0, 0.5);
+    color: #fff;
+    font-family: var(--font-family-main);
+    font-size: 0.65rem;
+    font-weight: 400;
+    letter-spacing: 0;
+    line-height: 1.15rem;
+    outline: none;
+    cursor: text;
+}
+
+.ace-devconsole .dc-search:focus {
+    background: rgba(0, 0, 0, 0.8);
 }
 
 .ace-devconsole .dc-tools {
-    margin-left: 0.6rem;
+    margin-left: 0.5rem;
+    border-left: 1px solid rgba(255, 255, 255, 0.1);
 }
 
-/* ---- body: lines --------------------------------------------------------------- */
+.ace-devconsole .dc-btn.dc-close {
+    width: 1.65rem;
+    padding: 0;
+    justify-content: center;
+    font-size: 0.9rem;
+}
+
+/* ---- body: lines + scrollbar ----------------------------------------------------- */
+
+.ace-devconsole .dc-scroll {
+    flex: 1 1 auto;
+    position: relative;
+    min-height: 0;
+}
 
 .ace-devconsole .dc-body {
-    flex: 1 1 auto;
-    overflow-y: auto;
-    overflow-x: hidden;
-    padding: 0.2rem 0.5rem;
+    position: absolute;
+    top: 0;
+    right: 0;
+    bottom: 0;
+    left: 0;
+    overflow: hidden;
+    padding: 0.25rem 1.4rem 0.25rem 0.75rem;
 }
 
 .ace-devconsole .dc-row {
     display: flex;
     flex-direction: row;
     align-items: flex-start;
+    padding: 0.1rem 0;
+    border-bottom: 0.05rem solid rgba(255, 255, 255, 0.05);
     line-height: 1.3;
     white-space: pre-wrap;
-    word-break: break-all;
+    overflow-wrap: break-word;
 }
 
 .ace-devconsole .dc-row.dc-hidden {
@@ -113,46 +193,134 @@ body.hide-hud .ace-devconsole {
 
 .ace-devconsole .dc-time {
     flex: 0 0 auto;
-    margin-right: 0.5rem;
-    opacity: 0.45;
+    margin-right: 0.6rem;
+    color: #666;
 }
 
 .ace-devconsole .dc-text {
     flex: 1 1 auto;
 }
 
+/* stock scrollbar look: dark track inset 0.5rem, white thumb, red while dragging */
+.ace-devconsole .dc-scrollbar {
+    position: absolute;
+    top: 0.5rem;
+    right: 0.5rem;
+    bottom: 0.5rem;
+    width: 0.35rem;
+    min-width: 8px;
+    background: #111;
+    border: 1px solid #000;
+    border-width: 0 1px 0 1px;
+    cursor: pointer;
+    transition: opacity 0.25s ease-out;
+}
+
+.ace-devconsole .dc-scrollbar.dc-nofit {
+    opacity: 0;
+    pointer-events: none;
+}
+
+.ace-devconsole .dc-scrollbar:hover {
+    background: #222;
+    border-color: #444;
+}
+
+.ace-devconsole .dc-thumb {
+    box-sizing: border-box;
+    width: 100%;
+    height: 100px;
+    background: #fff;
+    border: 1px solid #000;
+    border-width: 1px 0 1px 0;
+    cursor: pointer;
+    transition: background-color 0.25s;
+}
+
+.ace-devconsole .dc-scrollbar:hover .dc-thumb,
+.ace-devconsole .dc-scrollbar.dragging .dc-thumb {
+    background: #bd0000;
+}
+
+.ace-devconsole .dc-scrollbar.dragging {
+    background: #222;
+    border-color: #444;
+}
+
+/* shown while scrolled away from the newest line; click to follow again */
+.ace-devconsole .dc-follow {
+    position: absolute;
+    right: 1.4rem;
+    bottom: 0.5rem;
+    padding: 0.1rem 0.6rem;
+    border-radius: 0.2rem;
+    background: rgba(28, 30, 31, 0.9);
+    color: #ccc;
+    font-size: 0.65rem;
+    letter-spacing: 0.05rem;
+    cursor: pointer;
+}
+
+.ace-devconsole .dc-follow:hover {
+    background: #bd0000;
+    color: #fff;
+}
+
+.ace-devconsole .dc-follow.dc-hidden {
+    display: none;
+}
+
 /* ---- level colours -------------------------------------------------------------------- */
 
 .ace-devconsole [data-level="info"] .dc-text,
-.ace-devconsole [data-level="debug"] .dc-text { opacity: 0.75; }
+.ace-devconsole [data-level="debug"] .dc-text { color: rgba(255, 255, 255, 0.6); }
 
-.ace-devconsole [data-level="warn"] .dc-text { color: #ffb020; }
+.ace-devconsole [data-level="warn"] .dc-text { color: #fabc3c; }
 
 .ace-devconsole [data-level="error"] .dc-text { color: #ff5a5e; }
 
-.ace-devconsole [data-level="input"] .dc-text { color: #3aa6ff; }
+.ace-devconsole [data-level="input"] .dc-text { color: #fff; font-weight: 600; }
 
-.ace-devconsole [data-level="result"] .dc-text { color: #44ea78; }
+.ace-devconsole [data-level="result"] .dc-text { color: #5fd07a; }
 
 /* ---- footer: prompt ----------------------------------------------------------------- */
 
 .ace-devconsole .dc-footer {
     flex: 0 0 auto;
-    padding: 0.25rem 0.5rem 0.35rem 0.5rem;
-    border-top: 1px solid rgba(255, 255, 255, 0.12);
+    display: flex;
+    flex-direction: row;
+    align-items: center;
+    height: 1.65rem;
+    background: rgba(28, 30, 31, 0.75);
+    border-top: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.ace-devconsole .dc-prompt {
+    flex: 0 0 auto;
+    padding: 0 0.5rem 0 0.75rem;
+    color: #bd0000;
+    font-weight: 700;
 }
 
 .ace-devconsole .dc-input {
-    display: block;
-    width: 100%;
+    flex: 1 1 auto;
+    height: 1.65rem;
+    min-height: 0;
     box-sizing: border-box;
-    padding: 0.2rem 0.4rem;
-    border: 1px solid rgba(255, 255, 255, 0.18);
-    border-radius: 0.2rem;
-    background: rgba(255, 255, 255, 0.08);
+    margin: 0;
+    padding: 0 0.75rem 0 0;
+    border: none;
+    border-radius: 0;
+    background: transparent;
     color: #fff;
     font-family: var(--font-family-main);
-    font-size: 0.65rem;
+    font-size: 0.7rem;
+    font-weight: 400;
+    line-height: 1.65rem;
     outline: none;
     cursor: text;
+}
+
+.ace-devconsole .dc-input:focus {
+    background: rgba(255, 255, 255, 0.06);
 }
