@@ -155,6 +155,7 @@ AceMods.panel = (function () {
         const r = panel.root.getBoundingClientRect();
 
         panel.dragging = true;
+        panel.moved = false;
         panel.dragOffset.x = e.clientX - r.left;
         panel.dragOffset.y = e.clientY - r.top;
         panel.root.classList.add(DRAGGING_CLASS);
@@ -163,15 +164,18 @@ AceMods.panel = (function () {
     const onMouseMove = function (panel, e) {
         if (!panel.dragging) { return; }
 
+        panel.moved = true;
         moveTo(panel, e.clientX - panel.dragOffset.x, e.clientY - panel.dragOffset.y);
     };
 
+    /** A click that never moved the panel is not a drag: nothing to save. */
     const onMouseUp = function (panel) {
         if (!panel.dragging) { return; }
 
         panel.dragging = false;
         panel.root.classList.remove(DRAGGING_CLASS);
-        savePosition(panel);
+
+        if (panel.moved) { savePosition(panel); }
     };
 
     const attach = function (root, options) {
@@ -182,6 +186,7 @@ AceMods.panel = (function () {
             log: options.log || AceMods.log,
             onSaved: options.onSaved || null,
             dragging: false,
+            moved: false,               // the current drag changed the position
             dragOffset: { x: 0, y: 0 },
             handlers: null,
             attachedAt: 0,              // timestamp of the first frame after attach

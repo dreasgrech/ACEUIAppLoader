@@ -265,6 +265,15 @@ document.addEventListener("DOMContentLoaded", function () {
         AceMods.panel.detach(panel); hidden.remove(); window.HUD = null;
     });
 
+    t("panel: a click without movement saves nothing", function () {
+        window.HUD = makeHud(); localStorage.clear();
+        const p = makePanel(); p.root.style.left = "10px"; p.root.style.top = "10px";
+        mouse("mousedown", 15, 15, p.root); ok(p.root.classList.contains("dragging")); mouse("mouseup", 0, 0);
+        ok(!p.root.classList.contains("dragging")); eq(localStorage.getItem(KEY), null, "no localStorage write");
+        eq(window.HUD.StoredData.layouts.default.elements[HUD_ID], undefined, "no HUD store write");
+        AceMods.panel.detach(p.panel); p.root.remove(); window.HUD = null;
+    });
+
     t("panel: detach releases listeners and shows the root", function () {
         window.HUD = null; localStorage.clear();
         const p = makePanel(); p.root.style.left = "10px"; p.root.style.top = "10px";
