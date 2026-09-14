@@ -56,7 +56,6 @@
 
 <script>
 /** Fake game side: a ModelCurrentCar for the prompt to inspect, and buttons that log. */
-window.DEVCONSOLE_SOURCE = "preview";
 window.ModelCurrentCar = { has_focused_car: true, speed: 0, rpm: 0, gear: 3, gas_percent: 0, brake_percent: 0 };
 
 const Preview = (function () {
@@ -100,7 +99,7 @@ const Preview = (function () {
     };
 
     const wire = function () {
-        q("#version").textContent = DevConsole.VERSION;
+        q("#version").textContent = ACEUIModLoader.mod("devconsole").version;
 
         ACEUIModLoader.toArray(document.querySelectorAll("[data-emit]")).forEach(function (button) {
             button.addEventListener("click", function () { emit(button.getAttribute("data-emit")); });

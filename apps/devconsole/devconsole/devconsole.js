@@ -736,17 +736,9 @@ const DevConsole = (function () {
         }
     };
 
-    log("script loaded, version=" + me.version + ", source=" + (window.DEVCONSOLE_SOURCE || "ACEUIModLoader") + ", lib=" + ACEUIModLoader.VERSION + ", url=" + location.href);
+    log("script loaded, version=" + me.version + ", lib=" + ACEUIModLoader.VERSION + ", url=" + location.href);
 
     return {
-        VERSION: me.version,
-        LOG_PREFIX: me.prefix,
-        ROOT_ID: me.name,
-        HUD_ELEMENT_ID: me.hudId,
-        STORAGE_KEY: me.storageKey,
-        OPEN_KEY: OPEN_KEY,
-        FILTER_KEY: FILTER_KEY,
-        SCALE_KEY: SCALE_KEY,
         SCALE_MIN: SCALE_MIN,
         SCALE_MAX: SCALE_MAX,
         SCALE_STEP: SCALE_STEP,
@@ -775,17 +767,5 @@ const DevConsole = (function () {
     };
 }());
 
-/** Boot for pages that carry `<div id="devconsole">` themselves (the preview page); in game the loader creates it. */
-(function () {
-    const boot = function () {
-        const root = document.getElementById(DevConsole.ROOT_ID);
-
-        if (root) { DevConsole.attach(root); }
-    };
-
-    if (document.readyState === "loading") {
-        document.addEventListener("DOMContentLoaded", boot);
-    } else {
-        boot();
-    }
-}());
+/* Attach to #devconsole: the loader creates it in game, the preview page carries it. */
+ACEUIModLoader.mod("devconsole").mount(DevConsole.attach);

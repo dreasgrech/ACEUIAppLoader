@@ -12,7 +12,6 @@
 <!-- shared test doubles (fake frame clock, in-memory localStorage, console capture) from the loader repo -->
 <script src="../../../ACEUIModLoader/tests/lib/doubles.js"></script>
 <script>
-window.DEVCONSOLE_SOURCE = "harness";
 window.ModelCurrentCar = { has_focused_car: true, speed: 123.4, gas_percent: 0.5 };
 </script>
 <!-- the ACEUIModLoader library from the sibling checkout, in load order (in game it is part of cohtml.js) -->
@@ -33,13 +32,10 @@ console.warn("early warning");
 
 <script>
 (function () {
-    const results = [];
-    const t = function (name, fn) {
-        try { fn(); results.push({ name: name, pass: true }); }
-        catch (e) { results.push({ name: name, pass: false, msg: String(e && e.message || e) }); }
-    };
-    const eq = function (a, b, what) { if (a !== b) { throw new Error((what || "") + " expected " + JSON.stringify(b) + " got " + JSON.stringify(a)); } };
-    const ok = function (c, what) { if (!c) { throw new Error(what || "assertion failed"); } };
+    const H = window.__harness;
+    const t = H.t, eq = H.eq, ok = H.ok;
+    // what the loader knows about this mod; outside the game the title falls back to the name and the version reads "dev"
+    const me = ACEUIModLoader.mod("devconsole");
 
     const clock = window.__clock;
     const center = document.getElementById("center");
@@ -57,12 +53,11 @@ console.warn("early warning");
     t("library and module present, constants, load logged", function () {
         eq(typeof ACEUIModLoader.console, "object", "ACEUIModLoader.console"); eq(typeof DevConsole, "object", "DevConsole");
         eq(DevConsole.MAX_ROWS, 200); eq(DevConsole.TOGGLE_CODE, "Backquote"); eq(DevConsole.FILTERS.length, 3);
-        // outside the game the loader has no mod.json for us, so the title (and log prefix) fall back to the name and the version reads "dev"
-        eq(DevConsole.VERSION, ACEUIModLoader.loader.DEV_VERSION, "version comes from the loader");
-        eq(DevConsole.LOG_PREFIX, "[devconsole]"); eq(DevConsole.HUD_ELEMENT_ID, "hud_devconsole"); eq(DevConsole.STORAGE_KEY, "acedevconsole.pos");
-        eq(DevConsole.OPEN_KEY, "acedevconsole.open"); eq(DevConsole.FILTER_KEY, "acedevconsole.filters"); eq(DevConsole.SCALE_KEY, "acedevconsole.scale");
-        ok(window.__log.some(function (l) { return l.indexOf(DevConsole.LOG_PREFIX + " script loaded, version=" + DevConsole.VERSION + ", source=harness, lib=" + ACEUIModLoader.VERSION) >= 0; }), "no load log");
-        eq(document.getElementById(DevConsole.ROOT_ID), null, "harness must not carry the auto-boot root");
+        eq(me.version, ACEUIModLoader.loader.DEV_VERSION, "version comes from the loader"); eq(me.prefix, "[devconsole]");
+        eq(me.hudId, "hud_devconsole"); eq(me.storageKey, "acedevconsole.pos"); eq(me.key("open"), "acedevconsole.open");
+        ok(window.__log.some(function (l) { return l.indexOf(me.prefix + " script loaded, version=" + me.version + ", lib=" + ACEUIModLoader.VERSION) >= 0; }), "no load log");
+        eq(document.getElementById(me.name), null, "harness must not carry the auto-mount root");
+        eq(typeof DevConsole.VERSION, "undefined", "identity is the loader's, not re-exported");
     });
 
     const root = document.createElement("div");
@@ -73,17 +68,17 @@ console.warn("early warning");
     t("attach builds header, 3 filters, MAX_ROWS rows and the prompt; open by default; panel and loop wired", function () {
         eq(root.querySelectorAll(".dc-filter").length, 3, "filters"); eq(root.querySelectorAll(".dc-row").length, MAX, "row pool");
         ok(input, "prompt input"); eq(input.getAttribute("data-nodrag"), "", "prompt does not drag");
-        eq(root.querySelector(".dc-title").textContent, "ACE Dev Console" + DevConsole.VERSION, "title + version span");
-        eq(root.querySelector(".dc-version").textContent, DevConsole.VERSION, "version span");
+        eq(root.querySelector(".dc-title").textContent, "ACE Dev Console" + me.version, "title + version span");
+        eq(root.querySelector(".dc-version").textContent, me.version, "version span");
         ok(root.querySelector(".dc-scrollbar") && root.querySelector(".dc-thumb"), "scrollbar markup");
         eq(root.querySelector(".dc-scrollbar").getAttribute("data-nodrag"), "", "scrollbar does not drag the panel");
         ok(root.querySelector(".dc-follow").classList.contains("dc-hidden"), "follow chip hidden while following");
         eq(root.querySelector('[data-action="close"]').textContent, "×", "close glyph");
         eq(state.open, true, "open by default"); ok(!root.classList.contains("dc-closed"));
-        eq(state.panel.hudId, DevConsole.HUD_ELEMENT_ID); eq(state.panel.storageKey, DevConsole.STORAGE_KEY);
+        eq(state.panel.hudId, me.hudId); eq(state.panel.storageKey, me.storageKey);
         eq(root.style.visibility, "hidden", "hidden until positioned"); ok(state.loop.running, "loop running");
         eq(getComputedStyle(root).position, "absolute", "stylesheet applied");
-        ok(window.__log.some(function (l) { return l.indexOf(DevConsole.LOG_PREFIX + " console attached") >= 0 && l.indexOf("buffered line(s)") >= 0; }), "attach logged");
+        ok(window.__log.some(function (l) { return l.indexOf(me.prefix + " console attached") >= 0 && l.indexOf("buffered line(s)") >= 0; }), "attach logged");
     });
 
     t("first frame shows the lines buffered before attach, oldest first, with times and levels", function () {
@@ -94,7 +89,7 @@ console.warn("early warning");
         eq(shown[0], "early line one", "first buffered line"); eq(shown[1], "early warning", "second");
         eq(visibleRows(root)[1].getAttribute("data-level"), "warn", "level attribute");
         ok(/^\d\d:\d\d:\d\d$/.test(visibleRows(root)[0].querySelector(".dc-time").textContent), "time format");
-        ok(shown.some(function (s) { return s.indexOf(DevConsole.LOG_PREFIX + " console attached") === 0; }), "its own attach line is in the buffer");
+        ok(shown.some(function (s) { return s.indexOf(me.prefix + " console attached") === 0; }), "its own attach line is in the buffer");
     });
 
     t("a new console.warn renders on the next frame with its level; counts update; nothing rewritten when clean", function () {
@@ -114,7 +109,7 @@ console.warn("early warning");
         const warnBtn = root.querySelector('[data-filter="warn"]');
         warnBtn.dispatchEvent(new MouseEvent("click", { bubbles: true }));
         eq(state.filters.warn, false); ok(!warnBtn.classList.contains("on"));
-        eq(JSON.parse(localStorage.getItem(DevConsole.FILTER_KEY)).warn, false, "persisted");
+        eq(JSON.parse(localStorage.getItem(me.key("filters"))).warn, false, "persisted");
         nextFrame();
         ok(texts(root).indexOf("fresh warning") === -1, "warn rows hidden"); ok(texts(root).indexOf("early line one") >= 0, "log rows still shown");
         warnBtn.querySelector(".dc-count").dispatchEvent(new MouseEvent("click", { bubbles: true }));   // click on a child still toggles
@@ -256,7 +251,7 @@ console.warn("early warning");
         eq(state.scale, 1); eq(root.style.fontSize, "1rem", "root font-size drives every em inside");
         const w = root.offsetWidth; const rowH = visibleRows(root)[0].offsetHeight;
         root.querySelector('[data-action="larger"]').dispatchEvent(new MouseEvent("click", { bubbles: true }));
-        eq(state.scale, 1.1); eq(root.style.fontSize, "1.1rem"); eq(localStorage.getItem(DevConsole.SCALE_KEY), "1.1", "persisted");
+        eq(state.scale, 1.1); eq(root.style.fontSize, "1.1rem"); eq(localStorage.getItem(me.key("scale")), "1.1", "persisted");
         ok(root.offsetWidth > w, "panel wider"); ok(visibleRows(root)[0].offsetHeight > rowH, "rows taller");
         eq(state.thumbHeight, -1, "thumb geometry invalidated"); nextFrame(); ok(state.thumbHeight > 0, "thumb re-applied");
         let i; for (i = 0; i < 30; i += 1) { root.querySelector('[data-action="smaller"]').dispatchEvent(new MouseEvent("click", { bubbles: true })); }
@@ -282,7 +277,7 @@ console.warn("early warning");
 
     t("toggle key closes and opens, persists, is ignored while typing in the prompt; the x button closes", function () {
         key(window, { code: "Backquote", key: "`" });
-        eq(state.open, false); ok(root.classList.contains("dc-closed")); eq(localStorage.getItem(DevConsole.OPEN_KEY), "false");
+        eq(state.open, false); ok(root.classList.contains("dc-closed")); eq(localStorage.getItem(me.key("open")), "false");
         console.log("while closed"); nextFrame();
         eq(state.dirty, true, "no render while closed");
         key(window, { code: "Backquote", key: "`" });
@@ -298,11 +293,11 @@ console.warn("early warning");
         document.body.classList.add(ACEUIModLoader.HUD_HIDDEN_CLASS);
         console.log("hud hidden line"); nextFrame(); eq(state.dirty, true, "not rendered while the HUD is hidden");
         document.body.classList.remove(ACEUIModLoader.HUD_HIDDEN_CLASS); nextFrame(); eq(state.dirty, false);
-        localStorage.setItem(DevConsole.OPEN_KEY, "false");
+        localStorage.setItem(me.key("open"), "false");
         const root2 = document.createElement("div"); center.appendChild(root2);
         const state2 = DevConsole.attach(root2);
         eq(state2.open, false, "restored closed"); ok(root2.classList.contains("dc-closed"));
-        DevConsole.detach(state2); root2.remove(); localStorage.removeItem(DevConsole.OPEN_KEY);
+        DevConsole.detach(state2); root2.remove(); localStorage.removeItem(me.key("open"));
     });
 
     t("mousedown on the prompt or a button does not drag; on the header it does and saves under the mod's keys", function () {
@@ -315,7 +310,7 @@ console.warn("early warning");
         mouse("mousedown", 110, 105, header); ok(root.classList.contains("dragging"), "header drags");
         mouse("mousemove", 160, 125); mouse("mouseup", 0, 0);
         eq(root.style.left, "150px", "moved"); eq(root.style.top, "120px");
-        ok(JSON.parse(localStorage.getItem(DevConsole.STORAGE_KEY)).x === "150px", "saved under acedevconsole.pos");
+        ok(JSON.parse(localStorage.getItem(me.storageKey)).x === "150px", "saved under acedevconsole.pos");
     });
 
     t("detach stops the loop, unsubscribes and releases the key, click, wheel and track listeners", function () {
@@ -335,12 +330,7 @@ console.warn("early warning");
         eq(root.querySelectorAll(".dc-row").length, MAX, "markup reused"); DevConsole.detach(state);
     });
 
-    const passed = results.filter(function (r) { return r.pass; }).length;
-    document.getElementById("results").textContent =
-        results.map(function (r) { return (r.pass ? "PASS " : "FAIL ") + r.name + (r.msg ? "  -- " + r.msg : ""); }).join("\n") +
-        "\nSUMMARY " + passed + "/" + results.length;
-    document.getElementById("done").hidden = false;
-    document.getElementById("done").textContent = "DONE";
+    H.finish();
 }());
 </script>
 </body>
