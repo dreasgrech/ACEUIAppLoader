@@ -343,3 +343,32 @@ Consequences implemented:
 
 Open: mod load order is alphabetical (an `after` field in mod.json if a mod ever
 depends on another); the marker's home under `Video\` is fixed by the game.
+
+## 11. Less boilerplate per mod (loader 0.4.0, 2026-09-14)
+
+Inventory of the two reference mods showed eleven files each, the version in six
+places, the mod's name in about eight forms, the library load order in ten files
+across three repos, and `mod.js`, `tools/install.py` and the harness doubles
+identical between the mods.
+
+Loader-side changes, so a mod can be one folder with three files:
+- `mod.json` shrinks to `version`, `scripts`, `styles` (optional `title`, `pages`,
+  `root`, `name`); the folder name is the mod name and must match a `name` key.
+- The loader creates `<div id="<name>" data-mod="<name>">` in `.absolutecenter`
+  (or `<body>`) before injecting the scripts, so `mod.js` is unnecessary: the
+  script's own boot block finds `#<name>` exactly as it does on a preview page.
+- `ACEUIModLoader.mod()` / `mod(name)` returns name, title, version, root, a
+  prefixed logger, `hudId`, `storageKey` and `key(suffix)`; the script declares
+  none of these and never repeats the version (`const VERSION` is now a kit error).
+- `tools/modkit.py` is the shared test kit (one subclass per mod repo);
+  `tests/lib/doubles.js` and `tests/lib/lib.js` are the shared browser fixtures,
+  so `LIB_ORDER` has one mirror instead of nine.
+- `tools/new_mod.py` writes a complete mod repo that passes the kit; a test proves it.
+- `install_mod.py` derives the name from the folder (a legacy `src/` folder may
+  keep a `name` key) and rejects unknown keys.
+
+Found on the way: a `mod.json` without `styles` made `toArray(undefined)` throw
+inside the XHR callback, leaving the mod pending forever; the harness fixture
+`alpha` (no styles) caught it. Harnesses now wait on `ACEUIModLoader.ready` rather
+than a virtual-time deadline, with a timeout that reports a stuck loader.
+Next: strip PedalGraph and DevConsole to the new shape.

@@ -19,9 +19,19 @@
  *
  * There is no other source of mod names: without an engine (a plain browser) or
  * without an answer within PRESET_TIMEOUT_MS the loader logs why and loads nothing.
- * Per mod (`ACEUIModLoaderMods/<name>/mod.json`):
- *     { "name": "pedalgraph", "version": "0.4.0", "pages": ["hud.html"],
- *       "styles": ["pedalgraph.css"], "scripts": ["pedalgraph.js", "mod.js"] }
+ *
+ * Per mod, `ACEUIModLoaderMods/<name>/mod.json` holds what cannot be inferred:
+ *     { "version": "0.4.0", "styles": ["pedalgraph.css"], "scripts": ["pedalgraph.js"] }
+ * Optional: "pages" (default ["hud.html"], "*" = every page), "title" (log prefix,
+ * default the name), "root": false (do not create a root element). The name is
+ * the folder's; a "name" key must match it if present.
+ *
+ * Before a mod's scripts run the loader creates its root, `<div id="<name>"
+ * data-mod="<name>">`, inside the HUD's positioning container (or <body> on
+ * pages without one), so a script only has to attach to `#<name>`. While the
+ * scripts run, `ACEUIModLoader.mod()` describes the mod being loaded: name,
+ * version, title, root, a prefixed logger and derived storage keys, so none of
+ * that is repeated in the mod's own source.
  *
  * Never request a URL that could be a folder: the game's loose-file lookup only
  * checks existence and then dies opening it (crashed the game three times). Only
@@ -52,10 +62,22 @@ ACEUIModLoader.loader = (function () {
     /** Property set on our own response handler so the engine.on wrapper leaves it alone. */
     const OWN_HANDLER = "aceuimodloaderRaw";
 
+    /** Where mod roots go: the stock HUD's positioning container, else the body. */
+    const CONTAINER_SELECTOR = ".absolutecenter";
+    /** Attribute on a loader-created root naming its mod. */
+    const MOD_ATTR = "data-mod";
+    /** What `mod()` reports for a mod the loader did not load (preview pages). */
+    const DEV_VERSION = "dev";
+    /** Derived identifiers: storage keys "ace<name>.<suffix>", HUD layout id "hud_<name>". */
+    const KEY_PREFIX = "ace";
+    const HUD_ID_PREFIX = "hud_";
+    const POSITION_SUFFIX = "pos";
+
     const log = ACEUIModLoader.log;
 
     const state = {
         mods: [],           // { name, info, status }
+        current: null,      // the entry whose scripts are running right now
         source: "",         // "presets" (the game answered) | "none" (no engine or no answer)
         filtering: false,   // engine.on wrapped, stock handlers never see markers
         readyCallbacks: []
@@ -215,6 +237,11 @@ ACEUIModLoader.loader = (function () {
         document.body.appendChild(script);
     };
 
+    /** A mod.json list field: the array itself, or empty when absent (optional keys). */
+    const listOf = function (value) {
+        return Array.isArray(value) ? value : [];
+    };
+
     /** A file entry a mod.json may list: a plain relative file name with an extension, never a folder. */
     const isFileName = function (file) {
         return typeof file === "string" && file.indexOf("/") < 0 && file.indexOf("\\") < 0
@@ -237,6 +264,56 @@ ACEUIModLoader.loader = (function () {
         return pages.indexOf(ACEUIModLoader.page) >= 0 || pages.indexOf(ANY_PAGE) >= 0;
     };
 
+    /** The mod's root element, created inside the HUD container unless the mod opts out or one exists. */
+    const mountRoot = function (name, info) {
+        const existing = document.getElementById(name);
+        const container = document.querySelector(CONTAINER_SELECTOR) || document.body;
+        const root = document.createElement("div");
+
+        if (existing || info.root === false) { return existing; }
+
+        root.id = name;
+        root.setAttribute(MOD_ATTR, name);
+        container.appendChild(root);
+
+        return root;
+    };
+
+    const findEntry = function (name) {
+        return state.mods.filter(function (entry) { return entry.name === name; })[0] || null;
+    };
+
+    /**
+     * Everything a mod's script needs to know about itself, derived from the folder name
+     * and mod.json: `ACEUIModLoader.mod()` while its scripts run, `ACEUIModLoader.mod("x")` any
+     * time. Unknown names (preview pages without the loader) get a "dev" description.
+     */
+    const describe = function (name, entry) {
+        const info = entry && entry.info ? entry.info : {};
+        const title = info.title || name;
+        const key = function (suffix) { return KEY_PREFIX + name + "." + suffix; };
+
+        return {
+            name: name,
+            title: title,
+            version: info.version || DEV_VERSION,
+            base: entry ? ROOT + name + "/" : "",
+            loaded: Boolean(entry),
+            root: document.getElementById(name),
+            prefix: "[" + title + "]",
+            log: ACEUIModLoader.logger("[" + title + "]"),
+            hudId: HUD_ID_PREFIX + name,
+            storageKey: key(POSITION_SUFFIX),
+            key: key
+        };
+    };
+
+    const mod = function (name) {
+        const wanted = name || (state.current ? state.current.name : "");
+
+        return describe(wanted, findEntry(wanted));
+    };
+
     const loadMod = function (name, onDone) {
         const base = ROOT + name + "/";
         const entry = { name: name, info: null, status: "pending" };
@@ -244,8 +321,8 @@ ACEUIModLoader.loader = (function () {
         state.mods.push(entry);
         fetchText(base + MOD_FILE, function (text) {
             const info = text === null ? null : parseJson(text, name + "/" + MOD_FILE);
-            const styles = info ? ACEUIModLoader.toArray(info.styles) : [];
-            const scripts = info ? ACEUIModLoader.toArray(info.scripts) : [];
+            const styles = info ? listOf(info.styles) : [];
+            const scripts = info ? listOf(info.scripts) : [];
 
             if (!info) {
                 entry.status = "missing";
@@ -265,6 +342,14 @@ ACEUIModLoader.loader = (function () {
                 return;
             }
 
+            if (info.name && info.name !== name) {
+                entry.status = "invalid";
+                log("mod " + name + ": " + MOD_FILE + " names it \"" + info.name + "\", skipped");
+                onDone();
+
+                return;
+            }
+
             if (!wantsPage(info)) {
                 entry.status = "not-for-this-page";
                 onDone();
@@ -272,10 +357,13 @@ ACEUIModLoader.loader = (function () {
                 return;
             }
 
-            log("mod " + name + " " + (info.version || "?") + ": loading " + scripts.length + " script(s), "
+            log("mod " + name + " " + (info.version || DEV_VERSION) + ": loading " + scripts.length + " script(s), "
                 + styles.length + " stylesheet(s)");
             styles.forEach(function (file) { addStylesheet(base + file); });
+            mountRoot(name, info);
+            state.current = entry;
             loadScripts(base, scripts, 0, function (ok) {
+                state.current = null;
                 entry.status = ok ? "loaded" : "failed";
                 log("mod " + name + (ok ? " loaded" : " FAILED"));
                 onDone();
@@ -343,7 +431,11 @@ ACEUIModLoader.loader = (function () {
         MARKER_PREFIX: MARKER_PREFIX,
         MARKER_EXT: MARKER_EXT,
         PRESET_TIMEOUT_MS: PRESET_TIMEOUT_MS,
+        CONTAINER_SELECTOR: CONTAINER_SELECTOR,
+        MOD_ATTR: MOD_ATTR,
+        DEV_VERSION: DEV_VERSION,
         mods: state.mods,
+        mod: mod,
         source: source,
         filtering: filtering,
         isMarker: isMarker,
@@ -359,6 +451,7 @@ ACEUIModLoader.loader = (function () {
 /* Convenience aliases so mods can stay on the flat `ACEUIModLoader.*` API. */
 ACEUIModLoader.ROOT = ACEUIModLoader.loader.ROOT;
 ACEUIModLoader.mods = ACEUIModLoader.loader.mods;
+ACEUIModLoader.mod = ACEUIModLoader.loader.mod;
 ACEUIModLoader.ready = ACEUIModLoader.loader.ready;
 ACEUIModLoader.addStylesheet = ACEUIModLoader.loader.addStylesheet;
 ACEUIModLoader.addScript = ACEUIModLoader.loader.addScript;

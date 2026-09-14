@@ -2,7 +2,7 @@
 
 The single package that lets several UI mods coexist in Assetto Corsa EVO, the
 shared library those mods are built on, and the tools that build it and install
-mods for it. Version 0.3.0.
+mods for it. Version 0.4.0.
 
 Why a loader is needed at all, and why it has this shape, is in
 [`docs/design.md`](docs/design.md); the game mechanics it relies on are
@@ -48,17 +48,33 @@ Never request a URL that could be a folder: the game's loose-file lookup only
 checks that the path exists and then crashes opening it. The loader only ever
 requests plain file names listed in a `mod.json`.
 
-A mod's `mod.json`:
+A mod's `mod.json` holds only what cannot be inferred:
 
 ```json
-{ "name": "pedalgraph", "version": "0.4.0", "pages": ["hud.html"],
-  "styles": ["pedalgraph.css"], "scripts": ["pedalgraph.js", "mod.js"] }
+{ "version": "0.4.0", "styles": ["pedalgraph.css"], "scripts": ["pedalgraph.js"] }
 ```
 
-`pages` defaults to `["hud.html"]`; `"*"` means every page. Scripts run in
-order as classic scripts; the loader waits for each before adding the next.
-Everything the loader logs starts with `[ACEUIModLoader]` and lands in the game log
-as `[gameface]` lines.
+The mod's name is its folder's (and its marker's). Optional keys: `title` (the
+log prefix, default the name), `pages` (default `["hud.html"]`, `"*"` = every
+page), `root: false` (no root element), `name` (must equal the folder if given).
+Scripts run in order as classic scripts; the loader waits for each before adding
+the next.
+
+Before the scripts run the loader creates the mod's root, `<div id="<name>"
+data-mod="<name>">`, inside the HUD's positioning container (`.absolutecenter`,
+or `<body>` on pages without one). While they run, `ACEUIModLoader.mod()` describes
+the mod being loaded, and `ACEUIModLoader.mod("<name>")` does so at any time:
+
+| field | value |
+|---|---|
+| `name`, `title`, `version` | from the folder and `mod.json` (`version` is `"dev"` on pages the loader did not load the mod on, e.g. a preview) |
+| `root` | the `#<name>` element |
+| `log`, `prefix` | a logger writing `[Title] ...` |
+| `hudId`, `storageKey`, `key(suffix)` | `hud_<name>`, `ace<name>.pos`, `ace<name>.<suffix>`: the HUD layout id and storage keys for `ACEUIModLoader.panel` / `.persist` |
+| `base`, `loaded` | the mod folder's URL; whether this loader instance loaded it |
+
+So a mod's script declares none of that itself. Everything the loader logs
+starts with `[ACEUIModLoader]` and lands in the game log as `[gameface]` lines.
 
 ## The library (`ACEUIModLoader.*`)
 
@@ -72,21 +88,38 @@ in this order because each builds on the previous:
 | `src/ACEUIModLoader.persist.js` | `ACEUIModLoader.persist` | the stock HUD layout store (`HUD.elementModified` / `HUD.StoredData`, saved by the game on HUD close) and `localStorage`: `readHud`, `writeHud`, `hudAvailable`, `readLocal`, `writeLocal`, `removeLocal`, `save(hudId, key, data)` |
 | `src/ACEUIModLoader.panel.js` | `ACEUIModLoader.panel` | `attach(root, {hudId, storageKey, log, onSaved})`: drag inside the HUD container, clamped; position persisted as screen fractions; hidden until the stored position is applied (immediate `localStorage`, then the HUD store has the last word in `update(panel, now)`); `data-nodrag` on descendants that must not start a drag; `detach` |
 | `src/ACEUIModLoader.loop.js` | `ACEUIModLoader.loop` | `start(onFrame)` / `stop(handle)`; `sampler(hz, maxGapMs)` + `advance(sampler, now, onSample)` for fixed-rate sampling independent of frame rate, returning the 0..1 fraction towards the next sample |
-| `src/ACEUIModLoader.loader.js` | `ACEUIModLoader.loader` | mod discovery through the game's video preset list, the `engine.on` wrapper that hides markers from the stock presets menu, mod injection; aliases `ACEUIModLoader.ready(cb)`, `.mods`, `.addScript`, `.addStylesheet`, `.ROOT` |
+| `src/ACEUIModLoader.loader.js` | `ACEUIModLoader.loader` | mod discovery through the game's video preset list, the `engine.on` wrapper that hides markers from the stock presets menu, root creation, mod injection, `mod(name)`; aliases `ACEUIModLoader.mod`, `.ready(cb)`, `.mods`, `.addScript`, `.addStylesheet`, `.ROOT` |
 
-A mod is typically: `const MyMod = (function () { ... attach/detach ... }());`
-using `ACEUIModLoader.panel` for its root and `ACEUIModLoader.loop` for its frame, plus a
-`mod.js` that creates the root inside `.absolutecenter` and calls `attach`.
-`ACEPedalGraph` and `ACEDevConsole` are the two reference mods.
+A mod is one folder: `mod.json`, one script and one stylesheet. The script is an
+IIFE module that reads its identity from `ACEUIModLoader.mod("<name>")`, uses
+`ACEUIModLoader.panel` for its root and `ACEUIModLoader.loop` for its frame, and
+attaches to `#<name>` when the page has it (the loader in game, the preview and
+harness pages outside it). `python tools/new_mod.py <name> --title "Nice Name"`
+writes exactly that, plus a harness, a preview and a one-class test file that
+runs the shared kit. `ACEPedalGraph` and `ACEDevConsole` are the two reference mods.
+
+## The mod test kit (`tools/modkit.py`)
+
+A mod repo's whole test suite is one file that subclasses `modkit.ModTests` with
+`ROOT` set. The kit checks the shipped folder (`mod.json` valid and minimal,
+nothing unlisted ships, no stock file overridden, no legacy `VERSION` /
+`mod.js` / install wrapper / `const VERSION`), the JavaScript style rules, the
+Cohtml rules, that class names used by scripts exist in the stylesheet, that
+identity comes from `ACEUIModLoader.mod(...)`, optionally a per-frame hot path
+(`HOT_PATH` markers), and runs every `tests/**/harness.html` headlessly. Browser
+pages include `tests/lib/doubles.js` (fake frame clock, in-memory storage,
+console capture) and `tests/lib/lib.js` (the library in `LIB_ORDER`) from this
+repo, so the library load order exists in one place.
 
 ## Build and install
 
 ```
 python tools/build_loader.py --install     # extract stock cohtml.js, append the library, pack, pad, install
-python tools/install_mod.py <mod/src>      # copy a mod folder in place and write its empty marker
+python tools/install_mod.py <repo>/<name>  # copy a mod folder in place and write its empty marker
 python tools/install_mod.py --list
 python tools/install_mod.py --remove <name>
 python tools/check_ingame_log.py           # after a launch: did the loader run, which mods loaded, crashes?
+python tools/new_mod.py <name> [<parent dir>] [--title "Nice Name"]   # start a new mod repo
 ```
 
 Deleting `ACEUIModLoader.kspkg` from the mods folder restores the stock game;
@@ -105,11 +138,16 @@ paths, so it stays the same).
 | `tools/pack_kspkg.py` | generic `.kspkg` writer with override padding, verify, `--install` |
 | `tools/check_ingame_log.py` | reads the newest game log and reports loader/mod status |
 | `tools/headless.py` | runs an HTML test harness in a headless Edge/Chrome and parses its report; shared with the mod repos |
+| `tools/modkit.py` | the shared mod test kit (`ModTests` base class), see above |
+| `tools/new_mod.py` | writes a new mod repo: folder with `mod.json` + script + stylesheet, harness, preview, kit test file, README |
+| `tests/lib/doubles.js`, `tests/lib/lib.js` | test doubles and the library loader for browser pages, used by this repo's harness and every mod's |
+| `tests/lib/ACEUIModLoaderMods/alpha/` | harness fixture: a mod the fake engine lists, to prove injection, root creation and `mod()` |
 | `tools/_repos.py` | locates the sibling `ACEGameInternals`, the game and the mods folder (`ACE_*_DIR` overrides) |
 | `docs/design.md` | the investigation and decisions behind the loader and the library |
 | `tests/test_pack_kspkg.py` | package format tests |
 | `tests/test_loader_tools.py` | library style/contract tests, install_mod tests, a real build test (skipped without the game) |
-| `tests/test_lib_browser.py`, `tests/lib/harness.html` | 17 behavioural cases for the library in a headless browser (fake clock, storage, HUD store) |
+| `tests/test_lib_browser.py`, `tests/lib/harness.html` | 23 behavioural cases for the library in a headless browser (fake clock, storage, HUD store, fake engine) |
+| `tests/test_modkit.py` | `new_mod.py` output passes the kit; the kit catches legacy boilerplate |
 
 ## Dependencies
 

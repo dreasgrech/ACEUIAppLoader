@@ -10,41 +10,8 @@
   .panel { position: absolute; left: 2rem; bottom: 2rem; width: 200px; height: 100px; background: #444; }
   #results { white-space: pre; }
 </style>
+<script src="doubles.js"></script>
 <script>
-// ---- test doubles, installed before the library loads ---------------------------------
-
-// Manual animation-frame clock: tests call __clock.step(t) to run queued callbacks.
-window.__clock = {
-    queue: [], nextId: 1, cancelled: 0,
-    step: function (t) {
-        const run = this.queue; this.queue = [];
-        run.forEach(function (q) { q[1](t); });
-    }
-};
-window.requestAnimationFrame = function (cb) { const id = window.__clock.nextId++; window.__clock.queue.push([id, cb]); return id; };
-window.cancelAnimationFrame = function (id) {
-    const n = window.__clock.queue.length;
-    window.__clock.queue = window.__clock.queue.filter(function (q) { return q[0] !== id; });
-    if (window.__clock.queue.length !== n) { window.__clock.cancelled++; }
-};
-
-// In-memory localStorage so file:// origin quirks cannot affect the tests.
-const __store = {};
-Object.defineProperty(window, "localStorage", { value: {
-    getItem: function (k) { return (k in __store) ? __store[k] : null; },
-    setItem: function (k, v) { __store[k] = String(v); },
-    removeItem: function (k) { delete __store[k]; },
-    clear: function () { Object.keys(__store).forEach(function (k) { delete __store[k]; }); }
-}});
-
-// Capture what reaches the *original* console, to prove the hook chains to it.
-window.__log = [];
-const __origLog = console.log.bind(console);
-console.log = function () { const a = Array.prototype.slice.call(arguments); window.__log.push(a.join(" ")); __origLog.apply(null, a); };
-window.__warn = [];
-console.warn = function () { window.__warn.push(Array.prototype.slice.call(arguments).join(" ")); };
-console.error = function () { window.__warn.push(Array.prototype.slice.call(arguments).join(" ")); };
-
 // Fake Cohtml engine. Answers the video preset list (two markers, one real preset,
 // one malformed marker) a tick after being asked, like the game does, so discovery
 // and the stock-handler filter can be tested. Records every trigger.
@@ -69,12 +36,7 @@ window.engine = {
 };
 </script>
 <!-- the library exactly as build_loader.py appends it to cohtml.js, same order -->
-<script src="../../src/ACEUIModLoader.core.js"></script>
-<script src="../../src/ACEUIModLoader.console.js"></script>
-<script src="../../src/ACEUIModLoader.persist.js"></script>
-<script src="../../src/ACEUIModLoader.panel.js"></script>
-<script src="../../src/ACEUIModLoader.loop.js"></script>
-<script src="../../src/ACEUIModLoader.loader.js"></script>
+<script src="lib.js"></script>
 </head>
 <body>
 <div class="absolutecenter" id="center"></div>
@@ -368,29 +330,56 @@ document.addEventListener("DOMContentLoaded", function () {
     // fetches are XHRs), so the remaining cases wait for it before the report is written.
     const finish = function () {
         const passed = results.filter(function (r) { return r.pass; }).length;
+        const loaderLines = window.__log.filter(function (l) { return l.indexOf("[ACEUIModLoader]") === 0 || l.indexOf("[Alpha]") === 0; });
+        const statuses = ACEUIModLoader.loader.mods.map(function (m) { return m.name + "=" + m.status; }).join(" ");
         document.getElementById("results").textContent =
             results.map(function (r) { return (r.pass ? "PASS " : "FAIL ") + r.name + (r.msg ? "  -- " + r.msg : ""); }).join("\n") +
+            "\nloader log: " + loaderLines.join(" | ") + "\nmods: " + statuses + "\nerrors: " + window.__warn.slice(-3).join(" | ") +
             "\nSUMMARY " + passed + "/" + results.length;
         document.getElementById("done").hidden = false;
         document.getElementById("done").textContent = "DONE";
-    };
-    const settled = function () {
-        const mods = ACEUIModLoader.loader.mods;
-        return ACEUIModLoader.loader.source() !== "" && mods.length === 2 && mods.every(function (m) { return m.status !== "pending"; });
     };
     const waitFor = function (cond, then, deadline) {
         if (cond() || Date.now() > deadline) { then(); return; }
         window.setTimeout(function () { waitFor(cond, then, deadline); }, 10);
     };
 
-    waitFor(settled, function () {
+    // ACEUIModLoader.ready fires once every discovered mod has been processed (scripts loaded or skipped).
+    // If it never does, report that as a failure instead of producing no report at all.
+    let readyFired = false;
+    window.setTimeout(function () {
+        if (readyFired) { return; }
+        t("loader: became ready", function () { throw new Error("ACEUIModLoader.ready never fired; mods: " + ACEUIModLoader.loader.mods.map(function (m) { return m.name + "=" + m.status; }).join(" ")); });
+        finish();
+    }, 5000);
+    ACEUIModLoader.ready(function () {
+        readyFired = true;
         t("loader: discovered the mods from the game's answer, not a manifest", function () {
             const mods = ACEUIModLoader.loader.mods;
             eq(ACEUIModLoader.loader.source(), "presets");
             eq(mods.map(function (m) { return m.name; }).join(","), "alpha,beta", "markers only, prefix stripped, sorted");
-            mods.forEach(function (m) { eq(m.status, "missing", m.name + " has no folder in the harness"); });
+            eq(mods[0].status, "loaded", "alpha has a folder with mod.json in the harness");
+            eq(mods[1].status, "missing", "beta has none");
             ok(window.__log.indexOf("[ACEUIModLoader] presets: 2 mod(s)") >= 0, "discovery line");
+            ok(window.__log.indexOf("[ACEUIModLoader] mod alpha 1.2.3: loading 1 script(s), 0 stylesheet(s)") >= 0, "version from mod.json");
             ok(!window.__log.some(function (l) { return l.indexOf("nothing to load") >= 0; }), "no give-up line");
+        });
+
+        t("loader: the root is created inside the HUD container before the script runs, and mod() describes the mod", function () {
+            const a = window.__alpha;
+            ok(a, "alpha.js ran");
+            eq(a.name, "alpha"); eq(a.title, "Alpha", "title from mod.json"); eq(a.version, "1.2.3"); eq(a.loaded, true);
+            eq(a.base, "ACEUIModLoaderMods/alpha/");
+            eq(a.hudId, "hud_alpha"); eq(a.storageKey, "acealpha.pos"); eq(a.filterKey, "acealpha.filters");
+            ok(a.rootPresent, "root existed while the script ran"); eq(a.rootParent, "center", "inside .absolutecenter"); eq(a.rootAttr, "alpha");
+            eq(document.querySelectorAll("#alpha").length, 1, "exactly one root");
+            ok(window.__log.indexOf("[Alpha] alpha script ran") >= 0, "prefixed logger uses the title");
+            const later = ACEUIModLoader.mod("alpha");
+            eq(later.version, "1.2.3"); eq(later.root, document.getElementById("alpha"), "root by id later on");
+            eq(ACEUIModLoader.mod, ACEUIModLoader.loader.mod, "alias");
+            const dev = ACEUIModLoader.mod("zzz");
+            eq(dev.version, ACEUIModLoader.loader.DEV_VERSION); eq(dev.loaded, false); eq(dev.base, ""); eq(dev.name, "zzz"); eq(dev.hudId, "hud_zzz");
+            eq(ACEUIModLoader.mod("beta").version, "dev", "listed but not loaded reads as dev");
         });
 
         // A stock-style handler registered through the wrapped engine.on must never see markers.
@@ -410,7 +399,7 @@ document.addEventListener("DOMContentLoaded", function () {
             });
             finish();
         }, Date.now() + 2000);
-    }, Date.now() + 4000);
+    });
 });
 </script>
 </body>

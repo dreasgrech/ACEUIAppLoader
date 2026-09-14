@@ -2,7 +2,8 @@
 """
 install_mod.py - install (or remove) a loose UI mod for the ACEUIModLoader.
 
-A mod is a folder containing `mod.json` plus the files it lists. Installing copies
+A mod is a folder containing `mod.json` plus the files it lists; the folder's name is
+the mod's name (a legacy `src/` folder needs a "name" key). Installing copies
 the folder to `<ACE>/mods/uiresources/ACEUIModLoaderMods/<name>/` and writes the
 EMPTY marker file `<ACE>/Video/ACEUIModLoaderMods-<name>.settingspreset`. The game
 lists that folder for the UI (video settings presets), which is how the loader
@@ -32,6 +33,7 @@ MARKER_DIR = "Video"
 MARKER_PREFIX = "ACEUIModLoaderMods-"
 MARKER_EXT = ".settingspreset"
 MOD_FILE = "mod.json"
+KNOWN_KEYS = {"name", "version", "title", "pages", "scripts", "styles", "root"}
 LEGACY_MANIFEST = "manifest.json"
 NAME_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9_.-]*$")
 IGNORE = shutil.ignore_patterns("__pycache__", "*.swp", "*~", ".*")
@@ -104,10 +106,15 @@ def load_mod_info(src_dir):
         raise SystemExit(f"{src_dir} has no {MOD_FILE}")
     with open(path, encoding="utf-8") as f:
         info = json.load(f)
-    for key in ("name", "version"):
-        if not info.get(key):
-            raise SystemExit(f"{MOD_FILE}: missing '{key}'")
-    check_name(info["name"])
+    if not info.get("version"):
+        raise SystemExit(f"{MOD_FILE}: missing 'version'")
+    folder = os.path.basename(os.path.abspath(src_dir))
+    info["name"] = check_name(info.get("name") or folder)
+    if folder != info["name"] and folder != "src":
+        raise SystemExit(f"{MOD_FILE} names the mod {info['name']!r} but the folder is {folder!r}; they must match")
+    unknown = sorted(set(info) - KNOWN_KEYS)
+    if unknown:
+        raise SystemExit(f"{MOD_FILE}: unknown key(s) {unknown}; known: {sorted(KNOWN_KEYS)}")
     for key in ("scripts", "styles"):
         for rel in info.get(key, []):
             if os.path.basename(rel) != rel or not rel:

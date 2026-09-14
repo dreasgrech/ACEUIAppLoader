@@ -120,10 +120,27 @@ class LibrarySourceTests(unittest.TestCase):
         self.assertIn("loadScripts(base, files, index + 1, onDone)", js, "scripts load sequentially")
         self.assertIn("styles.concat(scripts).every(isFileName)", js, "never request anything that could be a folder")
         for name in ("PRESET_REQUEST", "PRESET_RESPONSE", "MARKER_PREFIX", "MARKER_EXT", "PRESET_TIMEOUT_MS", "source",
-                     "filtering", "isMarker", "markerNames", "withoutMarkers", "isFileName"):
+                     "filtering", "isMarker", "markerNames", "withoutMarkers", "isFileName", "CONTAINER_SELECTOR",
+                     "MOD_ATTR", "DEV_VERSION", "mod"):
             self.assertRegex(js, rf"\n\s+{name}: [A-Za-z_.]+,?\n", f"loader.{name} not exported")
-        for alias in ("ROOT", "mods", "ready", "addStylesheet", "addScript"):
+        for alias in ("ROOT", "mods", "mod", "ready", "addStylesheet", "addScript"):
             self.assertIn(f"ACEUIModLoader.{alias} = ACEUIModLoader.loader.{alias};", js)
+        self.assertIn('const CONTAINER_SELECTOR = ".absolutecenter";', js)
+        self.assertIn("mountRoot(name, info);\n            state.current = entry;\n            loadScripts(", js,
+                      "root exists and mod() knows the current mod before its scripts run")
+        self.assertIn('const KEY_PREFIX = "ace";', js)
+        self.assertIn('const HUD_ID_PREFIX = "hud_";', js)
+
+    def test_browser_pages_share_doubles_and_the_library_load_order(self):
+        lib_js = read(os.path.join(ROOT, "tests", "lib", "lib.js"))
+        names = re.search(r"const FILES = \[([^\]]*)\];", lib_js).group(1)
+        files = [f"ACEUIModLoader.{n.strip().strip(chr(34))}.js" for n in names.split(",")]
+        self.assertEqual(files, build_loader.LIB_ORDER, "tests/lib/lib.js must load the library in LIB_ORDER")
+        self.assertTrue(os.path.exists(os.path.join(ROOT, "tests", "lib", "doubles.js")))
+        harness = read(os.path.join(ROOT, "tests", "lib", "harness.html"))
+        self.assertIn('<script src="doubles.js"></script>', harness)
+        self.assertIn('<script src="lib.js"></script>', harness)
+        self.assertNotIn("ACEUIModLoader.core.js", harness, "the harness must not list library files itself")
 
     def test_marker_naming_matches_between_loader_and_install_tool(self):
         js = self.files["ACEUIModLoader.loader.js"]
@@ -178,6 +195,25 @@ class InstallModTests(unittest.TestCase):
         os.remove(os.path.join(self.src, "b.js"))
         with self.assertRaises(SystemExit):
             install_mod.install(self.src, self.mods)
+
+    def test_name_comes_from_the_folder_when_mod_json_has_none(self):
+        folder = os.path.join(self.tmp.name, "othermod")
+        os.makedirs(folder)
+        with open(os.path.join(folder, "mod.json"), "w", encoding="utf-8") as f:
+            json.dump({"version": "0.1.0", "scripts": ["othermod.js"]}, f)
+        with open(os.path.join(folder, "othermod.js"), "w") as f:
+            f.write("x")
+        dest = install_mod.install(folder, self.mods)
+        self.assertTrue(dest.endswith("othermod"))
+        self.assertEqual(install_mod.marker_names(self.mods), ["othermod"])
+        with open(os.path.join(folder, "mod.json"), "w", encoding="utf-8") as f:
+            json.dump({"name": "different", "version": "0.1.0", "scripts": ["othermod.js"]}, f)
+        with self.assertRaises(SystemExit):
+            install_mod.install(folder, self.mods)
+        with open(os.path.join(folder, "mod.json"), "w", encoding="utf-8") as f:
+            json.dump({"version": "0.1.0", "scripts": ["othermod.js"], "bogus": 1}, f)
+        with self.assertRaises(SystemExit):
+            install_mod.install(folder, self.mods)
 
     def test_names_and_paths_that_could_escape_the_folder_are_errors(self):
         with self.assertRaises(SystemExit):
