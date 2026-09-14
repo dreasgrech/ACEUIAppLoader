@@ -312,3 +312,34 @@ built against sections 4 and 5, and where it deviates.
   (`tests/lib/harness.html`, 17 cases); each mod tests its own logic plus its
   integration with the panel. The headless runner moved to
   `tools/headless.py` and is shared.
+
+## 10. Discovery without a manifest (loader 0.3.0, 2026-09-14)
+
+Problem: a player adding a mod had to edit (or run a script to regenerate)
+`ACEUIModLoaderMods/manifest.json`, because a page cannot list folders and every
+self-registration scheme (fixed shared files, numbered or hashed slots, fonts,
+localisation) either collides between zips, needs a central registry, or does
+not exist in this Cohtml build. See ACEGameInternals/docs/game-internals.md,
+"Folder listing for the UI".
+
+Mechanism: the game lists `Saved Games/ACE/Video/*.settingspreset` for its own
+video presets menu and answers `SettingsRequestVideoPresetList` on every page.
+Each mod ships an **empty** marker `Video/ACEUIModLoaderMods-<name>.settingspreset`
+next to its folder; the loader sends that request at start, keeps the names with
+our prefix, and loads those mods. Two zips never touch the same file, so any
+number of mods can be unzipped in any order. The video list was chosen because it
+applies no filter beyond the extension (the audio list also compares a version)
+and its menu is rarely visited.
+
+Consequences implemented:
+- `ACEUIModLoader.loader.js` wraps `engine.on` so stock handlers for
+  `SettingsResponseVideoPresetList` receive a copy without markers (our own
+  handler is flagged); falls back to the manifest after 1.5 s or without an engine;
+  refuses `mod.json` entries that are not plain file names, because requesting a
+  folder URL crashes the game.
+- `tools/install_mod.py` writes/removes the marker instead of the manifest and
+  validates names; `--list` reports folder/marker mismatches.
+- `check_ingame_log.py` reads `presets: N mod(s)` (or `manifest:` for the fallback).
+
+Open: mod load order is alphabetical (an `after` field in mod.json if a mod ever
+depends on another); the marker's home under `Video\` is fixed by the game.

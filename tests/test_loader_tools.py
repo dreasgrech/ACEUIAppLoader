@@ -106,14 +106,31 @@ class LibrarySourceTests(unittest.TestCase):
     def test_loader_contract(self):
         js = self.files["ACEUIModLoader.loader.js"]
         self.assertIn('const ROOT = "ACEUIModLoaderMods/";', js)
-        self.assertIn('ROOT + "manifest.json"', js)
+        self.assertIn('ROOT + "manifest.json"', js, "manifest stays as the no-engine fallback")
         self.assertIn('const MOD_FILE = "mod.json";', js)
         self.assertIn('const DEFAULT_PAGES = ["hud.html"];', js)
-        for line in ('"loader " + ACEUIModLoader.VERSION + " on /"', '"manifest: "', '" loaded"', '" FAILED"', '"no manifest at "'):
+        self.assertIn('const PRESET_REQUEST = "SettingsRequestVideoPresetList";', js)
+        self.assertIn('const PRESET_RESPONSE = "SettingsResponseVideoPresetList";', js)
+        self.assertIn('const MARKER_PREFIX = "ACEUIModLoaderMods-";', js)
+        self.assertIn('const MARKER_EXT = ".settingspreset";', js)
+        self.assertIn('engine.trigger("OnUICommand", PRESET_REQUEST, { __Type: PRESET_REQUEST, version: 0 });', js)
+        for line in ('"loader " + ACEUIModLoader.VERSION + " on /"', 'source + ": " + names.length + " mod(s)"', '" loaded"',
+                     '" FAILED"', '; no manifest at "', '"could not wrap engine.on'):
             self.assertIn(line, js, line)
         self.assertIn("loadScripts(base, files, index + 1, onDone)", js, "scripts load sequentially")
+        self.assertIn("styles.concat(scripts).every(isFileName)", js, "never request anything that could be a folder")
+        for name in ("PRESET_REQUEST", "PRESET_RESPONSE", "MARKER_PREFIX", "MARKER_EXT", "PRESET_TIMEOUT_MS", "source",
+                     "filtering", "isMarker", "markerNames", "withoutMarkers", "isFileName"):
+            self.assertRegex(js, rf"\n\s+{name}: [A-Za-z_.]+,?\n", f"loader.{name} not exported")
         for alias in ("ROOT", "mods", "ready", "addStylesheet", "addScript"):
             self.assertIn(f"ACEUIModLoader.{alias} = ACEUIModLoader.loader.{alias};", js)
+
+    def test_marker_naming_matches_between_loader_and_install_tool(self):
+        js = self.files["ACEUIModLoader.loader.js"]
+        self.assertIn(f'const MARKER_PREFIX = "{install_mod.MARKER_PREFIX}";', js)
+        self.assertIn(f'const MARKER_EXT = "{install_mod.MARKER_EXT}";', js)
+        self.assertEqual(install_mod.MARKER_DIR, "Video", "the game lists Saved Games/ACE/Video for SettingsRequestVideoPresetList")
+        self.assertEqual(install_mod.MODS_SUBDIR.replace(os.sep, "/") + "/", "uiresources/" + "ACEUIModLoaderMods/")
 
     def test_no_per_frame_geometry_or_css_in_library(self):
         for name, js in self.files.items():
@@ -137,31 +154,46 @@ class InstallModTests(unittest.TestCase):
     def tearDown(self):
         self.tmp.cleanup()
 
-    def test_install_copies_files_and_registers_in_manifest(self):
+    def test_install_copies_files_and_writes_an_empty_marker(self):
         dest = install_mod.install(self.src, self.mods)
         self.assertEqual(dest, os.path.join(self.mods, "uiresources", "ACEUIModLoaderMods", "mymod"))
         self.assertEqual(sorted(os.listdir(dest)), ["a.css", "a.js", "b.js", "mod.json"], "junk must not be copied")
-        manifest = install_mod.read_manifest(install_mod.mods_root_dir(self.mods))
-        self.assertEqual(manifest["mods"], ["mymod"])
+        marker = install_mod.marker_path("mymod", self.mods)
+        self.assertEqual(marker, os.path.join(self.tmp.name, "Video", "ACEUIModLoaderMods-mymod.settingspreset"),
+                         "marker lives next to the mods folder, where the game lists video presets")
+        self.assertTrue(os.path.isfile(marker))
+        self.assertEqual(os.path.getsize(marker), 0, "the game deserialises every listed file; only an empty one is safe")
         install_mod.install(self.src, self.mods)
-        self.assertEqual(install_mod.read_manifest(install_mod.mods_root_dir(self.mods))["mods"], ["mymod"])
+        self.assertEqual(install_mod.marker_names(self.mods), ["mymod"])
+        self.assertFalse(os.path.exists(os.path.join(install_mod.mods_root_dir(self.mods), "manifest.json")), "no manifest any more")
 
-    def test_remove(self):
+    def test_remove_deletes_folder_and_marker(self):
         install_mod.install(self.src, self.mods)
         install_mod.remove("mymod", self.mods)
         self.assertFalse(os.path.isdir(os.path.join(self.mods, "uiresources", "ACEUIModLoaderMods", "mymod")))
-        self.assertEqual(install_mod.read_manifest(install_mod.mods_root_dir(self.mods))["mods"], [])
+        self.assertFalse(os.path.exists(install_mod.marker_path("mymod", self.mods)))
+        self.assertEqual(install_mod.marker_names(self.mods), [])
 
     def test_missing_listed_file_is_an_error(self):
         os.remove(os.path.join(self.src, "b.js"))
         with self.assertRaises(SystemExit):
             install_mod.install(self.src, self.mods)
 
-    def test_manifest_keeps_other_mods(self):
-        root = install_mod.mods_root_dir(self.mods)
-        install_mod.write_manifest(root, {"mods": ["other"]})
-        install_mod.install(self.src, self.mods)
-        self.assertEqual(install_mod.read_manifest(root)["mods"], ["other", "mymod"])
+    def test_names_and_paths_that_could_escape_the_folder_are_errors(self):
+        with self.assertRaises(SystemExit):
+            install_mod.check_name("../evil")
+        with open(os.path.join(self.src, "mod.json"), "w", encoding="utf-8") as f:
+            json.dump({"name": "mymod", "version": "1.0.0", "scripts": ["sub/a.js"]}, f)
+        with self.assertRaises(SystemExit):
+            install_mod.install(self.src, self.mods)
+
+    def test_marker_names_ignore_the_players_own_presets(self):
+        folder = install_mod.marker_dir(self.mods)
+        os.makedirs(folder)
+        for name in ("MyLowSettings.settingspreset", "ACEUIModLoaderMods-other.settingspreset", "ACEUIModLoaderMods-x.txt"):
+            with open(os.path.join(folder, name), "wb"):
+                pass
+        self.assertEqual(install_mod.marker_names(self.mods), ["other"])
 
 
 @unittest.skipUnless(os.path.exists(os.path.join(_repos.game_dir(), "content.kspkg")), "game not installed")

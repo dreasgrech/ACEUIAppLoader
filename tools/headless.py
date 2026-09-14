@@ -36,7 +36,7 @@ BROWSER_EXES = ("msedge.exe", "chrome.exe", "chromium.exe")
 PROFILE_PREFIX = "aceuimodloader-headless-"
 TIMEOUT_S = 120
 VIRTUAL_TIME_BUDGET_MS = 10000
-KILL_RETRIES = 3
+KILL_RETRIES = 6
 KILL_RETRY_S = 0.5
 
 
@@ -63,6 +63,42 @@ def pids_using_profile(profile_dir):
     except Exception:
         return []
     return [int(p) for p in out.split() if p.strip().isdigit()]
+
+
+def orphan_pids():
+    """Browser processes started by any run of this tool whose throwaway profile folder is
+    already gone: the run that owned them has finished, so they are leaks by definition.
+    Chromium's helper processes occasionally outlive the --dump-dom parent, and parallel
+    suites make the per-run sweep racy, so every run also sweeps for these."""
+    if sys.platform != "win32":
+        return []
+    names = " -or ".join(f"$_.Name -eq '{n}'" for n in BROWSER_EXES)
+    ps = (f"Get-CimInstance Win32_Process | Where-Object {{ ({names}) -and $_.CommandLine -and "
+          f"$_.CommandLine.Contains('{PROFILE_PREFIX}') }} | "
+          "ForEach-Object { \"$($_.ProcessId)|$($_.CommandLine)\" }")
+    try:
+        out = subprocess.run(["powershell", "-NoProfile", "-Command", ps],
+                             capture_output=True, text=True, timeout=60).stdout
+    except Exception:
+        return []
+    pids = []
+    for line in out.splitlines():
+        pid, _, cmdline = line.partition("|")
+        m = re.search(r'--user-data-dir=("([^"]+)"|(\S+))', cmdline)
+        if not pid.strip().isdigit() or not m:
+            continue
+        profile = m.group(2) or m.group(3)
+        if not os.path.isdir(profile):
+            pids.append(int(pid))
+    return pids
+
+
+def sweep_orphans():
+    """Kill leaked browser processes from finished runs; returns how many were found."""
+    pids = orphan_pids()
+    for p in pids:
+        kill_tree(p)
+    return len(pids)
 
 
 def kill_tree(pid):
@@ -95,18 +131,30 @@ def run_harness(harness_path, browser=None):
     try:
         stdout, _ = proc.communicate(timeout=TIMEOUT_S)
     except subprocess.TimeoutExpired:
-        kill_tree(proc.pid)
-        stdout, _ = proc.communicate()
+        stdout, _ = kill_and_collect(proc)
     finally:
+        # The main process has exited (or been killed), but Chromium's helpers (gpu,
+        # utility, crashpad) can outlive it by a moment; kill by profile first, then
+        # keep sweeping orphans (profile folder gone) until none are left.
+        kill_tree(proc.pid)
         for _ in range(KILL_RETRIES):
             leftovers = [p for p in pids_using_profile(profile) if p != os.getpid()]
-            if not leftovers:
-                break
             for p in leftovers:
                 kill_tree(p)
+            if not leftovers:
+                break
             time.sleep(KILL_RETRY_S)
         shutil.rmtree(profile, ignore_errors=True)
+        for _ in range(KILL_RETRIES):
+            if not sweep_orphans():
+                break
+            time.sleep(KILL_RETRY_S)
     return stdout or ""
+
+
+def kill_and_collect(proc):
+    kill_tree(proc.pid)
+    return proc.communicate()
 
 
 def parse_report(dom):

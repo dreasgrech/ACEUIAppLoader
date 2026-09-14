@@ -9,7 +9,7 @@ loaded, and whether anything crashed, without a debugger. Run this after playing
   python tools/check_ingame_log.py            # newest log
   python tools/check_ingame_log.py <logfile>  # a specific log
 
-Exit codes: 0 loader ran on the HUD and every manifest mod loaded, 1 loader never
+Exit codes: 0 loader ran on the HUD and every discovered mod loaded, 1 loader never
 ran (package not applied), 2 crash/exception or a mod failed, 3 no log / HUD never
 loaded.
 """
@@ -57,12 +57,12 @@ def main(argv):
     pages = sorted({m.group(1) for m in (re.search(r"loader [\d.]+ on (/\S+)", l) for l in loader) if m})
     version = first_match(r"loader ([\d.]+) on /", loader)
     loaded = sorted({m.group(1) for m in (re.search(r"mod (\S+) loaded", l) for l in loader) if m})
-    failed = [l for l in loader if any(k in l for k in (" FAILED", "failed to load", "invalid JSON", "skipped", "no manifest"))]
-    manifest = first_match(r"manifest: (\d+) mod", loader)
+    failed = [l for l in loader if any(k in l for k in (" FAILED", "failed to load", "invalid JSON", "skipped", "no manifest", "could not wrap"))]
+    discovered = first_match(r"(presets|manifest): (\d+) mod", loader)
 
     print(f"loader: {'v' + version.group(1) if version else 'never ran'}; pages: {', '.join(pages) if pages else 'none'}")
-    if manifest:
-        print(f"manifest mods: {manifest.group(1)}; loaded: {', '.join(loaded) if loaded else 'none'}")
+    if discovered:
+        print(f"discovered via {discovered.group(1)}: {discovered.group(2)} mod(s); loaded: {', '.join(loaded) if loaded else 'none'}")
     for l in failed[:6]:
         print("  " + l[:200])
 
@@ -87,8 +87,8 @@ def main(argv):
     if crashes or failed:
         print("RESULT: loader ran but something failed (see above)")
         return 2
-    if manifest and int(manifest.group(1)) != len(loaded):
-        print("RESULT: loader ran but not every manifest mod reported loaded")
+    if discovered and int(discovered.group(2)) != len(loaded):
+        print("RESULT: loader ran but not every discovered mod reported loaded")
         return 2
     print(f"RESULT: OK - loader on {len(pages)} page(s), mods loaded: {', '.join(loaded) if loaded else 'none'}, no crashes")
     return 0

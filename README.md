@@ -2,7 +2,7 @@
 
 The single package that lets several UI mods coexist in Assetto Corsa EVO, the
 shared library those mods are built on, and the tools that build it and install
-mods for it. Version 0.2.0.
+mods for it. Version 0.3.0.
 
 Why a loader is needed at all, and why it has this shape, is in
 [`docs/design.md`](docs/design.md); the game mechanics it relies on are
@@ -17,20 +17,36 @@ stock script with the library files from `src/` appended in a fixed order. The
 packer adds the padding entries that make the override win the game's
 unstable-sort lookup for the installed game version.
 
-On every page the loader reads `ACEUIModLoaderMods/manifest.json`, then each listed mod's
-`ACEUIModLoaderMods/<name>/mod.json`, and injects that mod's stylesheets and scripts, in
-order, on the pages the mod asked for. Mods are plain folders under
-`%USERPROFILE%\Saved Games\ACE\mods\uiresources\ACEUIModLoaderMods\<name>\`; that
-directory is one of the game's loose-file search paths, so new files there are
-served with no packaging and no padding. Only the loader is a package.
+A UI page cannot list folders, but the game lists one folder for it: the video
+settings presets in `Saved Games\ACE\Video\*.settingspreset`. On every page the
+loader sends the game's own `SettingsRequestVideoPresetList` command, keeps the
+answers that start with `ACEUIModLoaderMods-`, and treats the rest of each name as
+an installed mod. It then reads that mod's `ACEUIModLoaderMods/<name>/mod.json` and
+injects the mod's stylesheets and scripts, in order, on the pages the mod asked
+for. So a mod is two things a player unzips into `Saved Games\ACE` and nothing
+else: its folder and one **empty** marker file. No manifest, no script, no
+registration step. Mod folders live under a loose-file search path of the game,
+so nothing is packaged or padded; only the loader is a package.
 
 ```
-Saved Games\ACE\mods\
-  ACEUIModLoader.kspkg                  <- built here (69 MB, mostly the fixed-size table)
-  uiresources\ACEUIModLoaderMods\manifest.json     <- { "mods": ["pedalgraph", "devconsole"] }, kept by install_mod.py
-  uiresources\ACEUIModLoaderMods\pedalgraph\       <- one folder per mod: mod.json + its files
-  uiresources\ACEUIModLoaderMods\devconsole\
+Saved Games\ACE\
+  mods\ACEUIModLoader.kspkg                        <- built here (69 MB, mostly the fixed-size table)
+  mods\uiresources\ACEUIModLoaderMods\pedalgraph\  <- one folder per mod: mod.json + its files
+  mods\uiresources\ACEUIModLoaderMods\devconsole\
+  Video\ACEUIModLoaderMods-pedalgraph.settingspreset   <- 0-byte markers; the game lists this folder
+  Video\ACEUIModLoaderMods-devconsole.settingspreset      for the UI, the loader reads the names back
 ```
+
+The markers must stay empty: the game deserialises every listed file before
+naming it, and an empty file is a valid default message. The stock UI shows the
+same list in its video presets menu, so the loader wraps `engine.on` and hands
+stock handlers a copy of the answer without our markers. Without an engine (the
+browser harness) or without an answer within 1.5 s it falls back to
+`ACEUIModLoaderMods/manifest.json` (`{ "mods": [...] }`).
+
+Never request a URL that could be a folder: the game's loose-file lookup only
+checks that the path exists and then crashes opening it. The loader only ever
+requests plain file names listed in a `mod.json`.
 
 A mod's `mod.json`:
 
@@ -56,7 +72,7 @@ in this order because each builds on the previous:
 | `src/ACEUIModLoader.persist.js` | `ACEUIModLoader.persist` | the stock HUD layout store (`HUD.elementModified` / `HUD.StoredData`, saved by the game on HUD close) and `localStorage`: `readHud`, `writeHud`, `hudAvailable`, `readLocal`, `writeLocal`, `removeLocal`, `save(hudId, key, data)` |
 | `src/ACEUIModLoader.panel.js` | `ACEUIModLoader.panel` | `attach(root, {hudId, storageKey, log, onSaved})`: drag inside the HUD container, clamped; position persisted as screen fractions; hidden until the stored position is applied (immediate `localStorage`, then the HUD store has the last word in `update(panel, now)`); `data-nodrag` on descendants that must not start a drag; `detach` |
 | `src/ACEUIModLoader.loop.js` | `ACEUIModLoader.loop` | `start(onFrame)` / `stop(handle)`; `sampler(hz, maxGapMs)` + `advance(sampler, now, onSample)` for fixed-rate sampling independent of frame rate, returning the 0..1 fraction towards the next sample |
-| `src/ACEUIModLoader.loader.js` | `ACEUIModLoader.loader` | manifest discovery and mod injection; aliases `ACEUIModLoader.ready(cb)`, `.mods`, `.addScript`, `.addStylesheet`, `.ROOT` |
+| `src/ACEUIModLoader.loader.js` | `ACEUIModLoader.loader` | mod discovery through the game's video preset list (manifest fallback), the `engine.on` wrapper that hides markers from the stock presets menu, mod injection; aliases `ACEUIModLoader.ready(cb)`, `.mods`, `.addScript`, `.addStylesheet`, `.ROOT` |
 
 A mod is typically: `const MyMod = (function () { ... attach/detach ... }());`
 using `ACEUIModLoader.panel` for its root and `ACEUIModLoader.loop` for its frame, plus a
@@ -67,7 +83,7 @@ using `ACEUIModLoader.panel` for its root and `ACEUIModLoader.loop` for its fram
 
 ```
 python tools/build_loader.py --install     # extract stock cohtml.js, append the library, pack, pad, install
-python tools/install_mod.py <mod/src>      # copy a mod folder in place and register it
+python tools/install_mod.py <mod/src>      # copy a mod folder in place and write its empty marker
 python tools/install_mod.py --list
 python tools/install_mod.py --remove <name>
 python tools/check_ingame_log.py           # after a launch: did the loader run, which mods loaded, crashes?
@@ -85,7 +101,7 @@ paths, so it stays the same).
 | `VERSION` | loader/library version, mirrored by `const VERSION` in `ACEUIModLoader.core.js` (test-enforced) |
 | `src/ACEUIModLoaderMods.*.js` | the library, see above; `LIB_ORDER` in `tools/build_loader.py` is the load order |
 | `tools/build_loader.py` | assembles `build/uiresources/js/cohtml.js` (stock + library), packs to `dist/`, `--install` |
-| `tools/install_mod.py` | validates a mod folder against its `mod.json`, copies it, updates the manifest |
+| `tools/install_mod.py` | validates a mod folder against its `mod.json`, copies it, writes the empty marker in `Saved Games\ACE\Video\` |
 | `tools/pack_kspkg.py` | generic `.kspkg` writer with override padding, verify, `--install` |
 | `tools/check_ingame_log.py` | reads the newest game log and reports loader/mod status |
 | `tools/headless.py` | runs an HTML test harness in a headless Edge/Chrome and parses its report; shared with the mod repos |

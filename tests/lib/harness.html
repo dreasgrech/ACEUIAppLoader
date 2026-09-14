@@ -44,6 +44,29 @@ console.log = function () { const a = Array.prototype.slice.call(arguments); win
 window.__warn = [];
 console.warn = function () { window.__warn.push(Array.prototype.slice.call(arguments).join(" ")); };
 console.error = function () { window.__warn.push(Array.prototype.slice.call(arguments).join(" ")); };
+
+// Fake Cohtml engine. Answers the video preset list (two markers, one real preset,
+// one malformed marker) a tick after being asked, like the game does, so discovery
+// and the stock-handler filter can be tested. Records every trigger.
+window.__engine = { handlers: {}, triggered: [] };
+window.engine = {
+    on: function (name, callback, context) {
+        const list = window.__engine.handlers[name] = window.__engine.handlers[name] || [];
+        const entry = { cb: callback, ctx: context };
+        list.push(entry);
+        return { clear: function () { const i = list.indexOf(entry); if (i >= 0) { list.splice(i, 1); } } };
+    },
+    trigger: function (name, command, data) {
+        window.__engine.triggered.push([name, command, data]);
+        if (command !== "SettingsRequestVideoPresetList") { return; }
+        window.setTimeout(function () {
+            const response = { __Type: "SettingsResponseVideoPresetList", response: "OK",
+                filenames: ["ACEUIModLoaderMods-beta", "MyLowSettings", "ACEUIModLoaderMods-alpha", "ACEUIModLoaderMods-"] };
+            (window.__engine.handlers["SettingsResponseVideoPresetList"] || []).slice().forEach(function (e) { e.cb.call(e.ctx || window.engine, response); });
+        }, 0);
+    },
+    whenReady: Promise.resolve()
+};
 </script>
 <!-- the library exactly as build_loader.py appends it to cohtml.js, same order -->
 <script src="../../src/ACEUIModLoader.core.js"></script>
@@ -315,18 +338,79 @@ document.addEventListener("DOMContentLoaded", function () {
     // ---- loader ---------------------------------------------------------------------------
 
     t("loader: constants, aliases, and it announced itself", function () {
-        eq(ACEUIModLoader.loader.ROOT, "ACEUIModLoaderMods/"); eq(ACEUIModLoader.ROOT, "ACEUIModLoaderMods/"); eq(ACEUIModLoader.loader.MOD_FILE, "mod.json");
-        eq(ACEUIModLoader.loader.DEFAULT_PAGES.join(","), "hud.html");
-        eq(ACEUIModLoader.ready, ACEUIModLoader.loader.ready); eq(ACEUIModLoader.mods, ACEUIModLoader.loader.mods); eq(typeof ACEUIModLoader.addScript, "function");
+        const L = ACEUIModLoader.loader;
+        eq(L.ROOT, "ACEUIModLoaderMods/"); eq(ACEUIModLoader.ROOT, "ACEUIModLoaderMods/"); eq(L.MOD_FILE, "mod.json");
+        eq(L.DEFAULT_PAGES.join(","), "hud.html");
+        eq(L.PRESET_REQUEST, "SettingsRequestVideoPresetList"); eq(L.PRESET_RESPONSE, "SettingsResponseVideoPresetList");
+        eq(L.MARKER_PREFIX, "ACEUIModLoaderMods-"); eq(L.MARKER_EXT, ".settingspreset");
+        eq(ACEUIModLoader.ready, L.ready); eq(ACEUIModLoader.mods, L.mods); eq(typeof ACEUIModLoader.addScript, "function");
         ok(window.__log.some(function (l) { return l === "[ACEUIModLoader] loader " + ACEUIModLoader.VERSION + " on /harness.html"; }), "boot line");
     });
 
-    const passed = results.filter(function (r) { return r.pass; }).length;
-    document.getElementById("results").textContent =
-        results.map(function (r) { return (r.pass ? "PASS " : "FAIL ") + r.name + (r.msg ? "  -- " + r.msg : ""); }).join("\n") +
-        "\nSUMMARY " + passed + "/" + results.length;
-    document.getElementById("done").hidden = false;
-    document.getElementById("done").textContent = "DONE";
+    t("loader: marker helpers and the file-name guard", function () {
+        const L = ACEUIModLoader.loader;
+        eq(L.markerNames(["ACEUIModLoaderMods-b", "Other", "ACEUIModLoaderMods-a", "ACEUIModLoaderMods-", 7]).join(","), "a,b");
+        eq(L.markerNames(null).length, 0);
+        const r = L.withoutMarkers({ __Type: "x", response: "OK", filenames: ["ACEUIModLoaderMods-a", "Mine"] });
+        eq(r.filenames.join(","), "Mine"); eq(r.response, "OK"); eq(r.__Type, "x");
+        eq(L.withoutMarkers(null), null);
+        ["a.js", "pedal-graph.css", "mod.json"].forEach(function (f) { ok(L.isFileName(f), f); });
+        ["sub/a.js", "sub\\a.js", "a", "", ".", "..", ".hidden", "a.", 5, null].forEach(function (f) { ok(!L.isFileName(f), JSON.stringify(f)); });
+    });
+
+    t("loader: it asked the game for the video preset list", function () {
+        const sent = window.__engine.triggered.filter(function (x) { return x[0] === "OnUICommand" && x[1] === "SettingsRequestVideoPresetList"; });
+        eq(sent.length, 1, "one request"); eq(sent[0][2].__Type, "SettingsRequestVideoPresetList"); eq(sent[0][2].version, 0);
+        ok(ACEUIModLoader.loader.filtering(), "engine.on wrapped");
+    });
+
+    // Discovery finishes asynchronously (the fake engine answers on a timer, mod.json
+    // fetches are XHRs), so the remaining cases wait for it before the report is written.
+    const finish = function () {
+        const passed = results.filter(function (r) { return r.pass; }).length;
+        document.getElementById("results").textContent =
+            results.map(function (r) { return (r.pass ? "PASS " : "FAIL ") + r.name + (r.msg ? "  -- " + r.msg : ""); }).join("\n") +
+            "\nSUMMARY " + passed + "/" + results.length;
+        document.getElementById("done").hidden = false;
+        document.getElementById("done").textContent = "DONE";
+    };
+    const settled = function () {
+        const mods = ACEUIModLoader.loader.mods;
+        return ACEUIModLoader.loader.source() !== "" && mods.length === 2 && mods.every(function (m) { return m.status !== "pending"; });
+    };
+    const waitFor = function (cond, then, deadline) {
+        if (cond() || Date.now() > deadline) { then(); return; }
+        window.setTimeout(function () { waitFor(cond, then, deadline); }, 10);
+    };
+
+    waitFor(settled, function () {
+        t("loader: discovered the mods from the game's answer, not a manifest", function () {
+            const mods = ACEUIModLoader.loader.mods;
+            eq(ACEUIModLoader.loader.source(), "presets");
+            eq(mods.map(function (m) { return m.name; }).join(","), "alpha,beta", "markers only, prefix stripped, sorted");
+            mods.forEach(function (m) { eq(m.status, "missing", m.name + " has no folder in the harness"); });
+            ok(window.__log.indexOf("[ACEUIModLoader] presets: 2 mod(s)") >= 0, "discovery line");
+            ok(!window.__log.some(function (l) { return l.indexOf("no manifest at") >= 0; }), "fallback not used");
+        });
+
+        // A stock-style handler registered through the wrapped engine.on must never see markers.
+        let seen = null;
+        const stockHandler = function (response) { seen = response; };
+        const handle = engine.on("SettingsResponseVideoPresetList", stockHandler, { tag: "stock" });
+        engine.trigger("OnUICommand", "SettingsRequestVideoPresetList", { __Type: "SettingsRequestVideoPresetList", version: 0 });
+
+        waitFor(function () { return seen !== null; }, function () {
+            t("loader: stock handlers get the list without our markers", function () {
+                ok(seen, "stock handler ran");
+                eq(seen.filenames.join(","), "MyLowSettings");
+                eq(seen.response, "OK");
+                eq(ACEUIModLoader.loader.mods.length, 2, "the loader's own handler was cleared after discovery");
+                handle.clear();
+                eq((window.__engine.handlers["SettingsResponseVideoPresetList"] || []).length, 0, "clear() still works through the wrapper");
+            });
+            finish();
+        }, Date.now() + 2000);
+    }, Date.now() + 4000);
 });
 </script>
 </body>
