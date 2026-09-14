@@ -1,15 +1,15 @@
 /**
  * DevConsole -- in-game debug console for Assetto Corsa EVO's HUD.
  *
- * Shows what the UI logs (everything `AceMods.console` captured, including the
+ * Shows what the UI logs (everything `ACEUIModLoader.console` captured, including the
  * stock bundle's own console.* output and uncaught errors) in a draggable panel,
  * with per-level filters, and runs JavaScript typed into its prompt against the
- * HUD page (e.g. `ModelCurrentCar.speed`, `AceMods.mods`). Toggle with the
+ * HUD page (e.g. `ModelCurrentCar.speed`, `ACEUIModLoader.mods`). Toggle with the
  * backquote key.
  *
- * Built on the AceMods library: `AceMods.console` is the source of lines and
- * takes the prompt's echo/result lines, `AceMods.panel` handles drag and position
- * persistence, `AceMods.loop` the frame loop, `AceMods.persist` the open state and
+ * Built on the ACEUIModLoader library: `ACEUIModLoader.console` is the source of lines and
+ * takes the prompt's echo/result lines, `ACEUIModLoader.panel` handles drag and position
+ * persistence, `ACEUIModLoader.loop` the frame loop, `ACEUIModLoader.persist` the open state and
  * filter choices. Styling lives in devconsole.css.
  *
  * Rendering rules (Cohtml): a fixed pool of MAX_ROWS row elements is created once;
@@ -53,7 +53,7 @@ const DevConsole = (function () {
     const BLUR_KEY = "Escape";
     const KEY_CODES = { Backquote: 192, Enter: 13, ArrowUp: 38, ArrowDown: 40, Escape: 27 };
 
-    /** Row elements created once and recycled; the buffer itself is AceMods.console's. */
+    /** Row elements created once and recycled; the buffer itself is ACEUIModLoader.console's. */
     const MAX_ROWS = 200;
     const HISTORY_MAX = 50;
     const TIME_DIGITS = 2;
@@ -105,13 +105,13 @@ const DevConsole = (function () {
     const RESULT_LEVEL = "result";
     const ERROR_LEVEL = "error";
 
-    const NO_DRAG_ATTR = AceMods.panel.NO_DRAG_ATTR;
-    const el = AceMods.el;
-    const close = AceMods.close;
-    const toArray = AceMods.toArray;
-    const log = AceMods.logger(LOG_PREFIX);
-    const lines = AceMods.console;
-    const persist = AceMods.persist;
+    const NO_DRAG_ATTR = ACEUIModLoader.panel.NO_DRAG_ATTR;
+    const el = ACEUIModLoader.el;
+    const close = ACEUIModLoader.close;
+    const toArray = ACEUIModLoader.toArray;
+    const log = ACEUIModLoader.logger(LOG_PREFIX);
+    const lines = ACEUIModLoader.console;
+    const persist = ACEUIModLoader.persist;
 
     // ---- small helpers -----------------------------------------------------------
 
@@ -235,8 +235,8 @@ const DevConsole = (function () {
             draft: "",
             unsubscribe: null,
             handlers: null,
-            panel: null,                // AceMods.panel state (drag + position)
-            loop: null                  // AceMods.loop handle
+            panel: null,                // ACEUIModLoader.panel state (drag + position)
+            loop: null                  // ACEUIModLoader.loop handle
         };
     };
 
@@ -314,9 +314,9 @@ const DevConsole = (function () {
 
     /** One animation frame: settle the position, then redraw if anything changed. */
     const tick = function (state, now) {
-        AceMods.panel.update(state.panel, now);
+        ACEUIModLoader.panel.update(state.panel, now);
 
-        if (!state.open || !state.dirty || AceMods.hudHidden()) { return; }
+        if (!state.open || !state.dirty || ACEUIModLoader.hudHidden()) { return; }
 
         state.dirty = false;
         render(state);
@@ -426,7 +426,7 @@ const DevConsole = (function () {
     };
 
     const onClick = function (state, e) {
-        const filter = AceMods.closestWithAttribute(e.target, FILTER_ATTR, state.root);
+        const filter = ACEUIModLoader.closestWithAttribute(e.target, FILTER_ATTR, state.root);
 
         if (filter) {
             const id = filter.getAttribute(FILTER_ATTR);
@@ -436,7 +436,7 @@ const DevConsole = (function () {
             return;
         }
 
-        const action = AceMods.closestWithAttribute(e.target, ACTION_ATTR, state.root);
+        const action = ACEUIModLoader.closestWithAttribute(e.target, ACTION_ATTR, state.root);
         const name = action ? action.getAttribute(ACTION_ATTR) : "";
 
         if (name === ACTION_CLEAR) { clearLines(state); }
@@ -466,9 +466,9 @@ const DevConsole = (function () {
         state.open = storedOpen === null ? true : Boolean(storedOpen);
         setClass(root, CLASS.closed, !state.open);
 
-        state.panel = AceMods.panel.attach(root, { hudId: HUD_ELEMENT_ID, storageKey: STORAGE_KEY, log: log });
+        state.panel = ACEUIModLoader.panel.attach(root, { hudId: HUD_ELEMENT_ID, storageKey: STORAGE_KEY, log: log });
         state.unsubscribe = lines.subscribe(function () { state.dirty = true; });
-        state.loop = AceMods.loop.start(function (now) { tick(state, now); });
+        state.loop = ACEUIModLoader.loop.start(function (now) { tick(state, now); });
         log("console attached, " + lines.entries().length + " buffered line(s), " + (state.open ? "open" : "closed") + ", toggle key " + TOGGLE_CODE);
 
         return state;
@@ -476,8 +476,8 @@ const DevConsole = (function () {
 
     /** Stop the loop, stop following the buffer and release the listeners. The DOM is left in place. */
     const detach = function (state) {
-        AceMods.loop.stop(state.loop);
-        AceMods.panel.detach(state.panel);
+        ACEUIModLoader.loop.stop(state.loop);
+        ACEUIModLoader.panel.detach(state.panel);
 
         if (state.unsubscribe) {
             state.unsubscribe();
@@ -492,7 +492,7 @@ const DevConsole = (function () {
         }
     };
 
-    log("script loaded, version=" + VERSION + ", source=" + (window.DEVCONSOLE_SOURCE || "acemods") + ", lib=" + AceMods.VERSION + ", url=" + location.href);
+    log("script loaded, version=" + VERSION + ", source=" + (window.DEVCONSOLE_SOURCE || "ACEUIModLoader") + ", lib=" + ACEUIModLoader.VERSION + ", url=" + location.href);
 
     return {
         VERSION: VERSION,

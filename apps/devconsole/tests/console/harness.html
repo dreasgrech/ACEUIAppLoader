@@ -46,13 +46,13 @@ console.log = function () { const a = Array.prototype.slice.call(arguments); win
 console.warn = function () {};
 console.error = function () {};
 </script>
-<!-- the AceMods library from the sibling ACEUIModLoader checkout, in load order (in game it is part of cohtml.js) -->
-<script src="../../../ACEUIModLoader/src/acemods.core.js"></script>
-<script src="../../../ACEUIModLoader/src/acemods.console.js"></script>
-<script src="../../../ACEUIModLoader/src/acemods.persist.js"></script>
-<script src="../../../ACEUIModLoader/src/acemods.panel.js"></script>
-<script src="../../../ACEUIModLoader/src/acemods.loop.js"></script>
-<script src="../../../ACEUIModLoader/src/acemods.loader.js"></script>
+<!-- the ACEUIModLoader library from the sibling checkout, in load order (in game it is part of cohtml.js) -->
+<script src="../../../ACEUIModLoader/src/ACEUIModLoader.core.js"></script>
+<script src="../../../ACEUIModLoader/src/ACEUIModLoader.console.js"></script>
+<script src="../../../ACEUIModLoader/src/ACEUIModLoader.persist.js"></script>
+<script src="../../../ACEUIModLoader/src/ACEUIModLoader.panel.js"></script>
+<script src="../../../ACEUIModLoader/src/ACEUIModLoader.loop.js"></script>
+<script src="../../../ACEUIModLoader/src/ACEUIModLoader.loader.js"></script>
 <link rel="stylesheet" type="text/css" href="../../src/devconsole.css">
 <script>
 // lines logged before the console attaches must show up once it does
@@ -91,9 +91,9 @@ console.warn("early warning");
     const nextFrame = function () { frame += 16; clock.step(frame); };
 
     t("library and module present, constants, load logged", function () {
-        eq(typeof AceMods.console, "object", "AceMods.console"); eq(typeof DevConsole, "object", "DevConsole");
+        eq(typeof ACEUIModLoader.console, "object", "ACEUIModLoader.console"); eq(typeof DevConsole, "object", "DevConsole");
         eq(DevConsole.MAX_ROWS, 200); eq(DevConsole.TOGGLE_CODE, "Backquote"); eq(DevConsole.FILTERS.length, 3);
-        ok(window.__log.some(function (l) { return l.indexOf("[DevConsole] script loaded, version=" + DevConsole.VERSION + ", source=harness, lib=" + AceMods.VERSION) >= 0; }), "no load log");
+        ok(window.__log.some(function (l) { return l.indexOf("[DevConsole] script loaded, version=" + DevConsole.VERSION + ", source=harness, lib=" + ACEUIModLoader.VERSION) >= 0; }), "no load log");
         eq(document.getElementById(DevConsole.ROOT_ID), null, "harness must not carry the auto-boot root");
     });
 
@@ -186,7 +186,7 @@ console.warn("early warning");
 
     t("clear button empties the buffer and the rows", function () {
         root.querySelector('[data-action="clear"]').dispatchEvent(new MouseEvent("click", { bubbles: true }));
-        eq(AceMods.console.entries().length, 0); nextFrame();
+        eq(ACEUIModLoader.console.entries().length, 0); nextFrame();
         eq(visibleRows(root).length, 0, "rows hidden"); eq(root.querySelector('[data-filter="log"] .dc-count').textContent, "0");
     });
 
@@ -213,9 +213,9 @@ console.warn("early warning");
     });
 
     t("hidden HUD skips rendering; stored open state is honoured on attach", function () {
-        document.body.classList.add(AceMods.HUD_HIDDEN_CLASS);
+        document.body.classList.add(ACEUIModLoader.HUD_HIDDEN_CLASS);
         console.log("hud hidden line"); nextFrame(); eq(state.dirty, true, "not rendered while the HUD is hidden");
-        document.body.classList.remove(AceMods.HUD_HIDDEN_CLASS); nextFrame(); eq(state.dirty, false);
+        document.body.classList.remove(ACEUIModLoader.HUD_HIDDEN_CLASS); nextFrame(); eq(state.dirty, false);
         localStorage.setItem(DevConsole.OPEN_KEY, "false");
         const root2 = document.createElement("div"); center.appendChild(root2);
         const state2 = DevConsole.attach(root2);
@@ -237,10 +237,10 @@ console.warn("early warning");
     });
 
     t("detach stops the loop, unsubscribes and releases the key and click listeners", function () {
-        const listeners = AceMods.console.listenerCount();
+        const listeners = ACEUIModLoader.console.listenerCount();
         const cancelled = clock.cancelled;
         DevConsole.detach(state);
-        eq(clock.cancelled, cancelled + 1); eq(state.loop.running, false); eq(AceMods.console.listenerCount(), listeners - 1, "unsubscribed");
+        eq(clock.cancelled, cancelled + 1); eq(state.loop.running, false); eq(ACEUIModLoader.console.listenerCount(), listeners - 1, "unsubscribed");
         const open = state.open;
         key(window, { code: "Backquote", key: "`" }); eq(state.open, open, "toggle key released");
         state.dirty = false;

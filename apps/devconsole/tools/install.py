@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-install.py - install DevConsole as a loose AceMods mod.
+install.py - install DevConsole as a loose ACEUIModLoader mod.
 
 Thin wrapper: copies src/ into the game's mods folder and registers the mod in the
 loader's manifest, via ../ACEUIModLoader/tools/install_mod.py (or ACE_LOADER_DIR).

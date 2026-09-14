@@ -1,7 +1,7 @@
 /*
  * DevConsole -- console stylesheet.
  *
- * Linked into hud.html by the AceMods loader after the stock ui.css /
+ * Linked into hud.html by the ACEUIModLoader after the stock ui.css /
  * uicomponents.css, so the font variable below is the game's. Line colours are
  * keyed by the data-level attribute the script puts on each row.
  *

@@ -6,14 +6,14 @@ version 0.9.1+release.6.
 A draggable panel that shows everything the UI logs, including the stock
 bundle's own `console.log` / `warn` / `error` output and uncaught errors, with
 per-level filters and counts, and a prompt that runs JavaScript against the HUD
-page (`ModelCurrentCar.speed`, `AceMods.mods`, `HUD.StoredData`, ...). Toggle
+page (`ModelCurrentCar.speed`, `ACEUIModLoader.mods`, `HUD.StoredData`, ...). Toggle
 it with the backquote key.
 
 This repository is the mod only. It is loaded by the `ACEUIModLoader` package
-and built on that package's shared library: `AceMods.console` captures the
+and built on that package's shared library: `ACEUIModLoader.console` captures the
 lines (it hooks `console.*` before the stock bundle runs, so the stock HUD's
-messages are in the buffer), `AceMods.panel` handles drag and position
-persistence, `AceMods.loop` the frame loop, `AceMods.persist` the open state
+messages are in the buffer), `ACEUIModLoader.panel` handles drag and position
+persistence, `ACEUIModLoader.loop` the frame loop, `ACEUIModLoader.persist` the open state
 and filters. Everything learned about the game and its UI engine is in
 `ACEGameInternals` (`docs/`). Clone all three side by side: the preview page
 and the tests load the library from `../ACEUIModLoader/src/`.
@@ -36,7 +36,7 @@ and the tests load the library from `../ACEUIModLoader/src/`.
 - `tests/` - this mod's tests, see below.
 
 The mod does not override any stock file. It is a loose folder the game reads
-from `%USERPROFILE%\Saved Games\ACE\mods\uiresources\acemods\devconsole\`.
+from `%USERPROFILE%\Saved Games\ACE\mods\uiresources\ACEUIModLoaderMods\devconsole\`.
 
 ## Install
 
@@ -66,7 +66,7 @@ Edits to `src/` need only a re-run of `install.py` and a HUD reload in game
   whenever the HUD page is reloaded (Escape/resume), but everything the loader
   and other mods logged while the page was loading is already in it.
 - Drag anywhere except the buttons and the prompt to move it; the position
-  persists like the stock widgets' (see the loader's `AceMods.panel`).
+  persists like the stock widgets' (see the loader's `ACEUIModLoader.panel`).
 
 Keyboard in game: the first launch showed typing reaches the prompt, but Enter
 did nothing because the game's engine reports keys through the legacy
@@ -89,7 +89,7 @@ fake `ModelCurrentCar` to inspect from the prompt.
 
 `VERSION` holds the semantic version; `devconsole.js` repeats it in
 `const VERSION` and in its first log line (`script loaded, version=0.1.0,
-source=acemods, lib=<loader version>`), `src/mod.json` repeats it for the
+source=ACEUIModLoader, lib=<loader version>`), `src/mod.json` repeats it for the
 loader, and this README must mention it. A test fails if they disagree.
 
 ## Code style (JavaScript)
@@ -126,7 +126,7 @@ python -m unittest discover -s tests -v
 ## Verifying in game
 
 Run `python ..\ACEUIModLoader\tools\check_ingame_log.py` after playing:
-`[AceMods] mod devconsole 0.1.0: loading` followed by
-`[DevConsole] script loaded, ... source=acemods` and `console attached, N
+`[ACEUIModLoader] mod devconsole 0.1.0: loading` followed by
+`[DevConsole] script loaded, ... source=ACEUIModLoader` and `console attached, N
 buffered line(s)` means the loader served the mod. Lines typed into the prompt
 never reach the game log; only what other code logs does.

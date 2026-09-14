@@ -6,7 +6,7 @@ Same guard rails as PedalGraph, adapted to a text panel:
   - mod.json must describe exactly the files that exist, in the right order
   - style: IIFE modules, function expressions, let/const, no classes, no `this`
   - the version is declared once per artefact and they all agree
-  - infrastructure comes from the AceMods library, not from this mod
+  - infrastructure comes from the ACEUIModLoader library, not from this mod
 """
 import json
 import os
@@ -22,7 +22,7 @@ MOD_JSON = os.path.join(SRC, "mod.json")
 VERSION_FILE = os.path.join(ROOT, "VERSION")
 PREVIEW = os.path.join(ROOT, "dev", "preview.html")
 HARNESS = os.path.join(ROOT, "tests", "console", "harness.html")
-LIB_FILES = ["acemods.core.js", "acemods.console.js", "acemods.persist.js", "acemods.panel.js", "acemods.loop.js", "acemods.loader.js"]
+LIB_FILES = ["ACEUIModLoader.core.js", "ACEUIModLoader.console.js", "ACEUIModLoader.persist.js", "ACEUIModLoader.panel.js", "ACEUIModLoader.loop.js", "ACEUIModLoader.loader.js"]
 
 
 def read(path):
@@ -75,7 +75,7 @@ class EntryTests(unittest.TestCase):
         self.assertIn("DevConsole.ROOT_ID", js)
         self.assertIn("DevConsole.attach(root)", js)
         self.assertIn("not attaching twice", js)
-        self.assertIn('AceMods.logger("[DevConsole]")', js)
+        self.assertIn('ACEUIModLoader.logger("[DevConsole]")', js)
 
 
 class ConsoleSourceTests(unittest.TestCase):
@@ -94,7 +94,7 @@ class ConsoleSourceTests(unittest.TestCase):
             self.assertNotIn(forbidden, hot, f"{forbidden} in the per-frame code")
         self.assertIn("textContent", hot)
         self.assertIn("if (row.seq === entry.seq) { return; }", self.js, "unchanged rows are skipped")
-        self.assertIn("if (!state.open || !state.dirty || AceMods.hudHidden()) { return; }", self.js, "render only when dirty")
+        self.assertIn("if (!state.open || !state.dirty || ACEUIModLoader.hudHidden()) { return; }", self.js, "render only when dirty")
         self.assertEqual(self.js.count("root.innerHTML = markup()"), 1, "markup built once, at attach")
 
     def test_no_per_frame_geometry_or_css_in_script(self):
@@ -113,11 +113,11 @@ class ConsoleSourceTests(unittest.TestCase):
         self.assertTrue(numbers <= {"0", "1"}, f"magic numbers in hot path: {sorted(numbers)}")
 
     def test_uses_the_library_instead_of_its_own_infrastructure(self):
-        for call in ("AceMods.panel.attach(root, { hudId: HUD_ELEMENT_ID, storageKey: STORAGE_KEY, log: log })",
-                     "AceMods.panel.update(state.panel, now)", "AceMods.panel.detach(state.panel)",
-                     "AceMods.loop.start(", "AceMods.loop.stop(state.loop)", "AceMods.hudHidden()",
-                     "AceMods.logger(LOG_PREFIX)", "lines.subscribe(", "lines.capture(", "lines.format(", "lines.entries()",
-                     "persist.readLocal(", "persist.writeLocal(", "AceMods.closestWithAttribute(", "AceMods.panel.NO_DRAG_ATTR"):
+        for call in ("ACEUIModLoader.panel.attach(root, { hudId: HUD_ELEMENT_ID, storageKey: STORAGE_KEY, log: log })",
+                     "ACEUIModLoader.panel.update(state.panel, now)", "ACEUIModLoader.panel.detach(state.panel)",
+                     "ACEUIModLoader.loop.start(", "ACEUIModLoader.loop.stop(state.loop)", "ACEUIModLoader.hudHidden()",
+                     "ACEUIModLoader.logger(LOG_PREFIX)", "lines.subscribe(", "lines.capture(", "lines.format(", "lines.entries()",
+                     "persist.readLocal(", "persist.writeLocal(", "ACEUIModLoader.closestWithAttribute(", "ACEUIModLoader.panel.NO_DRAG_ATTR"):
             self.assertIn(call, self.js, call)
         for own in ("requestAnimationFrame", "cancelAnimationFrame", "localStorage", "window.HUD", "getBoundingClientRect",
                     "addEventListener(\"mouse", "console.log(", "JSON.stringify"):

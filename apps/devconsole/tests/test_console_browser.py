@@ -1,7 +1,7 @@
 """Runs tests/console/harness.html in a headless Chromium (Edge or Chrome) and
 checks every case passed.
 
-The harness loads the AceMods library from the sibling ACEUIModLoader checkout
+The harness loads the ACEUIModLoader library from the sibling checkout
 (in game it is part of cohtml.js), fakes requestAnimationFrame and localStorage,
 and exercises rendering, filters, the prompt, the toggle key, drag exclusions and
 lifecycle deterministically. It does not prove Cohtml compatibility; see

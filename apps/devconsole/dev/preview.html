@@ -4,8 +4,8 @@
 <meta charset="utf-8">
 <title>DevConsole preview</title>
 <!--
-  Out-of-game preview. Loads the AceMods library from the sibling ACEUIModLoader
-  checkout, then the real stylesheet and script from src/, inside a 16:9 stand-in
+  Out-of-game preview. Loads the ACEUIModLoader library from the sibling checkout of the loader
+  repo, then the real stylesheet and script from src/, inside a 16:9 stand-in
   for the game's HUD container, with buttons that produce log lines and a fake
   ModelCurrentCar to poke at from the prompt. Open this file directly in Edge or
   Chrome:
@@ -16,12 +16,12 @@
   behaviour of the prompt in game), the stock HUD around the panel, and the
   game's font (a system font stands in for --font-family-main).
 -->
-<script src="../../ACEUIModLoader/src/acemods.core.js"></script>
-<script src="../../ACEUIModLoader/src/acemods.console.js"></script>
-<script src="../../ACEUIModLoader/src/acemods.persist.js"></script>
-<script src="../../ACEUIModLoader/src/acemods.panel.js"></script>
-<script src="../../ACEUIModLoader/src/acemods.loop.js"></script>
-<script src="../../ACEUIModLoader/src/acemods.loader.js"></script>
+<script src="../../ACEUIModLoader/src/ACEUIModLoader.core.js"></script>
+<script src="../../ACEUIModLoader/src/ACEUIModLoader.console.js"></script>
+<script src="../../ACEUIModLoader/src/ACEUIModLoader.persist.js"></script>
+<script src="../../ACEUIModLoader/src/ACEUIModLoader.panel.js"></script>
+<script src="../../ACEUIModLoader/src/ACEUIModLoader.loop.js"></script>
+<script src="../../ACEUIModLoader/src/ACEUIModLoader.loader.js"></script>
 <link rel="stylesheet" type="text/css" href="../src/devconsole.css">
 <style>
     :root { --font-family-main: "Segoe UI", "Helvetica Neue", Arial, sans-serif; font-size: 16px; }
@@ -56,7 +56,7 @@
     <button id="btn-flood" class="on">flood (1 line/s)</button>
     <button id="btn-hide">hide HUD</button>
     <button id="btn-reset">reset position</button>
-    <span class="dim">backquote toggles; try <code>ModelCurrentCar</code> or <code>AceMods.mods</code> in the prompt</span>
+    <span class="dim">backquote toggles; try <code>ModelCurrentCar</code> or <code>ACEUIModLoader.mods</code> in the prompt</span>
 </div>
 
 <script>
@@ -107,7 +107,7 @@ const Preview = (function () {
     const wire = function () {
         q("#version").textContent = DevConsole.VERSION;
 
-        AceMods.toArray(document.querySelectorAll("[data-emit]")).forEach(function (button) {
+        ACEUIModLoader.toArray(document.querySelectorAll("[data-emit]")).forEach(function (button) {
             button.addEventListener("click", function () { emit(button.getAttribute("data-emit")); });
         });
 
@@ -117,13 +117,13 @@ const Preview = (function () {
         });
 
         q("#btn-hide").addEventListener("click", function () {
-            const hidden = document.body.classList.toggle(AceMods.HUD_HIDDEN_CLASS);
+            const hidden = document.body.classList.toggle(ACEUIModLoader.HUD_HIDDEN_CLASS);
 
             q("#btn-hide").classList.toggle("on", hidden);
         });
 
         q("#btn-reset").addEventListener("click", function () {
-            AceMods.persist.removeLocal(DevConsole.STORAGE_KEY);
+            ACEUIModLoader.persist.removeLocal(DevConsole.STORAGE_KEY);
             location.reload();
         });
 
