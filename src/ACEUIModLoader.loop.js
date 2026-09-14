@@ -1,5 +1,5 @@
 /**
- * AceMods.loop -- per-frame runtime and a fixed-rate sampler.
+ * ACEUIModLoader.loop -- per-frame runtime and a fixed-rate sampler.
  *
  * `start(onFrame)` runs `onFrame(now)` on every animation frame until `stop`.
  * The next frame is requested before the callback runs, so an exception in one
@@ -12,7 +12,7 @@
  * between samples. A gap longer than `maxGapMs` (a pause, a stall) restarts the
  * clock instead of replaying hundreds of identical samples.
  */
-AceMods.loop = (function () {
+ACEUIModLoader.loop = (function () {
 
     const MS_PER_S = 1000;
 
@@ -55,7 +55,7 @@ AceMods.loop = (function () {
             onSample();
         }
 
-        return AceMods.clamp((now - s.lastSampleAt) / s.periodMs, 0, 1);
+        return ACEUIModLoader.clamp((now - s.lastSampleAt) / s.periodMs, 0, 1);
     };
 
     return {

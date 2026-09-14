@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-check_ingame_log.py - in-game smoke test for the AceMods loader and its mods.
+check_ingame_log.py - in-game smoke test for the ACEUIModLoader and its mods.
 
 The game writes the UI's console.log output into its own log as [gameface] lines,
 so after one launch + session we can tell whether the loader ran, which mods it
@@ -19,7 +19,7 @@ import re
 import sys
 
 LOG_DIR = os.path.join(os.path.expanduser("~"), "Saved Games", "ACE", "Logs")
-LOADER = "[AceMods]"
+LOADER = "[ACEUIModLoader]"
 # per-mod lines worth echoing (any "[Xyz]" prefixed UI line that is not the loader)
 INTERESTING = ("script loaded", "widget attached", "position ", "script error", "sampling ok", "not attaching")
 MAX_ECHO = 12

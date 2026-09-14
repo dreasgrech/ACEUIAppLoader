@@ -1,5 +1,5 @@
 /**
- * AceMods.console -- captures everything the UI logs, for in-game display.
+ * ACEUIModLoader.console -- captures everything the UI logs, for in-game display.
  *
  * Wraps console.log/info/debug/warn/error as soon as this file runs (before the
  * stock bundle, which calls them hundreds of times), keeps the last MAX_ENTRIES
@@ -12,7 +12,7 @@
  * Entries are { seq, t, level, text }; `capture(level, text)` adds one without
  * going through console (used by the debug console for its own echo/result lines).
  */
-AceMods.console = (function () {
+ACEUIModLoader.console = (function () {
 
     const MAX_ENTRIES = 500;
     const LEVELS = ["log", "info", "debug", "warn", "error"];
@@ -104,7 +104,7 @@ AceMods.console = (function () {
 
         state.original[level] = original;
         console[level] = function () {
-            const args = AceMods.toArray(arguments);
+            const args = ACEUIModLoader.toArray(arguments);
 
             push(level, formatArgs(args));
             original.apply(console, args);

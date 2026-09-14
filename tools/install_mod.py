@@ -1,10 +1,10 @@
 #!/usr/bin/env python3
 """
-install_mod.py - install (or remove) a loose UI mod for the AceMods loader.
+install_mod.py - install (or remove) a loose UI mod for the ACEUIModLoader.
 
 A mod is a folder containing `mod.json` plus the files it lists. Installing copies
-the folder to `<mods>\\uiresources\\acemods\\<name>\\` and adds the name to
-`<mods>\\uiresources\\acemods\\manifest.json`, which the loader reads on every page.
+the folder to `<mods>\\uiresources\\ACEUIModLoaderMods\\<name>\\` and adds the name to
+`<mods>\\uiresources\\ACEUIModLoaderMods\\manifest.json`, which the loader reads on every page.
 No packaging, no padding: the game serves these as loose files (see
 ACEGameInternals/docs/game-internals.md section 3).
 
@@ -22,13 +22,13 @@ import sys
 
 import _repos
 
-ACEMODS_SUBDIR = os.path.join("uiresources", "acemods")
+MODS_SUBDIR = os.path.join("uiresources", "ACEUIModLoaderMods")
 MANIFEST = "manifest.json"
 MOD_FILE = "mod.json"
 
 
-def acemods_dir(mods_dir=None):
-    return os.path.join(mods_dir or _repos.mods_dir(), ACEMODS_SUBDIR)
+def mods_root_dir(mods_dir=None):
+    return os.path.join(mods_dir or _repos.mods_dir(), MODS_SUBDIR)
 
 
 def read_manifest(root):
@@ -66,7 +66,7 @@ def load_mod_info(src_dir):
 
 def install(src_dir, mods_dir=None):
     info = load_mod_info(src_dir)
-    root = acemods_dir(mods_dir)
+    root = mods_root_dir(mods_dir)
     dest = os.path.join(root, info["name"])
     if os.path.isdir(dest):
         shutil.rmtree(dest)
@@ -81,7 +81,7 @@ def install(src_dir, mods_dir=None):
 
 
 def remove(name, mods_dir=None):
-    root = acemods_dir(mods_dir)
+    root = mods_root_dir(mods_dir)
     dest = os.path.join(root, name)
     if os.path.isdir(dest):
         shutil.rmtree(dest)
@@ -92,7 +92,7 @@ def remove(name, mods_dir=None):
 
 
 def list_mods(mods_dir=None):
-    root = acemods_dir(mods_dir)
+    root = mods_root_dir(mods_dir)
     manifest = read_manifest(root)
     for name in manifest["mods"]:
         path = os.path.join(root, name, MOD_FILE)

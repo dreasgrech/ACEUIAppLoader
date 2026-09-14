@@ -39,14 +39,14 @@ class LibrarySourceTests(unittest.TestCase):
 
     def test_every_source_file_is_in_load_order_and_present(self):
         self.assertEqual(sorted(n for n in os.listdir(SRC) if n.endswith(".js")), sorted(build_loader.LIB_ORDER))
-        self.assertEqual(build_loader.LIB_ORDER[0], "acemods.core.js", "core defines the namespace")
-        self.assertEqual(build_loader.LIB_ORDER[1], "acemods.console.js", "console hook must run before the stock bundle")
-        self.assertEqual(build_loader.LIB_ORDER[-1], "acemods.loader.js", "loader starts mods last")
+        self.assertEqual(build_loader.LIB_ORDER[0], "ACEUIModLoader.core.js", "core defines the namespace")
+        self.assertEqual(build_loader.LIB_ORDER[1], "ACEUIModLoader.console.js", "console hook must run before the stock bundle")
+        self.assertEqual(build_loader.LIB_ORDER[-1], "ACEUIModLoader.loader.js", "loader starts mods last")
 
     def test_version_matches_version_file_and_readme(self):
         v = read(os.path.join(ROOT, "VERSION")).strip()
         self.assertRegex(v, r"^\d+\.\d+\.\d+$")
-        self.assertIn(f'const VERSION = "{v}";', self.files["acemods.core.js"])
+        self.assertIn(f'const VERSION = "{v}";', self.files["ACEUIModLoader.core.js"])
         self.assertIn(v, read(os.path.join(ROOT, "README.md")))
 
     def test_style_rules(self):
@@ -67,21 +67,21 @@ class LibrarySourceTests(unittest.TestCase):
             self.assertEqual(re.findall(r"^[^\"'\n]*'", strip_comments(js), re.M), [], f"{name}: single-quoted literal")
 
     def test_module_shapes(self):
-        self.assertIn("const AceMods = (function () {", self.files["acemods.core.js"])
-        self.assertIn("\nwindow.AceMods = AceMods;\n", self.files["acemods.core.js"])
+        self.assertIn("const ACEUIModLoader = (function () {", self.files["ACEUIModLoader.core.js"])
+        self.assertIn("\nwindow.ACEUIModLoader = ACEUIModLoader;\n", self.files["ACEUIModLoader.core.js"])
         for name in build_loader.LIB_ORDER[1:]:
             ns = name.split(".")[1]
-            self.assertIn(f"AceMods.{ns} = (function () {{", self.files[name], f"{name} must define AceMods.{ns}")
-            self.assertNotIn("const AceMods", self.files[name], f"{name} must not redefine the namespace")
+            self.assertIn(f"ACEUIModLoader.{ns} = (function () {{", self.files[name], f"{name} must define ACEUIModLoader.{ns}")
+            self.assertNotIn("const ACEUIModLoader", self.files[name], f"{name} must not redefine the namespace")
 
     def test_core_exports(self):
-        core = self.files["acemods.core.js"]
+        core = self.files["ACEUIModLoader.core.js"]
         for name in ("VERSION", "LOG_PREFIX", "HUD_HIDDEN_CLASS", "page", "log", "logger", "clamp", "el", "close",
                      "toArray", "percentText", "hudHidden", "closestWithAttribute"):
             self.assertRegex(core, rf"\n\s+{name}: [A-Za-z_.()]+,?\n", f"core.{name} not exported")
 
     def test_console_hook_chains_and_never_echoes(self):
-        js = self.files["acemods.console.js"]
+        js = self.files["ACEUIModLoader.console.js"]
         self.assertIn('const LEVELS = ["log", "info", "debug", "warn", "error"];', js)
         self.assertNotIn('"trace"', js, "console.trace is wrapped by the stock bundle; leave it alone")
         self.assertIn("original.apply(console, args);", js)
@@ -93,7 +93,7 @@ class LibrarySourceTests(unittest.TestCase):
             self.assertRegex(js, rf"\n\s+{name}: [A-Za-z_.]+,?\n", f"console.{name} not exported")
 
     def test_panel_contract(self):
-        js = self.files["acemods.panel.js"]
+        js = self.files["ACEUIModLoader.panel.js"]
         self.assertIn('const NO_DRAG_ATTR = "data-nodrag";', js)
         self.assertIn('const DRAGGING_CLASS = "dragging";', js)
         self.assertIn("const RESTORE_WAIT_MS = 2000;", js)
@@ -104,16 +104,16 @@ class LibrarySourceTests(unittest.TestCase):
         self.assertIn('window.removeEventListener("mousemove", panel.handlers.move);', js)
 
     def test_loader_contract(self):
-        js = self.files["acemods.loader.js"]
-        self.assertIn('const ROOT = "acemods/";', js)
+        js = self.files["ACEUIModLoader.loader.js"]
+        self.assertIn('const ROOT = "ACEUIModLoaderMods/";', js)
         self.assertIn('ROOT + "manifest.json"', js)
         self.assertIn('const MOD_FILE = "mod.json";', js)
         self.assertIn('const DEFAULT_PAGES = ["hud.html"];', js)
-        for line in ('"loader " + AceMods.VERSION + " on /"', '"manifest: "', '" loaded"', '" FAILED"', '"no manifest at "'):
+        for line in ('"loader " + ACEUIModLoader.VERSION + " on /"', '"manifest: "', '" loaded"', '" FAILED"', '"no manifest at "'):
             self.assertIn(line, js, line)
         self.assertIn("loadScripts(base, files, index + 1, onDone)", js, "scripts load sequentially")
         for alias in ("ROOT", "mods", "ready", "addStylesheet", "addScript"):
-            self.assertIn(f"AceMods.{alias} = AceMods.loader.{alias};", js)
+            self.assertIn(f"ACEUIModLoader.{alias} = ACEUIModLoader.loader.{alias};", js)
 
     def test_no_per_frame_geometry_or_css_in_library(self):
         for name, js in self.files.items():
@@ -139,18 +139,18 @@ class InstallModTests(unittest.TestCase):
 
     def test_install_copies_files_and_registers_in_manifest(self):
         dest = install_mod.install(self.src, self.mods)
-        self.assertEqual(dest, os.path.join(self.mods, "uiresources", "acemods", "mymod"))
+        self.assertEqual(dest, os.path.join(self.mods, "uiresources", "ACEUIModLoaderMods", "mymod"))
         self.assertEqual(sorted(os.listdir(dest)), ["a.css", "a.js", "b.js", "mod.json"], "junk must not be copied")
-        manifest = install_mod.read_manifest(install_mod.acemods_dir(self.mods))
+        manifest = install_mod.read_manifest(install_mod.mods_root_dir(self.mods))
         self.assertEqual(manifest["mods"], ["mymod"])
         install_mod.install(self.src, self.mods)
-        self.assertEqual(install_mod.read_manifest(install_mod.acemods_dir(self.mods))["mods"], ["mymod"])
+        self.assertEqual(install_mod.read_manifest(install_mod.mods_root_dir(self.mods))["mods"], ["mymod"])
 
     def test_remove(self):
         install_mod.install(self.src, self.mods)
         install_mod.remove("mymod", self.mods)
-        self.assertFalse(os.path.isdir(os.path.join(self.mods, "uiresources", "acemods", "mymod")))
-        self.assertEqual(install_mod.read_manifest(install_mod.acemods_dir(self.mods))["mods"], [])
+        self.assertFalse(os.path.isdir(os.path.join(self.mods, "uiresources", "ACEUIModLoaderMods", "mymod")))
+        self.assertEqual(install_mod.read_manifest(install_mod.mods_root_dir(self.mods))["mods"], [])
 
     def test_missing_listed_file_is_an_error(self):
         os.remove(os.path.join(self.src, "b.js"))
@@ -158,7 +158,7 @@ class InstallModTests(unittest.TestCase):
             install_mod.install(self.src, self.mods)
 
     def test_manifest_keeps_other_mods(self):
-        root = install_mod.acemods_dir(self.mods)
+        root = install_mod.mods_root_dir(self.mods)
         install_mod.write_manifest(root, {"mods": ["other"]})
         install_mod.install(self.src, self.mods)
         self.assertEqual(install_mod.read_manifest(root)["mods"], ["other", "mymod"])
@@ -178,8 +178,8 @@ class BuildLoaderTests(unittest.TestCase):
             self.assertTrue(data.startswith(stock), "host must start with the untouched stock file")
             positions = [data.index(f"/* ---- {name} ".encode()) for name in build_loader.LIB_ORDER]
             self.assertEqual(positions, sorted(positions), "library files must be appended in LIB_ORDER")
-            self.assertIn(b"const AceMods = (function () {", data)
-            self.assertIn(b"AceMods.loader = (function () {", data)
+            self.assertIn(b"const ACEUIModLoader = (function () {", data)
+            self.assertIn(b"ACEUIModLoader.loader = (function () {", data)
             out = os.path.join(tmp, "loader.kspkg")
             written = pk.pack(build, out)
             pk.verify(out, written)

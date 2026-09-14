@@ -1,22 +1,22 @@
 /**
- * AceMods.core -- the root namespace and the small helpers every mod uses.
+ * ACEUIModLoader.core -- the root namespace and the small helpers every mod uses.
  *
  * First of the library files appended to the stock `uiresources/js/cohtml.js`
  * (see tools/build_loader.py for the order), so it runs on every Gameface page
- * before Kunos' bundle. Later files add one namespace each (`AceMods.console`,
- * `.persist`, `.panel`, `.loop`, `.loader`); mods only ever talk to `AceMods.*`.
+ * before Kunos' bundle. Later files add one namespace each (`ACEUIModLoader.console`,
+ * `.persist`, `.panel`, `.loop`, `.loader`); mods only ever talk to `ACEUIModLoader.*`.
  *
  * Classic scripts: a top-level `const` is a page-wide binding but not a window
- * property, so the module is also assigned to `window.AceMods` for mods that
+ * property, so the module is also assigned to `window.ACEUIModLoader` for mods that
  * detect the loader that way.
  */
-const AceMods = (function () {
+const ACEUIModLoader = (function () {
 
     /** Loader/library version -- keep in step with the VERSION file at the repo root. */
     const VERSION = "0.2.0";
 
     /** Prefix of every loader log line; the game log and check_ingame_log.py grep for it. */
-    const LOG_PREFIX = "[AceMods]";
+    const LOG_PREFIX = "[ACEUIModLoader]";
 
     /** The stock HUD toggles this class on <body> when the HUD is hidden. */
     const HUD_HIDDEN_CLASS = "hide-hud";
@@ -27,7 +27,7 @@ const AceMods = (function () {
         console.log(LOG_PREFIX + " " + message);
     };
 
-    /** Prefixed logger for mods: AceMods.logger("[PedalGraph]")("hello"). */
+    /** Prefixed logger for mods: ACEUIModLoader.logger("[PedalGraph]")("hello"). */
     const logger = function (prefix) {
         return function (message) {
             console.log(prefix + " " + message);
@@ -105,4 +105,4 @@ const AceMods = (function () {
     };
 }());
 
-window.AceMods = AceMods;
+window.ACEUIModLoader = ACEUIModLoader;

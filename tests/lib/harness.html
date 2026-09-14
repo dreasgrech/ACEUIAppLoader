@@ -2,7 +2,7 @@
 <html>
 <head>
 <meta charset="utf-8">
-<title>AceMods library tests</title>
+<title>ACEUIModLoader library tests</title>
 <style>
   body { margin: 0; background: #222; color: #ddd; font: 12px monospace; }
   /* stand-in for the game's HUD container */
@@ -46,12 +46,12 @@ console.warn = function () { window.__warn.push(Array.prototype.slice.call(argum
 console.error = function () { window.__warn.push(Array.prototype.slice.call(arguments).join(" ")); };
 </script>
 <!-- the library exactly as build_loader.py appends it to cohtml.js, same order -->
-<script src="../../src/acemods.core.js"></script>
-<script src="../../src/acemods.console.js"></script>
-<script src="../../src/acemods.persist.js"></script>
-<script src="../../src/acemods.panel.js"></script>
-<script src="../../src/acemods.loop.js"></script>
-<script src="../../src/acemods.loader.js"></script>
+<script src="../../src/ACEUIModLoader.core.js"></script>
+<script src="../../src/ACEUIModLoader.console.js"></script>
+<script src="../../src/ACEUIModLoader.persist.js"></script>
+<script src="../../src/ACEUIModLoader.panel.js"></script>
+<script src="../../src/ACEUIModLoader.loop.js"></script>
+<script src="../../src/ACEUIModLoader.loader.js"></script>
 </head>
 <body>
 <div class="absolutecenter" id="center"></div>
@@ -86,40 +86,40 @@ document.addEventListener("DOMContentLoaded", function () {
         const root = document.createElement("div");
         root.className = "panel";
         center.appendChild(root);
-        const panel = AceMods.panel.attach(root, Object.assign({ hudId: "hud_test", storageKey: "acetest.pos", log: function () {} }, opts || {}));
+        const panel = ACEUIModLoader.panel.attach(root, Object.assign({ hudId: "hud_test", storageKey: "acetest.pos", log: function () {} }, opts || {}));
         return { root: root, panel: panel };
     };
-    const HUD_ID = "hud_test", KEY = "acetest.pos", WAIT = AceMods.panel.RESTORE_WAIT_MS;
+    const HUD_ID = "hud_test", KEY = "acetest.pos", WAIT = ACEUIModLoader.panel.RESTORE_WAIT_MS;
 
     // ---- core ---------------------------------------------------------------------------
 
     t("core: namespace, version, page, window property", function () {
-        eq(typeof AceMods, "object"); eq(window.AceMods, AceMods, "window.AceMods");
-        ok(/^\d+\.\d+\.\d+$/.test(AceMods.VERSION), "semver"); eq(AceMods.page, "harness.html", "page");
-        eq(AceMods.LOG_PREFIX, "[AceMods]"); eq(AceMods.HUD_HIDDEN_CLASS, "hide-hud");
-        ["console", "persist", "panel", "loop", "loader"].forEach(function (ns) { eq(typeof AceMods[ns], "object", ns); });
+        eq(typeof ACEUIModLoader, "object"); eq(window.ACEUIModLoader, ACEUIModLoader, "window.ACEUIModLoader");
+        ok(/^\d+\.\d+\.\d+$/.test(ACEUIModLoader.VERSION), "semver"); eq(ACEUIModLoader.page, "harness.html", "page");
+        eq(ACEUIModLoader.LOG_PREFIX, "[ACEUIModLoader]"); eq(ACEUIModLoader.HUD_HIDDEN_CLASS, "hide-hud");
+        ["console", "persist", "panel", "loop", "loader"].forEach(function (ns) { eq(typeof ACEUIModLoader[ns], "object", ns); });
     });
 
     t("core: helpers", function () {
-        eq(AceMods.clamp(5, 0, 1), 1); eq(AceMods.clamp(-1, 0, 1), 0); eq(AceMods.clamp(0.5, 0, 1), 0.5);
-        eq(AceMods.el("div", "a", { "data-x": 1 }) + AceMods.close("div"), '<div class="a" data-x="1"></div>');
-        eq(AceMods.percentText(0.499), "50%"); eq(AceMods.percentText(0), "0%");
-        eq(AceMods.toArray(document.querySelectorAll("div")).length >= 1, true);
-        eq(AceMods.hudHidden(), false); document.body.classList.add("hide-hud"); eq(AceMods.hudHidden(), true); document.body.classList.remove("hide-hud");
-        AceMods.logger("[T]")("hi"); eq(last(window.__log), "[T] hi", "logger prefix"); AceMods.log("x"); eq(last(window.__log), "[AceMods] x");
+        eq(ACEUIModLoader.clamp(5, 0, 1), 1); eq(ACEUIModLoader.clamp(-1, 0, 1), 0); eq(ACEUIModLoader.clamp(0.5, 0, 1), 0.5);
+        eq(ACEUIModLoader.el("div", "a", { "data-x": 1 }) + ACEUIModLoader.close("div"), '<div class="a" data-x="1"></div>');
+        eq(ACEUIModLoader.percentText(0.499), "50%"); eq(ACEUIModLoader.percentText(0), "0%");
+        eq(ACEUIModLoader.toArray(document.querySelectorAll("div")).length >= 1, true);
+        eq(ACEUIModLoader.hudHidden(), false); document.body.classList.add("hide-hud"); eq(ACEUIModLoader.hudHidden(), true); document.body.classList.remove("hide-hud");
+        ACEUIModLoader.logger("[T]")("hi"); eq(last(window.__log), "[T] hi", "logger prefix"); ACEUIModLoader.log("x"); eq(last(window.__log), "[ACEUIModLoader] x");
         const outer = document.createElement("div"), inner = document.createElement("span"); inner.setAttribute("data-nodrag", ""); outer.appendChild(inner);
         const deep = document.createElement("b"); inner.appendChild(deep);
-        eq(AceMods.closestWithAttribute(deep, "data-nodrag", outer), inner, "closest finds ancestor"); eq(AceMods.closestWithAttribute(outer, "data-nodrag", outer), null, "stops at root");
+        eq(ACEUIModLoader.closestWithAttribute(deep, "data-nodrag", outer), inner, "closest finds ancestor"); eq(ACEUIModLoader.closestWithAttribute(outer, "data-nodrag", outer), null, "stops at root");
     });
 
     // ---- console ------------------------------------------------------------------------
 
     t("console: hook captures levels and text, still calls the original", function () {
-        AceMods.console.clear();
+        ACEUIModLoader.console.clear();
         console.log("hello", 42, true, null);
         console.warn("careful");
         console.error(new Error("boom"));
-        const e = AceMods.console.entries();
+        const e = ACEUIModLoader.console.entries();
         eq(e.length, 3, "entries"); eq(e[0].level, "log"); eq(e[0].text, "hello 42 true null"); eq(e[1].level, "warn"); eq(e[1].text, "careful");
         eq(e[2].level, "error"); eq(e[2].text, "Error: boom");
         eq(last(window.__log).indexOf("hello 42 true"), 0, "original console.log reached"); eq(window.__warn.length >= 2, true, "original warn/error reached");
@@ -127,55 +127,55 @@ document.addEventListener("DOMContentLoaded", function () {
     });
 
     t("console: objects are formatted compactly and bounded", function () {
-        AceMods.console.clear();
+        ACEUIModLoader.console.clear();
         console.log({ a: 1, b: "x", c: [1, 2, { d: 3 }], f: function named() {} });
-        eq(AceMods.console.entries()[0].text, '{a: 1, b: "x", c: [1, 2, {...}], f: [function named]}');
+        eq(ACEUIModLoader.console.entries()[0].text, '{a: 1, b: "x", c: [1, 2, {...}], f: [function named]}');
         const big = {}; let i; for (i = 0; i < 30; i += 1) { big["k" + i] = i; }
         console.log(big);
-        ok(AceMods.console.entries()[1].text.indexOf("...}") > 0, "key cap");
+        ok(ACEUIModLoader.console.entries()[1].text.indexOf("...}") > 0, "key cap");
         console.log("x".repeat(1000));
-        eq(AceMods.console.entries()[2].text.length, 403, "text cap");
-        eq(AceMods.console.format([1, [2, [3]]]), "[1, [2, [...]]]", "format export");
+        eq(ACEUIModLoader.console.entries()[2].text.length, 403, "text cap");
+        eq(ACEUIModLoader.console.format([1, [2, [3]]]), "[1, [2, [...]]]", "format export");
     });
 
     t("console: ring buffer keeps the last MAX_ENTRIES", function () {
-        AceMods.console.clear();
-        let i; for (i = 0; i < AceMods.console.MAX_ENTRIES + 10; i += 1) { console.log("n" + i); }
-        eq(AceMods.console.entries().length, AceMods.console.MAX_ENTRIES);
-        eq(AceMods.console.entries()[0].text, "n10", "oldest dropped");
+        ACEUIModLoader.console.clear();
+        let i; for (i = 0; i < ACEUIModLoader.console.MAX_ENTRIES + 10; i += 1) { console.log("n" + i); }
+        eq(ACEUIModLoader.console.entries().length, ACEUIModLoader.console.MAX_ENTRIES);
+        eq(ACEUIModLoader.console.entries()[0].text, "n10", "oldest dropped");
     });
 
     t("console: subscribe / unsubscribe / capture / errors", function () {
-        AceMods.console.clear();
+        ACEUIModLoader.console.clear();
         const seen = [];
-        const off = AceMods.console.subscribe(function (entry) { seen.push(entry.level + ":" + entry.text); });
-        eq(AceMods.console.listenerCount(), 1);
-        console.log("a"); AceMods.console.capture("input", "> 1+1");
+        const off = ACEUIModLoader.console.subscribe(function (entry) { seen.push(entry.level + ":" + entry.text); });
+        eq(ACEUIModLoader.console.listenerCount(), 1);
+        console.log("a"); ACEUIModLoader.console.capture("input", "> 1+1");
         eq(seen.join("|"), "log:a|input:> 1+1");
         eq(window.__log.indexOf("> 1+1"), -1, "capture does not reach console");
         window.dispatchEvent(new ErrorEvent("error", { message: "kaboom", filename: "x.js", lineno: 7 }));
         eq(last(seen), "error:uncaught: kaboom at x.js:7");
-        off(); eq(AceMods.console.listenerCount(), 0);
+        off(); eq(ACEUIModLoader.console.listenerCount(), 0);
         console.log("b"); eq(seen.length, 3, "no notification after unsubscribe");
         // a listener that logs must not recurse
-        const off2 = AceMods.console.subscribe(function () { console.log("from listener"); });
+        const off2 = ACEUIModLoader.console.subscribe(function () { console.log("from listener"); });
         console.log("trigger"); off2();
-        eq(last(AceMods.console.entries()).text, "from listener", "stored once, no infinite loop");
+        eq(last(ACEUIModLoader.console.entries()).text, "from listener", "stored once, no infinite loop");
     });
 
     // ---- persist -------------------------------------------------------------------------
 
     t("persist: local round trip, hud store when present", function () {
         window.HUD = null; localStorage.clear();
-        eq(AceMods.persist.hudAvailable(), false); eq(AceMods.persist.readHud("hud_x"), null);
-        eq(AceMods.persist.writeHud("hud_x", { a: 1 }), false, "no HUD object");
-        eq(AceMods.persist.writeLocal("k", { a: 1 }), true); eq(AceMods.persist.readLocal("k").a, 1);
-        AceMods.persist.removeLocal("k"); eq(AceMods.persist.readLocal("k"), null);
-        eq(AceMods.persist.save("hud_x", "k", { b: 2 }).join(","), "localStorage");
+        eq(ACEUIModLoader.persist.hudAvailable(), false); eq(ACEUIModLoader.persist.readHud("hud_x"), null);
+        eq(ACEUIModLoader.persist.writeHud("hud_x", { a: 1 }), false, "no HUD object");
+        eq(ACEUIModLoader.persist.writeLocal("k", { a: 1 }), true); eq(ACEUIModLoader.persist.readLocal("k").a, 1);
+        ACEUIModLoader.persist.removeLocal("k"); eq(ACEUIModLoader.persist.readLocal("k"), null);
+        eq(ACEUIModLoader.persist.save("hud_x", "k", { b: 2 }).join(","), "localStorage");
         window.HUD = makeHud({});
-        eq(AceMods.persist.hudAvailable(), true);
-        eq(AceMods.persist.save("hud_x", "k", { b: 3 }).join(","), "hud layout,localStorage");
-        eq(AceMods.persist.readHud("hud_x").b, 3); eq(AceMods.persist.readLocal("k").b, 3);
+        eq(ACEUIModLoader.persist.hudAvailable(), true);
+        eq(ACEUIModLoader.persist.save("hud_x", "k", { b: 3 }).join(","), "hud layout,localStorage");
+        eq(ACEUIModLoader.persist.readHud("hud_x").b, 3); eq(ACEUIModLoader.persist.readLocal("k").b, 3);
         window.HUD = null; localStorage.clear();
     });
 
@@ -200,7 +200,7 @@ document.addEventListener("DOMContentLoaded", function () {
         ok(!root.classList.contains("dragging"));
         const saved = JSON.parse(localStorage.getItem(KEY));
         near(saved.fx, 500 / c.width, 0.001, "fx"); near(saved.fy, 350 / c.height, 0.001, "fy"); eq(saved.x, "500px"); eq(saved.y, "350px");
-        AceMods.panel.detach(p.panel); root.remove();
+        ACEUIModLoader.panel.detach(p.panel); root.remove();
     });
 
     t("panel: data-nodrag descendants do not start a drag; onSaved fires with the HUD store written", function () {
@@ -215,7 +215,7 @@ document.addEventListener("DOMContentLoaded", function () {
         mouse("mousedown", 105, 105, root); mouse("mousemove", 125, 115); mouse("mouseup", 0, 0);
         const entry = window.HUD.StoredData.layouts.default.elements[HUD_ID];
         ok(entry, "HUD store entry"); eq(entry.x, "120px"); eq(entry.y, "110px"); ok(savedPos && savedPos.x === "120px", "onSaved");
-        AceMods.panel.detach(p.panel); root.remove(); window.HUD = null;
+        ACEUIModLoader.panel.detach(p.panel); root.remove(); window.HUD = null;
     });
 
     t("panel: localStorage position applied synchronously at attach, HUD store keeps the last word", function () {
@@ -224,45 +224,45 @@ document.addEventListener("DOMContentLoaded", function () {
         eq(p.root.style.left, Math.round(0.2 * c.width) + "px", "placed immediately"); eq(p.root.style.visibility, "", "visible right away");
         ok(!p.panel.restored, "not settled yet");
         window.HUD = makeHud({}); window.HUD.StoredData.layouts.default.elements[HUD_ID] = { fx: 0.5, fy: 0.5 };
-        AceMods.panel.update(p.panel, 1000);
+        ACEUIModLoader.panel.update(p.panel, 1000);
         eq(p.root.style.left, Math.round(0.5 * c.width) + "px", "HUD store wins"); ok(p.panel.restored);
-        AceMods.panel.detach(p.panel); p.root.remove(); localStorage.clear(); window.HUD = null;
+        ACEUIModLoader.panel.detach(p.panel); p.root.remove(); localStorage.clear(); window.HUD = null;
     });
 
     t("panel: nothing stored: hidden until the HUD store was consulted, then default", function () {
         window.HUD = null; localStorage.clear();
         const p = makePanel();
         eq(p.root.style.visibility, "hidden"); eq(p.root.style.left, "", "nothing applied");
-        AceMods.panel.update(p.panel, 1000); eq(p.panel.restored, false, "waiting for HUD");
-        window.HUD = makeHud({}); AceMods.panel.update(p.panel, 1016);
+        ACEUIModLoader.panel.update(p.panel, 1000); eq(p.panel.restored, false, "waiting for HUD");
+        window.HUD = makeHud({}); ACEUIModLoader.panel.update(p.panel, 1016);
         eq(p.root.style.left, "", "stylesheet default kept"); ok(p.panel.restored); eq(p.root.style.visibility, "", "shown");
-        AceMods.panel.detach(p.panel); p.root.remove(); window.HUD = null;
+        ACEUIModLoader.panel.detach(p.panel); p.root.remove(); window.HUD = null;
     });
 
     t("panel: no HUD object at all: localStorage fallback after the wait window", function () {
         window.HUD = null; localStorage.clear();
         const p = makePanel();
         localStorage.setItem(KEY, JSON.stringify({ fx: 0.3, fy: 0.4 }));   // saved later in the session
-        AceMods.panel.update(p.panel, 5000); AceMods.panel.update(p.panel, 5000 + WAIT - 1);
-        eq(p.root.style.left, "", "not yet"); AceMods.panel.update(p.panel, 5000 + WAIT);
+        ACEUIModLoader.panel.update(p.panel, 5000); ACEUIModLoader.panel.update(p.panel, 5000 + WAIT - 1);
+        eq(p.root.style.left, "", "not yet"); ACEUIModLoader.panel.update(p.panel, 5000 + WAIT);
         const c = center.getBoundingClientRect(); eq(p.root.style.left, Math.round(0.3 * c.width) + "px", "fallback applied"); ok(p.panel.restored);
-        AceMods.panel.detach(p.panel); p.root.remove(); localStorage.clear();
+        ACEUIModLoader.panel.detach(p.panel); p.root.remove(); localStorage.clear();
     });
 
     t("panel: legacy/invalid stored positions are ignored; zero-size parent defers", function () {
         window.HUD = makeHud({}); localStorage.setItem(KEY, JSON.stringify({ left: "5px" }));
         const p = makePanel(); eq(p.root.style.left, "", "nothing applied synchronously");
-        AceMods.panel.update(p.panel, 100); eq(p.root.style.left, ""); ok(p.panel.restored, "gave up cleanly");
-        AceMods.panel.detach(p.panel); p.root.remove(); localStorage.clear();
+        ACEUIModLoader.panel.update(p.panel, 100); eq(p.root.style.left, ""); ok(p.panel.restored, "gave up cleanly");
+        ACEUIModLoader.panel.detach(p.panel); p.root.remove(); localStorage.clear();
         window.HUD.StoredData.layouts.default.elements[HUD_ID] = { fx: 0.5, fy: 0.5 };
         const hidden = document.createElement("div"); hidden.className = "absolutecenter"; hidden.style.display = "none"; document.body.appendChild(hidden);
         const root = document.createElement("div"); root.className = "panel"; hidden.appendChild(root);
-        const panel = AceMods.panel.attach(root, { hudId: HUD_ID, storageKey: KEY, log: function () {} });
-        AceMods.panel.update(panel, 200); AceMods.panel.update(panel, 200 + WAIT + 100);
+        const panel = ACEUIModLoader.panel.attach(root, { hudId: HUD_ID, storageKey: KEY, log: function () {} });
+        ACEUIModLoader.panel.update(panel, 200); ACEUIModLoader.panel.update(panel, 200 + WAIT + 100);
         eq(root.style.left, "", "nothing while the container has no size"); ok(!panel.restored);
-        hidden.style.display = "block"; AceMods.panel.update(panel, 200 + WAIT + 200);
+        hidden.style.display = "block"; ACEUIModLoader.panel.update(panel, 200 + WAIT + 200);
         eq(root.style.left, Math.round(0.5 * hidden.getBoundingClientRect().width) + "px", "applied once laid out"); ok(panel.restored);
-        AceMods.panel.detach(panel); hidden.remove(); window.HUD = null;
+        ACEUIModLoader.panel.detach(panel); hidden.remove(); window.HUD = null;
     });
 
     t("panel: a click without movement saves nothing", function () {
@@ -271,13 +271,13 @@ document.addEventListener("DOMContentLoaded", function () {
         mouse("mousedown", 15, 15, p.root); ok(p.root.classList.contains("dragging")); mouse("mouseup", 0, 0);
         ok(!p.root.classList.contains("dragging")); eq(localStorage.getItem(KEY), null, "no localStorage write");
         eq(window.HUD.StoredData.layouts.default.elements[HUD_ID], undefined, "no HUD store write");
-        AceMods.panel.detach(p.panel); p.root.remove(); window.HUD = null;
+        ACEUIModLoader.panel.detach(p.panel); p.root.remove(); window.HUD = null;
     });
 
     t("panel: detach releases listeners and shows the root", function () {
         window.HUD = null; localStorage.clear();
         const p = makePanel(); p.root.style.left = "10px"; p.root.style.top = "10px";
-        AceMods.panel.detach(p.panel);
+        ACEUIModLoader.panel.detach(p.panel);
         eq(p.root.style.visibility, "", "shown");
         mouse("mousedown", 15, 15, p.root); mouse("mousemove", 500, 500); mouse("mouseup", 0, 0);
         eq(p.root.style.left, "10px", "listeners released"); eq(localStorage.getItem(KEY), null, "nothing saved");
@@ -288,37 +288,37 @@ document.addEventListener("DOMContentLoaded", function () {
 
     t("loop: start schedules frames before the callback, stop cancels", function () {
         const seen = [];
-        const h = AceMods.loop.start(function (now) { seen.push(now); if (now === 2) { throw new Error("frame error"); } });
+        const h = ACEUIModLoader.loop.start(function (now) { seen.push(now); if (now === 2) { throw new Error("frame error"); } });
         eq(clock.queue.length, 1, "first frame queued");
         clock.step(1); eq(seen.join(","), "1"); eq(clock.queue.length, 1, "next frame queued");
         try { clock.step(2); } catch (ignore) { /* the throw escapes the fake clock; the loop must survive */ }
         eq(clock.queue.length, 1, "loop survived a throwing frame");
         const cancelled = clock.cancelled;
-        AceMods.loop.stop(h);
+        ACEUIModLoader.loop.stop(h);
         eq(clock.cancelled, cancelled + 1); eq(clock.queue.length, 0); eq(h.rafId, 0); eq(h.running, false);
         clock.step(3); eq(seen.length, 2, "no frames after stop");
     });
 
     t("loop: sampler commits at the fixed rate, catches up, resets after a stall", function () {
-        const s = AceMods.loop.sampler(50, 5000);   // 20 ms period, 5 s max gap
+        const s = ACEUIModLoader.loop.sampler(50, 5000);   // 20 ms period, 5 s max gap
         let commits = 0; const commit = function () { commits += 1; };
-        near(AceMods.loop.advance(s, 1000, commit), 0, 1e-9, "first call starts the clock"); eq(commits, 0);
-        near(AceMods.loop.advance(s, 1010, commit), 0.5, 1e-9, "half way"); eq(commits, 0);
-        near(AceMods.loop.advance(s, 1020, commit), 0, 1e-9); eq(commits, 1, "one sample due");
-        AceMods.loop.advance(s, 1020 + 20 * 5, commit); eq(commits, 6, "catch up after a hitch");
-        AceMods.loop.advance(s, 1120 + 20000, commit); eq(commits, 6, "stall restarts the clock instead of replaying");
-        AceMods.loop.advance(s, 21120 + 20, commit); eq(commits, 7);
-        AceMods.loop.reset(s); eq(s.lastSampleAt, 0);
-        near(AceMods.loop.advance(s, 50000, commit), 0, 1e-9); eq(commits, 7, "reset: fresh start");
+        near(ACEUIModLoader.loop.advance(s, 1000, commit), 0, 1e-9, "first call starts the clock"); eq(commits, 0);
+        near(ACEUIModLoader.loop.advance(s, 1010, commit), 0.5, 1e-9, "half way"); eq(commits, 0);
+        near(ACEUIModLoader.loop.advance(s, 1020, commit), 0, 1e-9); eq(commits, 1, "one sample due");
+        ACEUIModLoader.loop.advance(s, 1020 + 20 * 5, commit); eq(commits, 6, "catch up after a hitch");
+        ACEUIModLoader.loop.advance(s, 1120 + 20000, commit); eq(commits, 6, "stall restarts the clock instead of replaying");
+        ACEUIModLoader.loop.advance(s, 21120 + 20, commit); eq(commits, 7);
+        ACEUIModLoader.loop.reset(s); eq(s.lastSampleAt, 0);
+        near(ACEUIModLoader.loop.advance(s, 50000, commit), 0, 1e-9); eq(commits, 7, "reset: fresh start");
     });
 
     // ---- loader ---------------------------------------------------------------------------
 
     t("loader: constants, aliases, and it announced itself", function () {
-        eq(AceMods.loader.ROOT, "acemods/"); eq(AceMods.ROOT, "acemods/"); eq(AceMods.loader.MOD_FILE, "mod.json");
-        eq(AceMods.loader.DEFAULT_PAGES.join(","), "hud.html");
-        eq(AceMods.ready, AceMods.loader.ready); eq(AceMods.mods, AceMods.loader.mods); eq(typeof AceMods.addScript, "function");
-        ok(window.__log.some(function (l) { return l === "[AceMods] loader " + AceMods.VERSION + " on /harness.html"; }), "boot line");
+        eq(ACEUIModLoader.loader.ROOT, "ACEUIModLoaderMods/"); eq(ACEUIModLoader.ROOT, "ACEUIModLoaderMods/"); eq(ACEUIModLoader.loader.MOD_FILE, "mod.json");
+        eq(ACEUIModLoader.loader.DEFAULT_PAGES.join(","), "hud.html");
+        eq(ACEUIModLoader.ready, ACEUIModLoader.loader.ready); eq(ACEUIModLoader.mods, ACEUIModLoader.loader.mods); eq(typeof ACEUIModLoader.addScript, "function");
+        ok(window.__log.some(function (l) { return l === "[ACEUIModLoader] loader " + ACEUIModLoader.VERSION + " on /harness.html"; }), "boot line");
     });
 
     const passed = results.filter(function (r) { return r.pass; }).length;

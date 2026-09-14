@@ -1,15 +1,15 @@
 #!/usr/bin/env python3
 """
-build_loader.py - build the AceMods loader package.
+build_loader.py - build the ACEUIModLoader package.
 
 1. Extract the stock `uiresources/js/cohtml.js` from the installed content.kspkg
    (never committed; it is Kunos'/Coherent's file).
-2. Append the library files in LIB_ORDER (src/acemods.*.js) to it
+2. Append the library files in LIB_ORDER (src/ACEUIModLoaderMods.*.js) to it
    -> build/uiresources/js/cohtml.js. The order matters: core defines the
    namespace, console hooks console.* before the stock bundle runs, loader
    comes last and starts loading mods once the DOM exists.
 3. Pack build/ with tools/pack_kspkg.py (which adds the padding that makes this
-   single override win the game's lookup) -> dist/acemods_loader.kspkg.
+   single override win the game's lookup) -> dist/ACEUIModLoader.kspkg.
 4. --install copies it to the game's mods folder.
 
 Usage:
@@ -28,15 +28,15 @@ import pack_kspkg as pk  # noqa: E402
 HOST_PATH = "uiresources/js/cohtml.js"
 SRC_DIR = os.path.join(_repos.REPO, "src")
 LIB_ORDER = [
-    "acemods.core.js",
-    "acemods.console.js",
-    "acemods.persist.js",
-    "acemods.panel.js",
-    "acemods.loop.js",
-    "acemods.loader.js",
+    "ACEUIModLoader.core.js",
+    "ACEUIModLoader.console.js",
+    "ACEUIModLoader.persist.js",
+    "ACEUIModLoader.panel.js",
+    "ACEUIModLoader.loop.js",
+    "ACEUIModLoader.loader.js",
 ]
 BUILD_DIR = os.path.join(_repos.REPO, "build")
-OUT = os.path.join(_repos.REPO, "dist", "acemods_loader.kspkg")
+OUT = os.path.join(_repos.REPO, "dist", "ACEUIModLoader.kspkg")
 
 
 def read_version():
@@ -45,7 +45,7 @@ def read_version():
 
 
 def marker(name):
-    return f"\n\n/* ---- {name} (AceMods {read_version()}, appended by ACEUIModLoader/tools/build_loader.py) ---- */\n"
+    return f"\n\n/* ---- {name} (ACEUIModLoader {read_version()}, appended by ACEUIModLoader/tools/build_loader.py) ---- */\n"
 
 
 def library_sources():
@@ -58,9 +58,9 @@ def library_sources():
             raise SystemExit(f"missing library file {path}")
         with open(path, encoding="utf-8") as f:
             out.append((name, f.read()))
-    core = dict(out)["acemods.core.js"]
+    core = dict(out)["ACEUIModLoader.core.js"]
     if f'const VERSION = "{version}";' not in core:
-        raise SystemExit(f"src/acemods.core.js VERSION does not match VERSION file ({version})")
+        raise SystemExit(f"src/ACEUIModLoader.core.js VERSION does not match VERSION file ({version})")
     unlisted = sorted(n for n in os.listdir(SRC_DIR) if n.endswith(".js") and n not in LIB_ORDER)
     if unlisted:
         raise SystemExit(f"src/ has files not in LIB_ORDER: {unlisted}")

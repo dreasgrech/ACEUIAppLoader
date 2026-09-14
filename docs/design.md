@@ -75,11 +75,11 @@ must respect all of them.
 ```
 ACEPedalGraph/                (rename later; it is becoming "ACE UI mods")
   lib/                        shared library, one IIFE per file, loaded in this order
-    acemods.core.js           AceMods.core: clamp, el/close, toArray, percentText, log(prefix)
-    acemods.persist.js        AceMods.persist: HUD-store + localStorage position/state store
-    acemods.panel.js          AceMods.panel: draggable, hide-with-HUD, positioning class, attach/detach
-    acemods.loop.js           AceMods.loop: per-frame runtime with fixed-rate sampling helper
-    acemods.console.js        AceMods.console: console.* hook + ring buffer + error capture (entry point uses it)
+    ACEUIModLoader.core.js           ACEUIModLoader.core: clamp, el/close, toArray, percentText, log(prefix)
+    ACEUIModLoader.persist.js        ACEUIModLoader.persist: HUD-store + localStorage position/state store
+    ACEUIModLoader.panel.js          ACEUIModLoader.panel: draggable, hide-with-HUD, positioning class, attach/detach
+    ACEUIModLoader.loop.js           ACEUIModLoader.loop: per-frame runtime with fixed-rate sampling helper
+    ACEUIModLoader.console.js        ACEUIModLoader.console: console.* hook + ring buffer + error capture (entry point uses it)
   mods/
     pedalgraph/               pedalgraph.js + pedalgraph.css (only the mod-specific 200 lines)
     console/                  debugconsole.js + debugconsole.css
@@ -92,19 +92,19 @@ ACEPedalGraph/                (rename later; it is becoming "ACE UI mods")
 
 Key decisions inside that:
 
-- **Namespaces, not globals soup.** `AceMods` is one global object; each lib
-  file adds one namespace (`AceMods.core`, ...). Mods are `PedalGraph`,
-  `DebugConsole` etc. and only talk to `AceMods.*`.
+- **Namespaces, not globals soup.** `ACEUIModLoader` is one global object; each lib
+  file adds one namespace (`ACEUIModLoader.core`, ...). Mods are `PedalGraph`,
+  `DebugConsole` etc. and only talk to `ACEUIModLoader.*`.
 - **Persistence API** (extracted from today's code, generalised beyond
-  position): `AceMods.persist.save(id, data)`, `AceMods.persist.load(id, onReady)`
+  position): `ACEUIModLoader.persist.save(id, data)`, `ACEUIModLoader.persist.load(id, onReady)`
   where `onReady(data, source)` fires once the HUD store is available or the
-  wait window ends, plus a synchronous `AceMods.persist.peek(id)` for the
+  wait window ends, plus a synchronous `ACEUIModLoader.persist.peek(id)` for the
   immediate localStorage attempt. Position handling on top:
-  `AceMods.panel.attach(root, { id, onFrame })` does the hidden-until-placed
+  `ACEUIModLoader.panel.attach(root, { id, onFrame })` does the hidden-until-placed
   dance itself.
 - **The entry point owns load order and diagnostics.** hud.html installs the
   console hook and error capture first, then the library, then each mod. The
-  per-mod `PEDALGRAPH_SOURCE` tag becomes `AceMods.source`.
+  per-mod `PEDALGRAPH_SOURCE` tag becomes `ACEUIModLoader.source`.
 - **Build step assembles, packer packs.** `build.py` copies lib + mods + hud
   into `build/uiresources/...` (single place for the game paths), then the
   existing packer runs on `build/`. The padding search already handles
@@ -114,17 +114,17 @@ Key decisions inside that:
 
 ## 5. Migration order (small, testable steps)
 
-1. Create `lib/acemods.core.js` and `lib/acemods.persist.js` by moving the
-   functions listed in section 1 unchanged; PedalGraph calls `AceMods.*`.
+1. Create `lib/ACEUIModLoader.core.js` and `lib/ACEUIModLoader.persist.js` by moving the
+   functions listed in section 1 unchanged; PedalGraph calls `ACEUIModLoader.*`.
    Tests: move the corresponding harness cases to a library harness.
-2. Extract `acemods.panel.js` (drag + hidden-until-placed + hide-with-HUD) and
-   `acemods.loop.js`; PedalGraph shrinks to its 200 lines.
+2. Extract `ACEUIModLoader.panel.js` (drag + hidden-until-placed + hide-with-HUD) and
+   `ACEUIModLoader.loop.js`; PedalGraph shrinks to its 200 lines.
 3. Introduce `build.py` and the `hud/` entry point; move mod sources to
    `mods/pedalgraph/`. Packer input becomes `build/`.
-4. Add `acemods.console.js` (hook + buffer) to the entry point, verify in a
+4. Add `ACEUIModLoader.console.js` (hook + buffer) to the entry point, verify in a
    launch that stock messages are captured (they will appear twice in the
    game log if we also re-log them -- the hook must not echo).
-5. Build the debug console mod on `AceMods.panel` + `AceMods.console`.
+5. Build the debug console mod on `ACEUIModLoader.panel` + `ACEUIModLoader.console`.
 
 Each step ends with the full test suite and one launch checked by
 `check_ingame_log.py`; steps 1-3 change no behaviour in game.
@@ -139,10 +139,10 @@ What the game allows:
 
 - Only one record per path wins, so only one package may override
   `hud.html`. That package is the loader. It ships the library and probes a
-  fixed set of mod slots (`uiresources\acemods\slotNN.js`, tried with dynamic
+  fixed set of mod slots (`uiresources\ACEUIModLoaderMods\slotNN.js`, tried with dynamic
   `<script>` elements and `onerror`; Cohtml has no directory listing).
 - Mod packages ship only **new** files: their slot script, their own
-  `uiresources\acemods\<mod>\...` assets. New paths have unique hashes and
+  `uiresources\ACEUIModLoaderMods\<mod>\...` assets. New paths have unique hashes and
   always resolve regardless of layout, so mods never need padding.
 
 What the game does not allow us to ignore, measured with `lookup_sim`:
@@ -223,7 +223,7 @@ choosing padding that wins under every permutation of the installed packages.
 
 **Recommendation.** One loader package (`js/cohtml.js` override + library,
 padded per game version, `repad` for machines with car-mod packages); every
-UI mod a loose folder under `mods\uiresources\acemods\<mod>\` plus one slot
+UI mod a loose folder under `mods\uiresources\ACEUIModLoaderMods\<mod>\` plus one slot
 script the loader probes. No per-mod packaging, no per-mod padding, and live
 editing during development.
 
@@ -283,15 +283,15 @@ version; UI mods as loose folders with no packaging and no padding.
 The library exists and both mods run on it; this section records what was
 built against sections 4 and 5, and where it deviates.
 
-- **Where the library lives.** Not as loose files: all six `src/acemods.*.js`
+- **Where the library lives.** Not as loose files: all six `src/ACEUIModLoaderMods.*.js`
   files are appended to the stock `js/cohtml.js` inside the loader package, in
   `LIB_ORDER` (core, console, persist, panel, loop, loader). Reason: the
   console hook must run before `components.js`, which only the host can
-  guarantee, and mods may then rely on `AceMods.*` existing synchronously.
+  guarantee, and mods may then rely on `ACEUIModLoader.*` existing synchronously.
   The cost is a rebuild + reinstall for library changes (padding unchanged,
   it depends only on paths).
-- **Namespaces** as planned: `AceMods` (core), `.console`, `.persist`,
-  `.panel`, `.loop`, `.loader`; flat aliases `AceMods.ready/mods/addScript/
+- **Namespaces** as planned: `ACEUIModLoader` (core), `.console`, `.persist`,
+  `.panel`, `.loop`, `.loader`; flat aliases `ACEUIModLoader.ready/mods/addScript/
   addStylesheet/ROOT` keep the 0.1.0 surface.
 - **Hidden-until-placed** is an inline `visibility` style set by the panel,
   not a CSS class, so the library needs no stylesheet.

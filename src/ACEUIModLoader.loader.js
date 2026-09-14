@@ -1,27 +1,27 @@
 /**
- * AceMods.loader -- finds and loads the installed UI mods.
+ * ACEUIModLoader.loader -- finds and loads the installed UI mods.
  *
  * Last of the library files appended to the stock `uiresources/js/cohtml.js`.
- * Once the page's DOM exists it reads `acemods/manifest.json`, then each listed
- * mod's `acemods/<name>/mod.json`, and injects that mod's stylesheets and
+ * Once the page's DOM exists it reads `ACEUIModLoaderMods/manifest.json`, then each listed
+ * mod's `ACEUIModLoaderMods/<name>/mod.json`, and injects that mod's stylesheets and
  * scripts, in order, on the pages the mod asked for. Mods are plain folders
- * under `Saved Games\ACE\mods\uiresources\acemods\` (a loose-file search
+ * under `Saved Games\ACE\mods\uiresources\ACEUIModLoaderMods\` (a loose-file search
  * directory of the game); only the loader is a package. See docs/design.md.
  *
- * Manifest (`acemods/manifest.json`, maintained by tools/install_mod.py):
+ * Manifest (`ACEUIModLoaderMods/manifest.json`, maintained by tools/install_mod.py):
  *     { "mods": ["pedalgraph", "devconsole"] }
  *
- * Per mod (`acemods/<name>/mod.json`):
+ * Per mod (`ACEUIModLoaderMods/<name>/mod.json`):
  *     { "name": "pedalgraph", "version": "0.4.0", "pages": ["hud.html"],
  *       "styles": ["pedalgraph.css"], "scripts": ["pedalgraph.js", "mod.js"] }
  *
- * Everything the loader logs starts with "[AceMods]" so the game log (and
+ * Everything the loader logs starts with "[ACEUIModLoader]" so the game log (and
  * tools/check_ingame_log.py) can follow it.
  */
-AceMods.loader = (function () {
+ACEUIModLoader.loader = (function () {
 
     /** Folder, relative to the page, that holds the manifest and the mod folders. */
-    const ROOT = "acemods/";
+    const ROOT = "ACEUIModLoaderMods/";
     const MANIFEST_URL = ROOT + "manifest.json";
     const MOD_FILE = "mod.json";
     /** Fallback when a mod.json lists no pages: only the HUD. */
@@ -30,7 +30,7 @@ AceMods.loader = (function () {
     const ANY_PAGE = "*";
     const HTTP_OK = 200;
 
-    const log = AceMods.log;
+    const log = ACEUIModLoader.log;
 
     const state = {
         mods: [],           // { name, info, status }
@@ -100,7 +100,7 @@ AceMods.loader = (function () {
     const wantsPage = function (info) {
         const pages = Array.isArray(info.pages) && info.pages.length ? info.pages : DEFAULT_PAGES;
 
-        return pages.indexOf(AceMods.page) >= 0 || pages.indexOf(ANY_PAGE) >= 0;
+        return pages.indexOf(ACEUIModLoader.page) >= 0 || pages.indexOf(ANY_PAGE) >= 0;
     };
 
     const loadMod = function (name, onDone) {
@@ -151,7 +151,7 @@ AceMods.loader = (function () {
     };
 
     const start = function () {
-        log("loader " + AceMods.VERSION + " on /" + AceMods.page);
+        log("loader " + ACEUIModLoader.VERSION + " on /" + ACEUIModLoader.page);
         fetchText(MANIFEST_URL, function (text) {
             const manifest = text === null ? null : parseJson(text, MANIFEST_URL);
 
@@ -188,9 +188,9 @@ AceMods.loader = (function () {
     };
 }());
 
-/* Convenience aliases so mods can stay on the flat `AceMods.*` API. */
-AceMods.ROOT = AceMods.loader.ROOT;
-AceMods.mods = AceMods.loader.mods;
-AceMods.ready = AceMods.loader.ready;
-AceMods.addStylesheet = AceMods.loader.addStylesheet;
-AceMods.addScript = AceMods.loader.addScript;
+/* Convenience aliases so mods can stay on the flat `ACEUIModLoader.*` API. */
+ACEUIModLoader.ROOT = ACEUIModLoader.loader.ROOT;
+ACEUIModLoader.mods = ACEUIModLoader.loader.mods;
+ACEUIModLoader.ready = ACEUIModLoader.loader.ready;
+ACEUIModLoader.addStylesheet = ACEUIModLoader.loader.addStylesheet;
+ACEUIModLoader.addScript = ACEUIModLoader.loader.addScript;

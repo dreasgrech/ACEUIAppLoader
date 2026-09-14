@@ -1,10 +1,10 @@
 /**
- * AceMods.panel -- a draggable HUD panel that remembers where it was.
+ * ACEUIModLoader.panel -- a draggable HUD panel that remembers where it was.
  *
  * `attach(root, options)` makes `root` draggable inside its parent (the HUD's
  * `.absolutecenter`), clamped so it stays fully on screen, and persists its
  * position as fractions of the parent (resolution independent) through
- * AceMods.persist under `options.hudId` / `options.storageKey`. The mod's frame
+ * ACEUIModLoader.persist under `options.hudId` / `options.storageKey`. The mod's frame
  * loop must call `update(panel, now)` every frame until the restore has settled.
  *
  * Restore sequence, to avoid any visible jump: the root is hidden at attach; a
@@ -18,7 +18,7 @@
  * Elements carrying `data-nodrag` (inputs, buttons) do not start a drag.
  * Options: { hudId, storageKey, log (prefixed logger), onSaved(position) }.
  */
-AceMods.panel = (function () {
+ACEUIModLoader.panel = (function () {
 
     const RESTORE_WAIT_MS = 2000;
     /** Class on the root while it is being dragged (mods style it). */
@@ -29,8 +29,8 @@ AceMods.panel = (function () {
     const HIDDEN = "hidden";
     const AUTO = "auto";
 
-    const clamp = AceMods.clamp;
-    const persist = AceMods.persist;
+    const clamp = ACEUIModLoader.clamp;
+    const persist = ACEUIModLoader.persist;
 
     const isPosition = function (pos) {
         return Boolean(pos) && typeof pos.fx === "number" && typeof pos.fy === "number";
@@ -150,7 +150,7 @@ AceMods.panel = (function () {
     };
 
     const onMouseDown = function (panel, e) {
-        if (AceMods.closestWithAttribute(e.target, NO_DRAG_ATTR, panel.root)) { return; }
+        if (ACEUIModLoader.closestWithAttribute(e.target, NO_DRAG_ATTR, panel.root)) { return; }
 
         const r = panel.root.getBoundingClientRect();
 
@@ -183,7 +183,7 @@ AceMods.panel = (function () {
             root: root,
             hudId: options.hudId || null,
             storageKey: options.storageKey || null,
-            log: options.log || AceMods.log,
+            log: options.log || ACEUIModLoader.log,
             onSaved: options.onSaved || null,
             dragging: false,
             moved: false,               // the current drag changed the position

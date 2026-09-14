@@ -12,24 +12,24 @@ documented in the `ACEGameInternals` repository.
 
 The game serves every UI page (menu, in-game, HUD, ...) from `content.kspkg`
 and loads `uiresources/js/cohtml.js` first on each of them. This repo ships
-one package, `acemods_loader.kspkg`, containing that one file: the untouched
+one package, `ACEUIModLoader.kspkg`, containing that one file: the untouched
 stock script with the library files from `src/` appended in a fixed order. The
 packer adds the padding entries that make the override win the game's
 unstable-sort lookup for the installed game version.
 
-On every page the loader reads `acemods/manifest.json`, then each listed mod's
-`acemods/<name>/mod.json`, and injects that mod's stylesheets and scripts, in
+On every page the loader reads `ACEUIModLoaderMods/manifest.json`, then each listed mod's
+`ACEUIModLoaderMods/<name>/mod.json`, and injects that mod's stylesheets and scripts, in
 order, on the pages the mod asked for. Mods are plain folders under
-`%USERPROFILE%\Saved Games\ACE\mods\uiresources\acemods\<name>\`; that
+`%USERPROFILE%\Saved Games\ACE\mods\uiresources\ACEUIModLoaderMods\<name>\`; that
 directory is one of the game's loose-file search paths, so new files there are
 served with no packaging and no padding. Only the loader is a package.
 
 ```
 Saved Games\ACE\mods\
-  acemods_loader.kspkg                  <- built here (69 MB, mostly the fixed-size table)
-  uiresources\acemods\manifest.json     <- { "mods": ["pedalgraph", "devconsole"] }, kept by install_mod.py
-  uiresources\acemods\pedalgraph\       <- one folder per mod: mod.json + its files
-  uiresources\acemods\devconsole\
+  ACEUIModLoader.kspkg                  <- built here (69 MB, mostly the fixed-size table)
+  uiresources\ACEUIModLoaderMods\manifest.json     <- { "mods": ["pedalgraph", "devconsole"] }, kept by install_mod.py
+  uiresources\ACEUIModLoaderMods\pedalgraph\       <- one folder per mod: mod.json + its files
+  uiresources\ACEUIModLoaderMods\devconsole\
 ```
 
 A mod's `mod.json`:
@@ -41,25 +41,25 @@ A mod's `mod.json`:
 
 `pages` defaults to `["hud.html"]`; `"*"` means every page. Scripts run in
 order as classic scripts; the loader waits for each before adding the next.
-Everything the loader logs starts with `[AceMods]` and lands in the game log
+Everything the loader logs starts with `[ACEUIModLoader]` and lands in the game log
 as `[gameface]` lines.
 
-## The library (`AceMods.*`)
+## The library (`ACEUIModLoader.*`)
 
-One global, `AceMods` (also `window.AceMods`), one namespace per file, loaded
+One global, `ACEUIModLoader` (also `window.ACEUIModLoader`), one namespace per file, loaded
 in this order because each builds on the previous:
 
 | File | Namespace | What it gives mods |
 |---|---|---|
-| `src/acemods.core.js` | `AceMods` | `VERSION`, `page`, `log`, `logger(prefix)`, `clamp`, `el`/`close` (markup strings), `toArray`, `percentText`, `hudHidden()`, `closestWithAttribute`, `HUD_HIDDEN_CLASS` |
-| `src/acemods.console.js` | `AceMods.console` | hooks `console.log/info/debug/warn/error` before the stock bundle runs (originals still called, nothing echoed), ring buffer of the last 500 `{seq, t, level, text}` entries, uncaught errors and unhandled rejections captured, `entries()`, `subscribe(fn)`, `capture(level, text)`, `clear()`, `format(value)` |
-| `src/acemods.persist.js` | `AceMods.persist` | the stock HUD layout store (`HUD.elementModified` / `HUD.StoredData`, saved by the game on HUD close) and `localStorage`: `readHud`, `writeHud`, `hudAvailable`, `readLocal`, `writeLocal`, `removeLocal`, `save(hudId, key, data)` |
-| `src/acemods.panel.js` | `AceMods.panel` | `attach(root, {hudId, storageKey, log, onSaved})`: drag inside the HUD container, clamped; position persisted as screen fractions; hidden until the stored position is applied (immediate `localStorage`, then the HUD store has the last word in `update(panel, now)`); `data-nodrag` on descendants that must not start a drag; `detach` |
-| `src/acemods.loop.js` | `AceMods.loop` | `start(onFrame)` / `stop(handle)`; `sampler(hz, maxGapMs)` + `advance(sampler, now, onSample)` for fixed-rate sampling independent of frame rate, returning the 0..1 fraction towards the next sample |
-| `src/acemods.loader.js` | `AceMods.loader` | manifest discovery and mod injection; aliases `AceMods.ready(cb)`, `.mods`, `.addScript`, `.addStylesheet`, `.ROOT` |
+| `src/ACEUIModLoader.core.js` | `ACEUIModLoader` | `VERSION`, `page`, `log`, `logger(prefix)`, `clamp`, `el`/`close` (markup strings), `toArray`, `percentText`, `hudHidden()`, `closestWithAttribute`, `HUD_HIDDEN_CLASS` |
+| `src/ACEUIModLoader.console.js` | `ACEUIModLoader.console` | hooks `console.log/info/debug/warn/error` before the stock bundle runs (originals still called, nothing echoed), ring buffer of the last 500 `{seq, t, level, text}` entries, uncaught errors and unhandled rejections captured, `entries()`, `subscribe(fn)`, `capture(level, text)`, `clear()`, `format(value)` |
+| `src/ACEUIModLoader.persist.js` | `ACEUIModLoader.persist` | the stock HUD layout store (`HUD.elementModified` / `HUD.StoredData`, saved by the game on HUD close) and `localStorage`: `readHud`, `writeHud`, `hudAvailable`, `readLocal`, `writeLocal`, `removeLocal`, `save(hudId, key, data)` |
+| `src/ACEUIModLoader.panel.js` | `ACEUIModLoader.panel` | `attach(root, {hudId, storageKey, log, onSaved})`: drag inside the HUD container, clamped; position persisted as screen fractions; hidden until the stored position is applied (immediate `localStorage`, then the HUD store has the last word in `update(panel, now)`); `data-nodrag` on descendants that must not start a drag; `detach` |
+| `src/ACEUIModLoader.loop.js` | `ACEUIModLoader.loop` | `start(onFrame)` / `stop(handle)`; `sampler(hz, maxGapMs)` + `advance(sampler, now, onSample)` for fixed-rate sampling independent of frame rate, returning the 0..1 fraction towards the next sample |
+| `src/ACEUIModLoader.loader.js` | `ACEUIModLoader.loader` | manifest discovery and mod injection; aliases `ACEUIModLoader.ready(cb)`, `.mods`, `.addScript`, `.addStylesheet`, `.ROOT` |
 
 A mod is typically: `const MyMod = (function () { ... attach/detach ... }());`
-using `AceMods.panel` for its root and `AceMods.loop` for its frame, plus a
+using `ACEUIModLoader.panel` for its root and `ACEUIModLoader.loop` for its frame, plus a
 `mod.js` that creates the root inside `.absolutecenter` and calls `attach`.
 `ACEPedalGraph` and `ACEDevConsole` are the two reference mods.
 
@@ -73,7 +73,7 @@ python tools/install_mod.py --remove <name>
 python tools/check_ingame_log.py           # after a launch: did the loader run, which mods loaded, crashes?
 ```
 
-Deleting `acemods_loader.kspkg` from the mods folder restores the stock game;
+Deleting `ACEUIModLoader.kspkg` from the mods folder restores the stock game;
 the loose mod folders are then simply never read. Library changes need a
 rebuild and reinstall of the package (the padding depends only on the file
 paths, so it stays the same).
@@ -82,8 +82,8 @@ paths, so it stays the same).
 
 | Path | Contents |
 |---|---|
-| `VERSION` | loader/library version, mirrored by `const VERSION` in `acemods.core.js` (test-enforced) |
-| `src/acemods.*.js` | the library, see above; `LIB_ORDER` in `tools/build_loader.py` is the load order |
+| `VERSION` | loader/library version, mirrored by `const VERSION` in `ACEUIModLoader.core.js` (test-enforced) |
+| `src/ACEUIModLoaderMods.*.js` | the library, see above; `LIB_ORDER` in `tools/build_loader.py` is the load order |
 | `tools/build_loader.py` | assembles `build/uiresources/js/cohtml.js` (stock + library), packs to `dist/`, `--install` |
 | `tools/install_mod.py` | validates a mod folder against its `mod.json`, copies it, updates the manifest |
 | `tools/pack_kspkg.py` | generic `.kspkg` writer with override padding, verify, `--install` |
