@@ -5,7 +5,7 @@
 <title>DevConsole preview</title>
 <!--
   Out-of-game preview. Loads the ACEUIModLoader library from the sibling checkout of the loader
-  repo, then the real stylesheet and script from src/, inside a 16:9 stand-in
+  repo, then the real stylesheet and script from devconsole/, inside a 16:9 stand-in
   for the game's HUD container, with buttons that produce log lines and a fake
   ModelCurrentCar to poke at from the prompt. Open this file directly in Edge or
   Chrome:
@@ -16,13 +16,8 @@
   behaviour of the prompt in game), the stock HUD around the panel, and the
   game's font (a system font stands in for --font-family-main).
 -->
-<script src="../../ACEUIModLoader/src/ACEUIModLoader.core.js"></script>
-<script src="../../ACEUIModLoader/src/ACEUIModLoader.console.js"></script>
-<script src="../../ACEUIModLoader/src/ACEUIModLoader.persist.js"></script>
-<script src="../../ACEUIModLoader/src/ACEUIModLoader.panel.js"></script>
-<script src="../../ACEUIModLoader/src/ACEUIModLoader.loop.js"></script>
-<script src="../../ACEUIModLoader/src/ACEUIModLoader.loader.js"></script>
-<link rel="stylesheet" type="text/css" href="../src/devconsole.css">
+<script src="../../ACEUIModLoader/tests/lib/lib.js"></script>
+<link rel="stylesheet" type="text/css" href="../devconsole/devconsole.css">
 <style>
     :root { --font-family-main: "Segoe UI", "Helvetica Neue", Arial, sans-serif; font-size: 16px; }
     html, body { margin: 0; height: 100%; background: #101214; color: #ddd; font-family: var(--font-family-main); }
@@ -133,7 +128,7 @@ const Preview = (function () {
     return { wire: wire, state: state };
 }());
 </script>
-<script defer src="../src/devconsole.js"></script>
+<script defer src="../devconsole/devconsole.js"></script>
 <script>
 document.addEventListener("DOMContentLoaded", function () { Preview.wire(); });
 </script>

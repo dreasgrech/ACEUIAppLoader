@@ -1,7 +1,7 @@
 # ACE DevConsole
 
-In-game debug console for Assetto Corsa EVO's HUD. Version 0.2.0, for game
-version 0.9.1+release.6.
+In-game debug console for Assetto Corsa EVO's HUD, for game version
+0.9.1+release.6. The mod's version is in `devconsole/mod.json` and nowhere else.
 
 A draggable panel that shows everything the UI logs, including the stock
 bundle's own `console.log` / `warn` / `error` output and uncaught errors, with
@@ -16,42 +16,47 @@ messages are in the buffer), `ACEUIModLoader.panel` handles drag and position
 persistence, `ACEUIModLoader.loop` the frame loop, `ACEUIModLoader.persist` the open state
 and filters. Everything learned about the game and its UI engine is in
 `ACEGameInternals` (`docs/`). Clone all three side by side: the preview page
-and the tests load the library from `../ACEUIModLoader/src/`.
+and the tests load the library and the shared test fixtures from
+`../ACEUIModLoader/`.
 
 ## Layout
 
-- `src/mod.json` - what the loader reads: name, version, the pages to load on
-  (`hud.html`), the stylesheet and the scripts in load order.
-- `src/devconsole.js` - the console, an IIFE module
-  (`DevConsole.attach(root)` / `DevConsole.detach(state)`): a fixed pool of
-  200 row elements recycled over the shared line buffer, filters, the prompt
-  (expression first, statements as fallback, history with the arrow keys),
-  the toggle key and the close/clear buttons.
-- `src/mod.js` - loader entry point: creates `<div id="devconsole">` inside
-  the HUD's positioning container and calls `DevConsole.attach`.
-- `src/devconsole.css` - all styling, in the stock HUD widgets' language (black
-  75 % panel, solid `#1c1e1f` header bar, flat buttons that turn `#bd0000` on
-  hover, the stock scrollbar look); line colours keyed by `data-level`.
-- `VERSION` - the mod version, single source of truth.
+- `devconsole/` - the shipped mod, exactly what lands in
+  `%USERPROFILE%\Saved Games\ACE\mods\uiresources\ACEUIModLoaderMods\devconsole\`:
+  - `mod.json` - version, title, stylesheet and script. The loader reads it
+    and hands the values back through `ACEUIModLoader.mod("devconsole")`
+    (name, version, title, root, logger, storage keys), so none of them is
+    repeated in the source.
+  - `devconsole.js` - the console, an IIFE module
+    (`DevConsole.attach(root)` / `DevConsole.detach(state)`): a fixed pool of
+    200 row elements recycled over the shared line buffer, level and text
+    filters, the scrollbar, the prompt (expression first, statements as
+    fallback, history with the arrow keys), scaling, the toggle key and the
+    header buttons. It attaches to `#devconsole`, which the loader creates in
+    game and the preview and harness pages carry themselves.
+  - `devconsole.css` - all styling, in the stock HUD widgets' language (black
+    75 % panel, solid `#1c1e1f` header bar, flat buttons that turn `#bd0000` on
+    hover, the stock scrollbar look), sized in em so the panel scales; line
+    colours keyed by `data-level`.
 - `dev/preview.html` - runs the console outside the game (see below).
-- `tools/install.py` - thin wrapper around the loader's `install_mod.py`.
-- `tests/` - this mod's tests, see below.
+- `tests/test_mod.py` - the loader's shared test kit pointed at this repo plus
+  the console's own contract; `tests/console/harness.html` holds the browser cases.
 
-The mod does not override any stock file. It is a loose folder the game reads
-from `%USERPROFILE%\Saved Games\ACE\mods\uiresources\ACEUIModLoaderMods\devconsole\`.
+The mod does not override any stock file. It is a loose folder the game reads,
+discovered through its marker file (see the loader's README).
 
 ## Install
 
-The loader package must be installed once (from `ACEUIModLoader`:
-`python tools/build_loader.py --install`). Then:
+With the loader package installed (`python tools/build_loader.py --install` in
+the loader repo, checked out next to this one):
 
 ```
-python tools/install.py            # copy src/ into the mods folder and write its empty marker
-python tools/install.py --remove
+python ..\ACEUIModLoader\tools\install_mod.py devconsole
+python ..\ACEUIModLoader\tools\install_mod.py --remove devconsole
 ```
 
-Edits to `src/` need only a re-run of `install.py` and a HUD reload in game
-(Escape, resume). Set `ACE_LOADER_DIR` if the loader repo is elsewhere.
+Edits need only a re-run of the install and a HUD reload in game (Escape,
+resume).
 
 ## Using it
 
@@ -95,22 +100,15 @@ input has the same exposure.
 
 Open `dev/preview.html` in Edge or Chrome (double-click, no server needed). It
 loads the library from the sibling loader checkout, then the real
-`devconsole.css` and `devconsole.js` from `src/`, inside a 16:9 stand-in for
+`devconsole.css` and `devconsole.js` from `devconsole/`, inside a 16:9 stand-in for
 the game's HUD container, with buttons that emit log, warn, error, object and
 uncaught-error lines, a one-line-per-second flood, the HUD hide toggle and a
 fake `ModelCurrentCar` to inspect from the prompt.
 
-## Versioning
-
-`VERSION` holds the semantic version; `devconsole.js` repeats it in
-`const VERSION` and in its first log line (`script loaded, version=0.2.0,
-source=ACEUIModLoader, lib=<loader version>`), `src/mod.json` repeats it for the
-loader, and this README must mention it. A test fails if they disagree.
-
 ## Code style (JavaScript)
 
 Same conventions as the other ACE mods and the uplinkjs scripts, enforced by
-`tests/test_sources.py`: one IIFE module per file, no classes, no `this`,
+the loader's test kit: one IIFE module per file, no classes, no `this`,
 functions as assigned expressions, no arrow functions, `let`/`const` only,
 double quotes, four-space indentation, braces on every `if`.
 
@@ -120,29 +118,26 @@ double quotes, four-space indentation, braces on every `if`.
 python -m unittest discover -s tests -v
 ```
 
-- `tests/test_sources.py` - static rules: `mod.json` lists exactly the files in
-  `src/` in the right order and overrides nothing; the per-frame code only
-  rewrites text on a fixed row pool and only when something changed; no CSS in
-  the script, no `var(--x, fallback)`, no magic numbers in the hot path; the
-  console uses the library for everything that is not the console; the prompt
-  never echoes into the game log; class names and level colours exist in the
-  stylesheet; versions agree; the preview and harness load the library first;
-  the JavaScript style rules.
-- `tests/test_console_browser.py` - runs `tests/console/harness.html` in a
-  headless Edge or Chrome with a fake animation clock and fake `localStorage`:
-  21 behavioural cases covering pre-attach buffering, rendering and its skip
-  of unchanged rows, filters, the prompt (results, statements, errors,
-  history), clear, the row cap, the scrollbar and wheel scrolling with the
-  follow/LATEST behaviour, thumb dragging, the text filter, scaling, the toggle key, hidden HUD, drag exclusions and
-  lifecycle. Skipped if no browser is found (`ACE_BROWSER=<path>`
-  overrides). The runner, shared from `ACEUIModLoader/tools/headless.py`,
-  uses a throwaway profile, kills the process tree on timeout and verifies no
-  browser process is left behind.
+`tests/test_mod.py` subclasses `modkit.ModTests` from the loader repo, which
+checks the shipped folder (`mod.json` valid and minimal, nothing unlisted ships,
+no stock override, no legacy boilerplate), the JavaScript style rules, the
+Cohtml rules, that class names exist in the stylesheet, that identity comes from
+the loader, that the per-frame hot path only rewrites text, and runs
+`tests/console/harness.html` in a headless Edge or Chrome: 21 behavioural cases
+covering pre-attach buffering, rendering and its skip of unchanged rows,
+filters, the prompt (results, statements, errors, history), clear, the row cap,
+the scrollbar and wheel scrolling with the follow/LATEST behaviour, thumb
+dragging, the text filter, scaling, the toggle key, hidden HUD, drag exclusions
+and lifecycle. A second class keeps the console's own contract (fixed row pool,
+legacy `keyCode` handling, the Cohtml wheel sign, the prompt never echoing into
+the game log). The harness includes the shared test doubles and library loader
+from `ACEUIModLoader/tests/lib/`. Skipped without a browser (`ACE_BROWSER=<path>`
+overrides); the runner leaves no browser process behind.
 
 ## Verifying in game
 
 Run `python ..\ACEUIModLoader\tools\check_ingame_log.py` after playing:
-`[ACEUIModLoader] mod devconsole 0.2.0: loading` followed by
+`[ACEUIModLoader] mod devconsole <version>: loading` followed by
 `[DevConsole] script loaded, ... source=ACEUIModLoader` and `console attached, N
 buffered line(s)` means the loader served the mod. Lines typed into the prompt
 never reach the game log; only what other code logs does.

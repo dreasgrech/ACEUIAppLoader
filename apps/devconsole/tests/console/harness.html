@@ -9,58 +9,22 @@
   .absolutecenter { position: relative; width: 1600px; height: 900px; overflow: hidden; }
   #results { white-space: pre; }
 </style>
+<!-- shared test doubles (fake frame clock, in-memory localStorage, console capture) from the loader repo -->
+<script src="../../../ACEUIModLoader/tests/lib/doubles.js"></script>
 <script>
-// ---- test doubles, installed before the library and the console load ------------------
-
-// Manual animation-frame clock: tests call __clock.step(t) to run queued callbacks.
-window.__clock = {
-    queue: [], nextId: 1, cancelled: 0,
-    step: function (t) {
-        const run = this.queue; this.queue = [];
-        run.forEach(function (q) { q[1](t); });
-    }
-};
-window.requestAnimationFrame = function (cb) { const id = window.__clock.nextId++; window.__clock.queue.push([id, cb]); return id; };
-window.cancelAnimationFrame = function (id) {
-    const n = window.__clock.queue.length;
-    window.__clock.queue = window.__clock.queue.filter(function (q) { return q[0] !== id; });
-    if (window.__clock.queue.length !== n) { window.__clock.cancelled++; }
-};
-
-// In-memory localStorage so file:// origin quirks cannot affect the tests.
-const __store = {};
-Object.defineProperty(window, "localStorage", { value: {
-    getItem: function (k) { return (k in __store) ? __store[k] : null; },
-    setItem: function (k, v) { __store[k] = String(v); },
-    removeItem: function (k) { delete __store[k]; },
-    clear: function () { Object.keys(__store).forEach(function (k) { delete __store[k]; }); }
-}});
-
 window.DEVCONSOLE_SOURCE = "harness";
 window.ModelCurrentCar = { has_focused_car: true, speed: 123.4, gas_percent: 0.5 };
-
-// Capture console output so it can be asserted on and shown in the dump.
-window.__log = [];
-const __origLog = console.log.bind(console);
-console.log = function () { const a = Array.prototype.slice.call(arguments); window.__log.push(a.join(" ")); __origLog.apply(null, a); };
-console.warn = function () {};
-console.error = function () {};
 </script>
 <!-- the ACEUIModLoader library from the sibling checkout, in load order (in game it is part of cohtml.js) -->
-<script src="../../../ACEUIModLoader/src/ACEUIModLoader.core.js"></script>
-<script src="../../../ACEUIModLoader/src/ACEUIModLoader.console.js"></script>
-<script src="../../../ACEUIModLoader/src/ACEUIModLoader.persist.js"></script>
-<script src="../../../ACEUIModLoader/src/ACEUIModLoader.panel.js"></script>
-<script src="../../../ACEUIModLoader/src/ACEUIModLoader.loop.js"></script>
-<script src="../../../ACEUIModLoader/src/ACEUIModLoader.loader.js"></script>
-<link rel="stylesheet" type="text/css" href="../../src/devconsole.css">
+<script src="../../../ACEUIModLoader/tests/lib/lib.js"></script>
+<link rel="stylesheet" type="text/css" href="../../devconsole/devconsole.css">
 <script>
 // lines logged before the console attaches must show up once it does
 console.log("early line one");
 console.warn("early warning");
 </script>
 <!-- classic script, as the loader injects it: `DevConsole` is a page-wide binding -->
-<script src="../../src/devconsole.js"></script>
+<script src="../../devconsole/devconsole.js"></script>
 </head>
 <body>
 <div class="absolutecenter" id="center"></div>
@@ -93,7 +57,11 @@ console.warn("early warning");
     t("library and module present, constants, load logged", function () {
         eq(typeof ACEUIModLoader.console, "object", "ACEUIModLoader.console"); eq(typeof DevConsole, "object", "DevConsole");
         eq(DevConsole.MAX_ROWS, 200); eq(DevConsole.TOGGLE_CODE, "Backquote"); eq(DevConsole.FILTERS.length, 3);
-        ok(window.__log.some(function (l) { return l.indexOf("[DevConsole] script loaded, version=" + DevConsole.VERSION + ", source=harness, lib=" + ACEUIModLoader.VERSION) >= 0; }), "no load log");
+        // outside the game the loader has no mod.json for us, so the title (and log prefix) fall back to the name and the version reads "dev"
+        eq(DevConsole.VERSION, ACEUIModLoader.loader.DEV_VERSION, "version comes from the loader");
+        eq(DevConsole.LOG_PREFIX, "[devconsole]"); eq(DevConsole.HUD_ELEMENT_ID, "hud_devconsole"); eq(DevConsole.STORAGE_KEY, "acedevconsole.pos");
+        eq(DevConsole.OPEN_KEY, "acedevconsole.open"); eq(DevConsole.FILTER_KEY, "acedevconsole.filters"); eq(DevConsole.SCALE_KEY, "acedevconsole.scale");
+        ok(window.__log.some(function (l) { return l.indexOf(DevConsole.LOG_PREFIX + " script loaded, version=" + DevConsole.VERSION + ", source=harness, lib=" + ACEUIModLoader.VERSION) >= 0; }), "no load log");
         eq(document.getElementById(DevConsole.ROOT_ID), null, "harness must not carry the auto-boot root");
     });
 
@@ -115,7 +83,7 @@ console.warn("early warning");
         eq(state.panel.hudId, DevConsole.HUD_ELEMENT_ID); eq(state.panel.storageKey, DevConsole.STORAGE_KEY);
         eq(root.style.visibility, "hidden", "hidden until positioned"); ok(state.loop.running, "loop running");
         eq(getComputedStyle(root).position, "absolute", "stylesheet applied");
-        ok(window.__log.some(function (l) { return l.indexOf("[DevConsole] console attached") >= 0 && l.indexOf("buffered line(s)") >= 0; }), "attach logged");
+        ok(window.__log.some(function (l) { return l.indexOf(DevConsole.LOG_PREFIX + " console attached") >= 0 && l.indexOf("buffered line(s)") >= 0; }), "attach logged");
     });
 
     t("first frame shows the lines buffered before attach, oldest first, with times and levels", function () {
@@ -126,7 +94,7 @@ console.warn("early warning");
         eq(shown[0], "early line one", "first buffered line"); eq(shown[1], "early warning", "second");
         eq(visibleRows(root)[1].getAttribute("data-level"), "warn", "level attribute");
         ok(/^\d\d:\d\d:\d\d$/.test(visibleRows(root)[0].querySelector(".dc-time").textContent), "time format");
-        ok(shown.some(function (s) { return s.indexOf("[DevConsole] console attached") === 0; }), "its own attach line is in the buffer");
+        ok(shown.some(function (s) { return s.indexOf(DevConsole.LOG_PREFIX + " console attached") === 0; }), "its own attach line is in the buffer");
     });
 
     t("a new console.warn renders on the next frame with its level; counts update; nothing rewritten when clean", function () {

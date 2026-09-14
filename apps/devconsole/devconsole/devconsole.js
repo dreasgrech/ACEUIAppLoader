@@ -26,19 +26,13 @@
  */
 const DevConsole = (function () {
 
-    /** Mod version -- keep in step with the VERSION file and mod.json. */
-    const VERSION = "0.2.0";
-
-    /** Prefix of every log line; the game log and the tests grep for it. */
-    const LOG_PREFIX = "[DevConsole]";
-
-    /** Keys under which the position, open state and filters persist. */
-    const HUD_ELEMENT_ID = "hud_devconsole";
-    const STORAGE_KEY = "acedevconsole.pos";
-    const OPEN_KEY = "acedevconsole.open";
-    const FILTER_KEY = "acedevconsole.filters";
-    /** Element id of the console's root (mod.js creates it; the preview page carries one). */
-    const ROOT_ID = "devconsole";
+    /**
+     * Identity from the loader: name, version (mod.json), title, root, a prefixed
+     * logger and the storage keys, so none of it is repeated here.
+     */
+    const me = ACEUIModLoader.mod("devconsole");
+    const OPEN_KEY = me.key("open");
+    const FILTER_KEY = me.key("filters");
 
     /**
      * Keyboard. Names are `e.key` / `e.code` values; the numbers are the legacy
@@ -86,7 +80,7 @@ const DevConsole = (function () {
     const SEARCH_TEXT = "filter text";
 
     /** Panel scale: the root's font-size in rem; everything inside is sized in em. */
-    const SCALE_KEY = "acedevconsole.scale";
+    const SCALE_KEY = me.key("scale");
     const SCALE_DEFAULT = 1;
     const SCALE_MIN = 0.6;
     const SCALE_MAX = 2;
@@ -154,7 +148,7 @@ const DevConsole = (function () {
     const el = ACEUIModLoader.el;
     const close = ACEUIModLoader.close;
     const toArray = ACEUIModLoader.toArray;
-    const log = ACEUIModLoader.logger(LOG_PREFIX);
+    const log = me.log;
     const lines = ACEUIModLoader.console;
     const persist = ACEUIModLoader.persist;
 
@@ -241,7 +235,7 @@ const DevConsole = (function () {
         }
 
         return el("div", CLASS.header)
-            + el("div", CLASS.title) + TITLE_TEXT + el("span", CLASS.version) + VERSION + close("span") + close("div")
+            + el("div", CLASS.title) + TITLE_TEXT + el("span", CLASS.version) + me.version + close("span") + close("div")
             + el("div", CLASS.filters) + FILTERS.map(filterMarkup).join("") + close("div")
             + el("input", CLASS.search, noDrag({ type: "text", placeholder: SEARCH_TEXT }))
             + el("div", CLASS.tools)
@@ -709,7 +703,7 @@ const DevConsole = (function () {
         setClass(root, CLASS.closed, !state.open);
         setScale(state, typeof storedScale === "number" ? storedScale : SCALE_DEFAULT);
 
-        state.panel = ACEUIModLoader.panel.attach(root, { hudId: HUD_ELEMENT_ID, storageKey: STORAGE_KEY, log: log });
+        state.panel = ACEUIModLoader.panel.attach(root, { hudId: me.hudId, storageKey: me.storageKey, log: log });
         state.unsubscribe = lines.subscribe(function () { state.dirty = true; });
         state.loop = ACEUIModLoader.loop.start(function (now) { tick(state, now); });
         log("console attached, " + lines.entries().length + " buffered line(s), " + (state.open ? "open" : "closed")
@@ -742,14 +736,14 @@ const DevConsole = (function () {
         }
     };
 
-    log("script loaded, version=" + VERSION + ", source=" + (window.DEVCONSOLE_SOURCE || "ACEUIModLoader") + ", lib=" + ACEUIModLoader.VERSION + ", url=" + location.href);
+    log("script loaded, version=" + me.version + ", source=" + (window.DEVCONSOLE_SOURCE || "ACEUIModLoader") + ", lib=" + ACEUIModLoader.VERSION + ", url=" + location.href);
 
     return {
-        VERSION: VERSION,
-        LOG_PREFIX: LOG_PREFIX,
-        ROOT_ID: ROOT_ID,
-        HUD_ELEMENT_ID: HUD_ELEMENT_ID,
-        STORAGE_KEY: STORAGE_KEY,
+        VERSION: me.version,
+        LOG_PREFIX: me.prefix,
+        ROOT_ID: me.name,
+        HUD_ELEMENT_ID: me.hudId,
+        STORAGE_KEY: me.storageKey,
         OPEN_KEY: OPEN_KEY,
         FILTER_KEY: FILTER_KEY,
         SCALE_KEY: SCALE_KEY,
@@ -781,7 +775,7 @@ const DevConsole = (function () {
     };
 }());
 
-/** Boot for pages that carry `<div id="devconsole">` themselves (the preview page); in game mod.js attaches. */
+/** Boot for pages that carry `<div id="devconsole">` themselves (the preview page); in game the loader creates it. */
 (function () {
     const boot = function () {
         const root = document.getElementById(DevConsole.ROOT_ID);
