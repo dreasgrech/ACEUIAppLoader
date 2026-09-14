@@ -125,20 +125,8 @@ const __GLOBAL__ = (function () {
     };
 }());
 
-/** Attach to the root the loader (or the preview / harness page) provides. */
-(function () {
-    const boot = function () {
-        const root = document.getElementById("__NAME__");
-
-        if (root) { __GLOBAL__.attach(root); }
-    };
-
-    if (document.readyState === "loading") {
-        document.addEventListener("DOMContentLoaded", boot);
-    } else {
-        boot();
-    }
-}());
+/* Attach to #__NAME__: the loader creates it in game, the preview page carries it. */
+ACEUIModLoader.mod("__NAME__").mount(__GLOBAL__.attach);
 """
 
 STYLE = """/*
@@ -235,17 +223,10 @@ HARNESS = """<!DOCTYPE html>
 </head>
 <body>
 <div class="absolutecenter" id="center"></div>
-<pre id="results"></pre>
-<div id="done" hidden></div>
 <script>
 (function () {
-    const results = [];
-    const t = function (name, fn) {
-        try { fn(); results.push({ name: name, pass: true }); }
-        catch (e) { results.push({ name: name, pass: false, msg: String(e && e.message || e) }); }
-    };
-    const eq = function (a, b, what) { if (a !== b) { throw new Error((what || "") + " expected " + JSON.stringify(b) + " got " + JSON.stringify(a)); } };
-    const ok = function (c, what) { if (!c) { throw new Error(what || "assertion failed"); } };
+    const H = window.__harness;
+    const t = H.t, eq = H.eq, ok = H.ok;
     let frame = 1000;
     const nextFrame = function () { frame += 16; window.__clock.step(frame); };
 
@@ -274,12 +255,7 @@ HARNESS = """<!DOCTYPE html>
         eq(window.__clock.cancelled, cancelled + 1); eq(state.loop.running, false);
     });
 
-    const passed = results.filter(function (r) { return r.pass; }).length;
-    document.getElementById("results").textContent =
-        results.map(function (r) { return (r.pass ? "PASS " : "FAIL ") + r.name + (r.msg ? "  -- " + r.msg : ""); }).join("\\n") +
-        "\\nSUMMARY " + passed + "/" + results.length;
-    document.getElementById("done").hidden = false;
-    document.getElementById("done").textContent = "DONE";
+    H.finish();
 }());
 </script>
 </body>

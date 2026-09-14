@@ -31,7 +31,8 @@
  * pages without one), so a script only has to attach to `#<name>`. While the
  * scripts run, `ACEUIModLoader.mod()` describes the mod being loaded: name,
  * version, title, root, a prefixed logger and derived storage keys, so none of
- * that is repeated in the mod's own source.
+ * that is repeated in the mod's own source; `mod("x").mount(attach)` calls
+ * `attach(#x)` once the DOM has the root, so a script needs no boot code either.
  *
  * Never request a URL that could be a folder: the game's loose-file lookup only
  * checks existence and then dies opening it (crashed the game three times). Only
@@ -66,6 +67,8 @@ ACEUIModLoader.loader = (function () {
     const CONTAINER_SELECTOR = ".absolutecenter";
     /** Attribute on a loader-created root naming its mod. */
     const MOD_ATTR = "data-mod";
+    /** Set on a root once `mount` has attached a mod to it, so a second mount is a no-op. */
+    const MOUNTED_ATTR = "data-mounted";
     /** What `mod()` reports for a mod the loader did not load (preview pages). */
     const DEV_VERSION = "dev";
     /** Derived identifiers: storage keys "ace<name>.<suffix>", HUD layout id "hud_<name>". */
@@ -292,6 +295,23 @@ ACEUIModLoader.loader = (function () {
         const info = entry && entry.info ? entry.info : {};
         const title = info.title || name;
         const key = function (suffix) { return KEY_PREFIX + name + "." + suffix; };
+        /** Call `attach(root)` with `#<name>` once the DOM has it (now, or on DOMContentLoaded); once per root. */
+        const mount = function (attach) {
+            const boot = function () {
+                const root = document.getElementById(name);
+
+                if (!root || root.hasAttribute(MOUNTED_ATTR)) { return; }
+
+                root.setAttribute(MOUNTED_ATTR, "");
+                attach(root);
+            };
+
+            if (document.readyState === "loading") {
+                document.addEventListener("DOMContentLoaded", boot);
+            } else {
+                boot();
+            }
+        };
 
         return {
             name: name,
@@ -304,7 +324,8 @@ ACEUIModLoader.loader = (function () {
             log: ACEUIModLoader.logger("[" + title + "]"),
             hudId: HUD_ID_PREFIX + name,
             storageKey: key(POSITION_SUFFIX),
-            key: key
+            key: key,
+            mount: mount
         };
     };
 
@@ -433,6 +454,7 @@ ACEUIModLoader.loader = (function () {
         PRESET_TIMEOUT_MS: PRESET_TIMEOUT_MS,
         CONTAINER_SELECTOR: CONTAINER_SELECTOR,
         MOD_ATTR: MOD_ATTR,
+        MOUNTED_ATTR: MOUNTED_ATTR,
         DEV_VERSION: DEV_VERSION,
         mods: state.mods,
         mod: mod,

@@ -158,8 +158,11 @@ class ModTests(unittest.TestCase):
     def test_identity_comes_from_the_loader(self):
         joined = "\n".join(self.scripts.values())
         self.assertIn("ACEUIModLoader.mod(", joined, "read name/version/title/root/log/keys from ACEUIModLoader.mod(...)")
+        self.assertIn(".mount(", joined, "attach through ACEUIModLoader.mod(name).mount(attach), not your own boot code")
         for name, js in self.scripts.items():
             code = strip_js(js)
+            for own in ("DOMContentLoaded", "readyState"):
+                self.assertNotIn(own, code, f"{name}: {own}: the loader's mount() handles page readiness")
             for own in LIBRARY_OWNED:
                 if own in self.ALLOW_OWN:
                     continue

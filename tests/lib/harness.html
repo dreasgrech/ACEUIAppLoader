@@ -47,14 +47,8 @@ window.engine = {
 // Runs on DOMContentLoaded: the loader registered its own listener first, so its
 // boot line is logged before the cases run, exactly as on a game page.
 document.addEventListener("DOMContentLoaded", function () {
-    const results = [];
-    const t = function (name, fn) {
-        try { fn(); results.push({ name: name, pass: true }); }
-        catch (e) { results.push({ name: name, pass: false, msg: String(e && e.message || e) }); }
-    };
-    const eq = function (a, b, what) { if (a !== b) { throw new Error((what || "") + " expected " + JSON.stringify(b) + " got " + JSON.stringify(a)); } };
-    const ok = function (c, what) { if (!c) { throw new Error(what || "assertion failed"); } };
-    const near = function (a, b, eps, what) { if (Math.abs(a - b) > eps) { throw new Error((what || "") + " expected ~" + b + " got " + a); } };
+    const H = window.__harness;
+    const t = H.t, eq = H.eq, ok = H.ok, near = H.near;
     const last = function (arr) { return arr[arr.length - 1]; };
 
     const clock = window.__clock;
@@ -329,15 +323,10 @@ document.addEventListener("DOMContentLoaded", function () {
     // Discovery finishes asynchronously (the fake engine answers on a timer, mod.json
     // fetches are XHRs), so the remaining cases wait for it before the report is written.
     const finish = function () {
-        const passed = results.filter(function (r) { return r.pass; }).length;
         const loaderLines = window.__log.filter(function (l) { return l.indexOf("[ACEUIModLoader]") === 0 || l.indexOf("[Alpha]") === 0; });
         const statuses = ACEUIModLoader.loader.mods.map(function (m) { return m.name + "=" + m.status; }).join(" ");
-        document.getElementById("results").textContent =
-            results.map(function (r) { return (r.pass ? "PASS " : "FAIL ") + r.name + (r.msg ? "  -- " + r.msg : ""); }).join("\n") +
-            "\nloader log: " + loaderLines.join(" | ") + "\nmods: " + statuses + "\nerrors: " + window.__warn.slice(-3).join(" | ") +
-            "\nSUMMARY " + passed + "/" + results.length;
-        document.getElementById("done").hidden = false;
-        document.getElementById("done").textContent = "DONE";
+
+        H.finish(["loader log: " + loaderLines.join(" | "), "mods: " + statuses, "errors: " + window.__warn.slice(-3).join(" | ")]);
     };
     const waitFor = function (cond, then, deadline) {
         if (cond() || Date.now() > deadline) { then(); return; }
@@ -380,6 +369,20 @@ document.addEventListener("DOMContentLoaded", function () {
             const dev = ACEUIModLoader.mod("zzz");
             eq(dev.version, ACEUIModLoader.loader.DEV_VERSION); eq(dev.loaded, false); eq(dev.base, ""); eq(dev.name, "zzz"); eq(dev.hudId, "hud_zzz");
             eq(ACEUIModLoader.mod("beta").version, "dev", "listed but not loaded reads as dev");
+        });
+
+        t("loader: mod(name).mount(attach) attaches once to #name when the DOM has it, and is a no-op otherwise", function () {
+            let calls = [];
+            const attach = function (root) { calls.push(root); };
+            ACEUIModLoader.mod("gamma").mount(attach);
+            eq(calls.length, 0, "no #gamma yet: nothing happens");
+            const gamma = document.createElement("div"); gamma.id = "gamma"; center.appendChild(gamma);
+            ACEUIModLoader.mod("gamma").mount(attach);
+            eq(calls.length, 1, "attached once the root exists"); eq(calls[0], gamma, "with the root");
+            ok(gamma.hasAttribute(ACEUIModLoader.loader.MOUNTED_ATTR), "marked as mounted");
+            ACEUIModLoader.mod("gamma").mount(attach);
+            eq(calls.length, 1, "a second mount is a no-op");
+            gamma.remove();
         });
 
         // A stock-style handler registered through the wrapped engine.on must never see markers.

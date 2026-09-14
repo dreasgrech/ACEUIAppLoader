@@ -72,6 +72,7 @@ the mod being loaded, and `ACEUIModLoader.mod("<name>")` does so at any time:
 | `log`, `prefix` | a logger writing `[Title] ...` |
 | `hudId`, `storageKey`, `key(suffix)` | `hud_<name>`, `ace<name>.pos`, `ace<name>.<suffix>`: the HUD layout id and storage keys for `ACEUIModLoader.panel` / `.persist` |
 | `base`, `loaded` | the mod folder's URL; whether this loader instance loaded it |
+| `mount(attach)` | calls `attach(#<name>)` once the DOM has the root (now or on DOMContentLoaded), once per root: the whole boot code of a mod is `ACEUIModLoader.mod("x").mount(X.attach);` |
 
 So a mod's script declares none of that itself. Everything the loader logs
 starts with `[ACEUIModLoader]` and lands in the game log as `[gameface]` lines.
@@ -108,8 +109,10 @@ Cohtml rules, that class names used by scripts exist in the stylesheet, that
 identity comes from `ACEUIModLoader.mod(...)`, optionally a per-frame hot path
 (`HOT_PATH` markers), and runs every `tests/**/harness.html` headlessly. Browser
 pages include `tests/lib/doubles.js` (fake frame clock, in-memory storage,
-console capture) and `tests/lib/lib.js` (the library in `LIB_ORDER`) from this
-repo, so the library load order exists in one place.
+console capture, and the `window.__harness` helpers `t`/`eq`/`ok`/`near`/`finish`
+that write the report the runner parses) and `tests/lib/lib.js` (the library in
+`LIB_ORDER`) from this repo, so a harness holds only its own cases and the
+library load order exists in one place.
 
 ## Build and install
 

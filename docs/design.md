@@ -372,3 +372,12 @@ inside the XHR callback, leaving the mod pending forever; the harness fixture
 `alpha` (no styles) caught it. Harnesses now wait on `ACEUIModLoader.ready` rather
 than a virtual-time deadline, with a timeout that reports a stuck loader.
 Next: strip PedalGraph and DevConsole to the new shape.
+
+Follow-up (same day): the last three repeats went too. `mod(name).mount(attach)`
+replaces the twelve-line boot block every script carried; the harness helpers
+(`t`/`eq`/`ok`/`near`) and the report writer live in `tests/lib/doubles.js` as
+`window.__harness`, so a harness holds only its cases; the scripts no longer
+re-export their identity (harnesses ask `ACEUIModLoader.mod(name)`), and the
+`source=` flag from the package era is gone from the load line. The kit rejects
+`DOMContentLoaded`/`readyState` in mod scripts and requires `.mount(`. A mod is
+now its script, its stylesheet, `mod.json`, its own harness cases and a README.
