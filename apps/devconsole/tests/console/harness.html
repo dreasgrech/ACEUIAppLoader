@@ -1,0 +1,246 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<title>DevConsole tests</title>
+<style>
+  body { margin: 0; background: #222; color: #ddd; font: 12px monospace; }
+  /* stand-in for the game's HUD container */
+  .absolutecenter { position: relative; width: 1600px; height: 900px; overflow: hidden; }
+  #results { white-space: pre; }
+</style>
+<script>
+// ---- test doubles, installed before the library and the console load ------------------
+
+// Manual animation-frame clock: tests call __clock.step(t) to run queued callbacks.
+window.__clock = {
+    queue: [], nextId: 1, cancelled: 0,
+    step: function (t) {
+        const run = this.queue; this.queue = [];
+        run.forEach(function (q) { q[1](t); });
+    }
+};
+window.requestAnimationFrame = function (cb) { const id = window.__clock.nextId++; window.__clock.queue.push([id, cb]); return id; };
+window.cancelAnimationFrame = function (id) {
+    const n = window.__clock.queue.length;
+    window.__clock.queue = window.__clock.queue.filter(function (q) { return q[0] !== id; });
+    if (window.__clock.queue.length !== n) { window.__clock.cancelled++; }
+};
+
+// In-memory localStorage so file:// origin quirks cannot affect the tests.
+const __store = {};
+Object.defineProperty(window, "localStorage", { value: {
+    getItem: function (k) { return (k in __store) ? __store[k] : null; },
+    setItem: function (k, v) { __store[k] = String(v); },
+    removeItem: function (k) { delete __store[k]; },
+    clear: function () { Object.keys(__store).forEach(function (k) { delete __store[k]; }); }
+}});
+
+window.DEVCONSOLE_SOURCE = "harness";
+window.ModelCurrentCar = { has_focused_car: true, speed: 123.4, gas_percent: 0.5 };
+
+// Capture console output so it can be asserted on and shown in the dump.
+window.__log = [];
+const __origLog = console.log.bind(console);
+console.log = function () { const a = Array.prototype.slice.call(arguments); window.__log.push(a.join(" ")); __origLog.apply(null, a); };
+console.warn = function () {};
+console.error = function () {};
+</script>
+<!-- the AceMods library from the sibling ACEUIModLoader checkout, in load order (in game it is part of cohtml.js) -->
+<script src="../../../ACEUIModLoader/src/acemods.core.js"></script>
+<script src="../../../ACEUIModLoader/src/acemods.console.js"></script>
+<script src="../../../ACEUIModLoader/src/acemods.persist.js"></script>
+<script src="../../../ACEUIModLoader/src/acemods.panel.js"></script>
+<script src="../../../ACEUIModLoader/src/acemods.loop.js"></script>
+<script src="../../../ACEUIModLoader/src/acemods.loader.js"></script>
+<link rel="stylesheet" type="text/css" href="../../src/devconsole.css">
+<script>
+// lines logged before the console attaches must show up once it does
+console.log("early line one");
+console.warn("early warning");
+</script>
+<!-- classic script, as the loader injects it: `DevConsole` is a page-wide binding -->
+<script src="../../src/devconsole.js"></script>
+</head>
+<body>
+<div class="absolutecenter" id="center"></div>
+<pre id="results"></pre>
+<div id="done" hidden></div>
+
+<script>
+(function () {
+    const results = [];
+    const t = function (name, fn) {
+        try { fn(); results.push({ name: name, pass: true }); }
+        catch (e) { results.push({ name: name, pass: false, msg: String(e && e.message || e) }); }
+    };
+    const eq = function (a, b, what) { if (a !== b) { throw new Error((what || "") + " expected " + JSON.stringify(b) + " got " + JSON.stringify(a)); } };
+    const ok = function (c, what) { if (!c) { throw new Error(what || "assertion failed"); } };
+
+    const clock = window.__clock;
+    const center = document.getElementById("center");
+    const MAX = DevConsole.MAX_ROWS;
+    const visibleRows = function (root) {
+        return Array.prototype.slice.call(root.querySelectorAll(".dc-row")).filter(function (r) { return !r.classList.contains("dc-hidden"); });
+    };
+    const texts = function (root) { return visibleRows(root).map(function (r) { return r.querySelector(".dc-text").textContent; }); };
+    const lastRow = function (root) { const rows = visibleRows(root); return rows[rows.length - 1]; };
+    const key = function (target, init) { target.dispatchEvent(new KeyboardEvent("keydown", Object.assign({ bubbles: true, cancelable: true }, init))); };
+    const mouse = function (type, x, y, target) { (target || window).dispatchEvent(new MouseEvent(type, { clientX: x, clientY: y, bubbles: true })); };
+    let frame = 1000;
+    const nextFrame = function () { frame += 16; clock.step(frame); };
+
+    t("library and module present, constants, load logged", function () {
+        eq(typeof AceMods.console, "object", "AceMods.console"); eq(typeof DevConsole, "object", "DevConsole");
+        eq(DevConsole.MAX_ROWS, 200); eq(DevConsole.TOGGLE_CODE, "Backquote"); eq(DevConsole.FILTERS.length, 3);
+        ok(window.__log.some(function (l) { return l.indexOf("[DevConsole] script loaded, version=" + DevConsole.VERSION + ", source=harness, lib=" + AceMods.VERSION) >= 0; }), "no load log");
+        eq(document.getElementById(DevConsole.ROOT_ID), null, "harness must not carry the auto-boot root");
+    });
+
+    const root = document.createElement("div");
+    center.appendChild(root);
+    let state = DevConsole.attach(root);
+    const input = root.querySelector(".dc-input");
+
+    t("attach builds header, 3 filters, MAX_ROWS rows and the prompt; open by default; panel and loop wired", function () {
+        eq(root.querySelectorAll(".dc-filter").length, 3, "filters"); eq(root.querySelectorAll(".dc-row").length, MAX, "row pool");
+        ok(input, "prompt input"); eq(input.getAttribute("data-nodrag"), "", "prompt does not drag");
+        eq(root.querySelector(".dc-title").textContent, "CONSOLE " + DevConsole.VERSION, "title");
+        eq(state.open, true, "open by default"); ok(!root.classList.contains("dc-closed"));
+        eq(state.panel.hudId, DevConsole.HUD_ELEMENT_ID); eq(state.panel.storageKey, DevConsole.STORAGE_KEY);
+        eq(root.style.visibility, "hidden", "hidden until positioned"); ok(state.loop.running, "loop running");
+        eq(getComputedStyle(root).position, "absolute", "stylesheet applied");
+        ok(window.__log.some(function (l) { return l.indexOf("[DevConsole] console attached") >= 0 && l.indexOf("buffered line(s)") >= 0; }), "attach logged");
+    });
+
+    t("first frame shows the lines buffered before attach, oldest first, with times and levels", function () {
+        eq(visibleRows(root).length, 0, "nothing rendered before a frame");
+        nextFrame();
+        const shown = texts(root);
+        ok(shown.length >= 2, "rows rendered");
+        eq(shown[0], "early line one", "first buffered line"); eq(shown[1], "early warning", "second");
+        eq(visibleRows(root)[1].getAttribute("data-level"), "warn", "level attribute");
+        ok(/^\d\d:\d\d:\d\d$/.test(visibleRows(root)[0].querySelector(".dc-time").textContent), "time format");
+        ok(shown.some(function (s) { return s.indexOf("[DevConsole] console attached") === 0; }), "its own attach line is in the buffer");
+    });
+
+    t("a new console.warn renders on the next frame with its level; counts update; nothing rewritten when clean", function () {
+        eq(state.dirty, false, "clean after render");
+        console.warn("fresh warning");
+        eq(state.dirty, true, "subscriber marked dirty");
+        nextFrame();
+        const row = lastRow(root);
+        eq(row.querySelector(".dc-text").textContent, "fresh warning"); eq(row.getAttribute("data-level"), "warn");
+        eq(root.querySelector('[data-filter="warn"] .dc-count').textContent, "2", "warn count");
+        const sentinel = row.querySelector(".dc-text"); sentinel.textContent = "sentinel";
+        nextFrame();
+        eq(sentinel.textContent, "sentinel", "no rewrite without new lines");
+    });
+
+    t("filter toggle hides that level, persists, and shows it again", function () {
+        const warnBtn = root.querySelector('[data-filter="warn"]');
+        warnBtn.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+        eq(state.filters.warn, false); ok(!warnBtn.classList.contains("on"));
+        eq(JSON.parse(localStorage.getItem(DevConsole.FILTER_KEY)).warn, false, "persisted");
+        nextFrame();
+        ok(texts(root).indexOf("fresh warning") === -1, "warn rows hidden"); ok(texts(root).indexOf("early line one") >= 0, "log rows still shown");
+        warnBtn.querySelector(".dc-count").dispatchEvent(new MouseEvent("click", { bubbles: true }));   // click on a child still toggles
+        eq(state.filters.warn, true); nextFrame(); ok(texts(root).indexOf("fresh warning") >= 0, "shown again");
+    });
+
+    t("prompt: expression result, statement, error, echo; history with arrows; input cleared", function () {
+        input.value = "1 + 1"; key(input, { key: "Enter" });
+        eq(input.value, "", "cleared");
+        nextFrame();
+        let shown = texts(root);
+        eq(shown[shown.length - 2], "> 1 + 1", "echo"); eq(shown[shown.length - 1], "2", "result");
+        eq(lastRow(root).getAttribute("data-level"), "result");
+        input.value = "ModelCurrentCar.speed"; key(input, { key: "Enter" }); nextFrame();
+        eq(texts(root).pop(), "123.4", "reads page globals");
+        input.value = "nope()"; key(input, { key: "Enter" }); nextFrame();
+        eq(texts(root).pop(), "ReferenceError: nope is not defined", "error text"); eq(lastRow(root).getAttribute("data-level"), "error");
+        input.value = "window.__side = 7"; key(input, { key: "Enter" }); nextFrame();
+        eq(window.__side, 7, "statements run"); eq(texts(root).pop(), "7");
+        input.value = "   "; key(input, { key: "Enter" }); eq(state.dirty, false, "blank input does nothing");
+        key(input, { key: "ArrowUp" }); eq(input.value, "window.__side = 7", "history 1");
+        key(input, { key: "ArrowUp" }); eq(input.value, "nope()", "history 2");
+        key(input, { key: "ArrowDown" }); key(input, { key: "ArrowDown" }); eq(input.value, "", "back to the draft");
+        eq(state.history.length, 4);
+    });
+
+    t("clear button empties the buffer and the rows", function () {
+        root.querySelector('[data-action="clear"]').dispatchEvent(new MouseEvent("click", { bubbles: true }));
+        eq(AceMods.console.entries().length, 0); nextFrame();
+        eq(visibleRows(root).length, 0, "rows hidden"); eq(root.querySelector('[data-filter="log"] .dc-count').textContent, "0");
+    });
+
+    t("more lines than rows: only the newest MAX_ROWS are shown, newest last", function () {
+        let i; for (i = 0; i < MAX + 30; i += 1) { console.log("bulk " + i); }
+        nextFrame();
+        const shown = texts(root);
+        eq(shown.length, MAX, "row pool fully used"); eq(shown[0], "bulk 30", "oldest visible"); eq(shown[MAX - 1], "bulk " + (MAX + 29), "newest last");
+        eq(root.querySelector('[data-filter="log"] .dc-count').textContent, String(MAX + 30), "count is the buffer's, not the rows'");
+    });
+
+    t("toggle key closes and opens, persists, is ignored while typing in the prompt; the x button closes", function () {
+        key(window, { code: "Backquote", key: "`" });
+        eq(state.open, false); ok(root.classList.contains("dc-closed")); eq(localStorage.getItem(DevConsole.OPEN_KEY), "false");
+        console.log("while closed"); nextFrame();
+        eq(state.dirty, true, "no render while closed");
+        key(window, { code: "Backquote", key: "`" });
+        eq(state.open, true); ok(!root.classList.contains("dc-closed")); nextFrame(); eq(state.dirty, false, "rendered once open");
+        eq(texts(root).pop(), "while closed");
+        key(input, { code: "Backquote", key: "`" });
+        eq(state.open, true, "typing a backquote in the prompt does not toggle");
+        root.querySelector('[data-action="close"]').dispatchEvent(new MouseEvent("click", { bubbles: true }));
+        eq(state.open, false, "x closes"); DevConsole.setOpen(state, true);
+    });
+
+    t("hidden HUD skips rendering; stored open state is honoured on attach", function () {
+        document.body.classList.add(AceMods.HUD_HIDDEN_CLASS);
+        console.log("hud hidden line"); nextFrame(); eq(state.dirty, true, "not rendered while the HUD is hidden");
+        document.body.classList.remove(AceMods.HUD_HIDDEN_CLASS); nextFrame(); eq(state.dirty, false);
+        localStorage.setItem(DevConsole.OPEN_KEY, "false");
+        const root2 = document.createElement("div"); center.appendChild(root2);
+        const state2 = DevConsole.attach(root2);
+        eq(state2.open, false, "restored closed"); ok(root2.classList.contains("dc-closed"));
+        DevConsole.detach(state2); root2.remove(); localStorage.removeItem(DevConsole.OPEN_KEY);
+    });
+
+    t("mousedown on the prompt or a button does not drag; on the header it does and saves under the mod's keys", function () {
+        root.style.left = "100px"; root.style.top = "100px"; root.style.right = "auto";
+        mouse("mousedown", 110, 110, input); mouse("mousemove", 300, 300); mouse("mouseup", 0, 0);
+        eq(root.style.left, "100px", "prompt did not drag"); ok(!root.classList.contains("dragging"));
+        mouse("mousedown", 110, 110, root.querySelector('[data-filter="log"]')); mouse("mousemove", 300, 300); mouse("mouseup", 0, 0);
+        eq(root.style.left, "100px", "filter button did not drag");
+        const header = root.querySelector(".dc-header");
+        mouse("mousedown", 110, 105, header); ok(root.classList.contains("dragging"), "header drags");
+        mouse("mousemove", 160, 125); mouse("mouseup", 0, 0);
+        eq(root.style.left, "150px", "moved"); eq(root.style.top, "120px");
+        ok(JSON.parse(localStorage.getItem(DevConsole.STORAGE_KEY)).x === "150px", "saved under acedevconsole.pos");
+    });
+
+    t("detach stops the loop, unsubscribes and releases the key and click listeners", function () {
+        const listeners = AceMods.console.listenerCount();
+        const cancelled = clock.cancelled;
+        DevConsole.detach(state);
+        eq(clock.cancelled, cancelled + 1); eq(state.loop.running, false); eq(AceMods.console.listenerCount(), listeners - 1, "unsubscribed");
+        const open = state.open;
+        key(window, { code: "Backquote", key: "`" }); eq(state.open, open, "toggle key released");
+        state.dirty = false;
+        console.log("after detach"); eq(state.dirty, false, "no longer following the buffer");
+        input.value = "1"; key(input, { key: "Enter" }); eq(input.value, "1", "prompt released");
+        state = DevConsole.attach(root);
+        eq(root.querySelectorAll(".dc-row").length, MAX, "markup reused"); DevConsole.detach(state);
+    });
+
+    const passed = results.filter(function (r) { return r.pass; }).length;
+    document.getElementById("results").textContent =
+        results.map(function (r) { return (r.pass ? "PASS " : "FAIL ") + r.name + (r.msg ? "  -- " + r.msg : ""); }).join("\n") +
+        "\nSUMMARY " + passed + "/" + results.length;
+    document.getElementById("done").hidden = false;
+    document.getElementById("done").textContent = "DONE";
+}());
+</script>
+</body>
+</html>

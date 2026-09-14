@@ -1,0 +1,7 @@
+{
+  "name": "devconsole",
+  "version": "0.1.0",
+  "pages": ["hud.html"],
+  "styles": ["devconsole.css"],
+  "scripts": ["devconsole.js", "mod.js"]
+}
