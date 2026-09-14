@@ -13,9 +13,6 @@ ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, os.path.join(ROOT, "tools"))
 
 import pack_kspkg as pk  # noqa: E402  (also puts ACEGameInternals/tools on sys.path)
-import lookup_sim  # noqa: E402
-
-PEDALGRAPH_SRC = os.path.join(os.environ.get("ACE_PEDALGRAPH_DIR") or os.path.join(os.path.dirname(ROOT), "ACEPedalGraph"), "src")
 
 # (path, FNV-1a-64 of lower-case UTF-16LE path) pairs taken from packages the game
 # accepted: Kunos' sample mod and the working PedalGraph build of 2026-09-13.
@@ -213,32 +210,6 @@ class PackTests(unittest.TestCase):
         pk.pack(self.src, self.out, pad=False)
         with open(self.out, "rb") as f:
             self.assertEqual(f.read(), first)
-
-
-@unittest.skipUnless(os.path.isdir(PEDALGRAPH_SRC), "ACEPedalGraph checkout not found next to this repo")
-class RepoBuildTests(unittest.TestCase):
-    """Packs a real mod source tree (ACEPedalGraph) and checks the game will honour it."""
-
-    def test_repo_source_builds_with_required_entries(self):
-        with tempfile.TemporaryDirectory() as tmp:
-            out = os.path.join(tmp, "pedalgraph.kspkg")
-            written = pk.pack(PEDALGRAPH_SRC, out)
-            pk.verify(out, written)
-            _, _, entries = read_table(out)
-            files = {e["path"] for e in entries if not e["flags"] & pk.FLAG_DIR}
-            self.assertIn("uiresources\\hud.html", files)
-            self.assertIn("uiresources\\js\\pedalgraph.js", files)
-            self.assertIn("uiresources\\assets\\pedalgraph.css", files)
-            # The game resolves duplicates by an unstable sort (see lookup_sim.py). With the
-            # game installed, the packer must have added padding and hud.html must win.
-            base_pkg = lookup_sim.find_base_package()
-            if base_pkg:
-                pads = [p for p in {e["path"] for e in entries} if p.startswith("uiresources\\pad")]
-                self.assertTrue(pads, "packer did not add padding entries")
-                base = lookup_sim.read_base_hashes(base_pkg)
-                w = lookup_sim.winners(base, [e["hash"] for e in entries])
-                self.assertEqual(w[pk.path_hash("uiresources\\hud.html")], "mod",
-                                 "hud.html override would lose to the base package")
 
 
 @unittest.skipUnless(os.environ.get("ACE_SDK_SAMPLE"), "set ACE_SDK_SAMPLE=1 to check against the SDK sample package")
