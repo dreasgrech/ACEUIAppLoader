@@ -157,7 +157,7 @@ def list_mods(mods_dir=None):
         print("no mods installed")
     legacy = os.path.join(mods_root_dir(mods_dir), LEGACY_MANIFEST)
     if os.path.exists(legacy):
-        print(f"note: legacy {LEGACY_MANIFEST} present; the loader only reads it when the game gives no preset list")
+        print(f"note: stale {LEGACY_MANIFEST} present; the loader ignores it, you can delete it")
 
 
 if __name__ == "__main__":

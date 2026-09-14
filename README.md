@@ -40,9 +40,9 @@ Saved Games\ACE\
 The markers must stay empty: the game deserialises every listed file before
 naming it, and an empty file is a valid default message. The stock UI shows the
 same list in its video presets menu, so the loader wraps `engine.on` and hands
-stock handlers a copy of the answer without our markers. Without an engine (the
-browser harness) or without an answer within 1.5 s it falls back to
-`ACEUIModLoaderMods/manifest.json` (`{ "mods": [...] }`).
+stock handlers a copy of the answer without our markers. The game's answer is
+the only source of mod names: without an engine or without an answer within
+1.5 s the loader logs why and loads nothing.
 
 Never request a URL that could be a folder: the game's loose-file lookup only
 checks that the path exists and then crashes opening it. The loader only ever
@@ -72,7 +72,7 @@ in this order because each builds on the previous:
 | `src/ACEUIModLoader.persist.js` | `ACEUIModLoader.persist` | the stock HUD layout store (`HUD.elementModified` / `HUD.StoredData`, saved by the game on HUD close) and `localStorage`: `readHud`, `writeHud`, `hudAvailable`, `readLocal`, `writeLocal`, `removeLocal`, `save(hudId, key, data)` |
 | `src/ACEUIModLoader.panel.js` | `ACEUIModLoader.panel` | `attach(root, {hudId, storageKey, log, onSaved})`: drag inside the HUD container, clamped; position persisted as screen fractions; hidden until the stored position is applied (immediate `localStorage`, then the HUD store has the last word in `update(panel, now)`); `data-nodrag` on descendants that must not start a drag; `detach` |
 | `src/ACEUIModLoader.loop.js` | `ACEUIModLoader.loop` | `start(onFrame)` / `stop(handle)`; `sampler(hz, maxGapMs)` + `advance(sampler, now, onSample)` for fixed-rate sampling independent of frame rate, returning the 0..1 fraction towards the next sample |
-| `src/ACEUIModLoader.loader.js` | `ACEUIModLoader.loader` | mod discovery through the game's video preset list (manifest fallback), the `engine.on` wrapper that hides markers from the stock presets menu, mod injection; aliases `ACEUIModLoader.ready(cb)`, `.mods`, `.addScript`, `.addStylesheet`, `.ROOT` |
+| `src/ACEUIModLoader.loader.js` | `ACEUIModLoader.loader` | mod discovery through the game's video preset list, the `engine.on` wrapper that hides markers from the stock presets menu, mod injection; aliases `ACEUIModLoader.ready(cb)`, `.mods`, `.addScript`, `.addStylesheet`, `.ROOT` |
 
 A mod is typically: `const MyMod = (function () { ... attach/detach ... }());`
 using `ACEUIModLoader.panel` for its root and `ACEUIModLoader.loop` for its frame, plus a

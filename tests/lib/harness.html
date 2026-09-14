@@ -390,7 +390,7 @@ document.addEventListener("DOMContentLoaded", function () {
             eq(mods.map(function (m) { return m.name; }).join(","), "alpha,beta", "markers only, prefix stripped, sorted");
             mods.forEach(function (m) { eq(m.status, "missing", m.name + " has no folder in the harness"); });
             ok(window.__log.indexOf("[ACEUIModLoader] presets: 2 mod(s)") >= 0, "discovery line");
-            ok(!window.__log.some(function (l) { return l.indexOf("no manifest at") >= 0; }), "fallback not used");
+            ok(!window.__log.some(function (l) { return l.indexOf("nothing to load") >= 0; }), "no give-up line");
         });
 
         // A stock-style handler registered through the wrapped engine.on must never see markers.

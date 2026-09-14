@@ -334,12 +334,12 @@ and its menu is rarely visited.
 Consequences implemented:
 - `ACEUIModLoader.loader.js` wraps `engine.on` so stock handlers for
   `SettingsResponseVideoPresetList` receive a copy without markers (our own
-  handler is flagged); falls back to the manifest after 1.5 s or without an engine;
+  handler is flagged); without an engine or an answer within 1.5 s it loads nothing;
   refuses `mod.json` entries that are not plain file names, because requesting a
   folder URL crashes the game.
-- `tools/install_mod.py` writes/removes the marker instead of the manifest and
+- `tools/install_mod.py` writes/removes the marker (manifest.json is gone) and
   validates names; `--list` reports folder/marker mismatches.
-- `check_ingame_log.py` reads `presets: N mod(s)` (or `manifest:` for the fallback).
+- `check_ingame_log.py` reads `presets: N mod(s)`.
 
 Open: mod load order is alphabetical (an `after` field in mod.json if a mod ever
 depends on another); the marker's home under `Video\` is fixed by the game.

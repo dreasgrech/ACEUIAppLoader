@@ -17,10 +17,9 @@
  * wraps `engine.on`: any stock handler for the response gets a copy of the answer
  * with our markers removed. Our own handler is flagged and sees the raw list.
  *
- * Fallback. Without an engine (browser harness) or without an answer within
- * PRESET_TIMEOUT_MS, the loader reads `ACEUIModLoaderMods/manifest.json`
- * (`{ "mods": ["pedalgraph", "devconsole"] }`) instead, so development setups keep
- * working. Per mod (`ACEUIModLoaderMods/<name>/mod.json`):
+ * There is no other source of mod names: without an engine (a plain browser) or
+ * without an answer within PRESET_TIMEOUT_MS the loader logs why and loads nothing.
+ * Per mod (`ACEUIModLoaderMods/<name>/mod.json`):
  *     { "name": "pedalgraph", "version": "0.4.0", "pages": ["hud.html"],
  *       "styles": ["pedalgraph.css"], "scripts": ["pedalgraph.js", "mod.js"] }
  *
@@ -33,9 +32,8 @@
  */
 ACEUIModLoader.loader = (function () {
 
-    /** Folder, relative to the page, that holds the mod folders (and the fallback manifest). */
+    /** Folder, relative to the page, that holds one folder per mod. */
     const ROOT = "ACEUIModLoaderMods/";
-    const MANIFEST_URL = ROOT + "manifest.json";
     const MOD_FILE = "mod.json";
     /** Fallback when a mod.json lists no pages: only the HUD. */
     const DEFAULT_PAGES = ["hud.html"];
@@ -49,7 +47,7 @@ ACEUIModLoader.loader = (function () {
     /** Marker file name: MARKER_PREFIX + mod name + MARKER_EXT, zero bytes. */
     const MARKER_PREFIX = "ACEUIModLoaderMods-";
     const MARKER_EXT = ".settingspreset";
-    /** After this long without an answer the manifest fallback is used. */
+    /** After this long without an answer the loader gives up and loads nothing. */
     const PRESET_TIMEOUT_MS = 1500;
     /** Property set on our own response handler so the engine.on wrapper leaves it alone. */
     const OWN_HANDLER = "aceuimodloaderRaw";
@@ -58,7 +56,7 @@ ACEUIModLoader.loader = (function () {
 
     const state = {
         mods: [],           // { name, info, status }
-        source: "",         // "presets" | "manifest" | "none"
+        source: "",         // "presets" (the game answered) | "none" (no engine or no answer)
         filtering: false,   // engine.on wrapped, stock handlers never see markers
         readyCallbacks: []
     };
@@ -146,8 +144,8 @@ ACEUIModLoader.loader = (function () {
     };
 
     /**
-     * Find the installed mod names: ask the game for the video preset list, fall back
-     * to the manifest. onFound(names, source) is called exactly once.
+     * Find the installed mod names by asking the game for the video preset list.
+     * onFound(names, source) is called exactly once; source is "presets" or "none".
      */
     const discover = function (onFound) {
         let settled = false;
@@ -159,19 +157,9 @@ ACEUIModLoader.loader = (function () {
             if (handle && typeof handle.clear === "function") { handle.clear(); }
             onFound(names, source);
         };
-        const fromManifest = function (reason) {
-            fetchText(MANIFEST_URL, function (text) {
-                const manifest = text === null ? null : parseJson(text, MANIFEST_URL);
-
-                if (!manifest || !Array.isArray(manifest.mods)) {
-                    log(reason + "; no manifest at " + MANIFEST_URL + "; nothing to load");
-                    finish([], "none");
-
-                    return;
-                }
-
-                finish(manifest.mods.slice(), "manifest");
-            });
+        const nothing = function (reason) {
+            log(reason + "; nothing to load");
+            finish([], "none");
         };
         const onAnswer = function (response) {
             finish(markerNames(response ? response.filenames : null), "presets");
@@ -183,7 +171,7 @@ ACEUIModLoader.loader = (function () {
         };
 
         if (!rawOn) {
-            fromManifest("no engine");
+            nothing("no engine on this page");
 
             return;
         }
@@ -191,7 +179,7 @@ ACEUIModLoader.loader = (function () {
         onAnswer[OWN_HANDLER] = true;
         handle = rawOn.call(engine, PRESET_RESPONSE, onAnswer);
         window.setTimeout(function () {
-            if (!settled) { fromManifest("no preset list answer in " + PRESET_TIMEOUT_MS + " ms"); }
+            if (!settled) { nothing("no preset list answer in " + PRESET_TIMEOUT_MS + " ms"); }
         }, PRESET_TIMEOUT_MS);
 
         if (engine.whenReady && typeof engine.whenReady.then === "function") {
@@ -330,7 +318,7 @@ ACEUIModLoader.loader = (function () {
         state.readyCallbacks.push(callback);
     };
 
-    /** "presets" (the game listed the markers), "manifest" (fallback) or "none"; "" until discovered. */
+    /** "presets" (the game listed the markers) or "none" (no engine or no answer); "" until discovered. */
     const source = function () {
         return state.source;
     };

@@ -106,7 +106,7 @@ class LibrarySourceTests(unittest.TestCase):
     def test_loader_contract(self):
         js = self.files["ACEUIModLoader.loader.js"]
         self.assertIn('const ROOT = "ACEUIModLoaderMods/";', js)
-        self.assertIn('ROOT + "manifest.json"', js, "manifest stays as the no-engine fallback")
+        self.assertNotIn("manifest", js.lower(), "the game's preset list is the only source of mod names")
         self.assertIn('const MOD_FILE = "mod.json";', js)
         self.assertIn('const DEFAULT_PAGES = ["hud.html"];', js)
         self.assertIn('const PRESET_REQUEST = "SettingsRequestVideoPresetList";', js)
@@ -115,7 +115,7 @@ class LibrarySourceTests(unittest.TestCase):
         self.assertIn('const MARKER_EXT = ".settingspreset";', js)
         self.assertIn('engine.trigger("OnUICommand", PRESET_REQUEST, { __Type: PRESET_REQUEST, version: 0 });', js)
         for line in ('"loader " + ACEUIModLoader.VERSION + " on /"', 'source + ": " + names.length + " mod(s)"', '" loaded"',
-                     '" FAILED"', '; no manifest at "', '"could not wrap engine.on'):
+                     '" FAILED"', '"; nothing to load"', '"no engine on this page"', '"could not wrap engine.on'):
             self.assertIn(line, js, line)
         self.assertIn("loadScripts(base, files, index + 1, onDone)", js, "scripts load sequentially")
         self.assertIn("styles.concat(scripts).every(isFileName)", js, "never request anything that could be a folder")

@@ -57,8 +57,8 @@ def main(argv):
     pages = sorted({m.group(1) for m in (re.search(r"loader [\d.]+ on (/\S+)", l) for l in loader) if m})
     version = first_match(r"loader ([\d.]+) on /", loader)
     loaded = sorted({m.group(1) for m in (re.search(r"mod (\S+) loaded", l) for l in loader) if m})
-    failed = [l for l in loader if any(k in l for k in (" FAILED", "failed to load", "invalid JSON", "skipped", "no manifest", "could not wrap"))]
-    discovered = first_match(r"(presets|manifest): (\d+) mod", loader)
+    failed = [l for l in loader if any(k in l for k in (" FAILED", "failed to load", "invalid JSON", "skipped", "nothing to load", "could not wrap"))]
+    discovered = first_match(r"(presets): (\d+) mod", loader)
 
     print(f"loader: {'v' + version.group(1) if version else 'never ran'}; pages: {', '.join(pages) if pages else 'none'}")
     if discovered:
