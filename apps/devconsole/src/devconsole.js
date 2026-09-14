@@ -75,14 +75,25 @@ const DevConsole = (function () {
     const WHEEL_STEP = 0.25;
     const MIN_THUMB_PX = 12;
     /**
-     * Cohtml reports the wheel with the opposite sign to a browser (the stock bundle
-     * treats a positive deltaY as "up"), so the direction is flipped in game.
+     * Cohtml reports the wheel with the opposite sign to a browser: a positive deltaY
+     * is "up" (observed in game twice; the stock bundle reads it the same way), so
+     * the direction is flipped. The first wheel event is logged so the game log shows
+     * the delta and the user agent it came with.
      */
-    const COHTML = /Cohtml/.test(navigator.userAgent);
-    const WHEEL_SIGN = COHTML ? -1 : 1;
+    const WHEEL_SIGN = -1;
 
     /** Text filter: rows whose text does not contain the query (case-insensitive) are hidden. */
     const SEARCH_TEXT = "filter text";
+
+    /** Panel scale: the root's font-size in rem; everything inside is sized in em. */
+    const SCALE_KEY = "acedevconsole.scale";
+    const SCALE_DEFAULT = 1;
+    const SCALE_MIN = 0.6;
+    const SCALE_MAX = 2;
+    const SCALE_STEP = 0.1;
+    const SCALE_DIGITS = 2;
+    const SMALLER_TEXT = "−";
+    const LARGER_TEXT = "+";
 
     /** Class names shared with devconsole.css. */
     const CLASS = {
@@ -99,6 +110,7 @@ const DevConsole = (function () {
         search: "dc-search",
         tools: "dc-tools",
         button: "dc-btn",
+        glyph: "dc-glyph",
         closeButton: "dc-close",
         scroll: "dc-scroll",
         body: "dc-body",
@@ -122,6 +134,8 @@ const DevConsole = (function () {
     const ACTION_CLEAR = "clear";
     const ACTION_CLOSE = "close";
     const ACTION_FOLLOW = "follow";
+    const ACTION_SMALLER = "smaller";
+    const ACTION_LARGER = "larger";
 
     /** Filter toggles and the entry levels each covers; echo/result lines are always shown. */
     const FILTERS = [
@@ -231,7 +245,8 @@ const DevConsole = (function () {
             + el("div", CLASS.filters) + FILTERS.map(filterMarkup).join("") + close("div")
             + el("input", CLASS.search, noDrag({ type: "text", placeholder: SEARCH_TEXT }))
             + el("div", CLASS.tools)
-            + actionMarkup(ACTION_CLEAR, CLEAR_TEXT) + actionMarkup(ACTION_CLOSE, CLOSE_TEXT, CLASS.closeButton)
+            + actionMarkup(ACTION_SMALLER, SMALLER_TEXT, CLASS.glyph) + actionMarkup(ACTION_LARGER, LARGER_TEXT, CLASS.glyph)
+            + actionMarkup(ACTION_CLEAR, CLEAR_TEXT) + actionMarkup(ACTION_CLOSE, CLOSE_TEXT, CLASS.glyph + " " + CLASS.closeButton)
             + close("div")
             + close("div")
             + el("div", CLASS.scroll)
@@ -275,6 +290,8 @@ const DevConsole = (function () {
             input: root.querySelector("." + CLASS.input),
             search: root.querySelector("." + CLASS.search),
             query: "",                  // lower-cased text filter, "" for none
+            scale: SCALE_DEFAULT,       // root font-size in rem, see setScale
+            wheelLogged: false,         // the first wheel event is logged once
             drag: null,                 // thumb drag in progress: { startY, startTop }
             follow: true,               // keep the newest line in view
             thumbHeight: -1,            // last applied thumb geometry, so frames only touch it on change
@@ -405,6 +422,18 @@ const DevConsole = (function () {
         state.dirty = true;
     };
 
+    /** Scale the whole panel: the root's font-size in rem, everything inside is em. Persisted. */
+    const setScale = function (state, scale) {
+        const value = Number(clamp(scale, SCALE_MIN, SCALE_MAX).toFixed(SCALE_DIGITS));
+
+        state.scale = value;
+        state.root.style.fontSize = value + "rem";
+        persist.writeLocal(SCALE_KEY, value);
+        state.thumbHeight = -1;         // geometry changed: re-apply the thumb on the next render
+        state.thumbY = -1;
+        state.dirty = true;
+    };
+
     // ---- scrollbar -----------------------------------------------------------------------
 
     /** Size and place the thumb from the body's scroll geometry; touches style only on change. */
@@ -456,6 +485,11 @@ const DevConsole = (function () {
 
     const onWheel = function (state, e) {
         const direction = e.deltaY > 0 ? 1 : (e.deltaY < 0 ? -1 : 0);
+
+        if (!state.wheelLogged) {
+            state.wheelLogged = true;
+            log("first wheel event deltaY=" + e.deltaY + " (positive is treated as up), userAgent=" + navigator.userAgent);
+        }
 
         if (direction === 0) { return; }
 
@@ -634,6 +668,10 @@ const DevConsole = (function () {
         if (name === ACTION_CLOSE) { setOpen(state, false); }
 
         if (name === ACTION_FOLLOW) { setFollow(state, true); }
+
+        if (name === ACTION_SMALLER) { setScale(state, state.scale - SCALE_STEP); }
+
+        if (name === ACTION_LARGER) { setScale(state, state.scale + SCALE_STEP); }
     };
 
     // ---- lifecycle ---------------------------------------------------------------
@@ -645,6 +683,7 @@ const DevConsole = (function () {
     const attach = function (root) {
         const state = create(root);
         const storedOpen = persist.readLocal(OPEN_KEY);
+        const storedScale = persist.readLocal(SCALE_KEY);
 
         state.handlers = {
             key: function (e) { onWindowKey(state, e); },
@@ -668,11 +707,13 @@ const DevConsole = (function () {
 
         state.open = storedOpen === null ? true : Boolean(storedOpen);
         setClass(root, CLASS.closed, !state.open);
+        setScale(state, typeof storedScale === "number" ? storedScale : SCALE_DEFAULT);
 
         state.panel = ACEUIModLoader.panel.attach(root, { hudId: HUD_ELEMENT_ID, storageKey: STORAGE_KEY, log: log });
         state.unsubscribe = lines.subscribe(function () { state.dirty = true; });
         state.loop = ACEUIModLoader.loop.start(function (now) { tick(state, now); });
-        log("console attached, " + lines.entries().length + " buffered line(s), " + (state.open ? "open" : "closed") + ", toggle key " + TOGGLE_CODE);
+        log("console attached, " + lines.entries().length + " buffered line(s), " + (state.open ? "open" : "closed")
+            + ", scale " + state.scale + ", toggle key " + TOGGLE_CODE);
 
         return state;
     };
@@ -711,6 +752,10 @@ const DevConsole = (function () {
         STORAGE_KEY: STORAGE_KEY,
         OPEN_KEY: OPEN_KEY,
         FILTER_KEY: FILTER_KEY,
+        SCALE_KEY: SCALE_KEY,
+        SCALE_MIN: SCALE_MIN,
+        SCALE_MAX: SCALE_MAX,
+        SCALE_STEP: SCALE_STEP,
         TOGGLE_CODE: TOGGLE_CODE,
         TOGGLE_KEY: TOGGLE_KEY,
         KEY_CODES: KEY_CODES,
@@ -727,6 +772,7 @@ const DevConsole = (function () {
         setFilter: setFilter,
         setFollow: setFollow,
         setQuery: setQuery,
+        setScale: setScale,
         scrollBy: scrollBy,
         syncScrollbar: syncScrollbar,
         tick: tick,

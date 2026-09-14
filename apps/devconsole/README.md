@@ -59,13 +59,15 @@ Edits to `src/` need only a re-run of `install.py` and a HUD reload in game
   for the session. The `×` button closes it too.
 - **LOG / WARN / ERR** toggle those levels; the number is how many lines of
   that level the buffer holds. Prompt echo and results are always shown.
+- **− / +** scale the whole panel (text, buttons, scrollbar) in 10 % steps
+  between 60 % and 200 %; the scale is remembered like the position.
 - **CLEAR** empties the shared buffer (for every consumer of it).
 - **Filter text**: the field in the header hides every line that does not
   contain what you type (case-insensitive); Escape clears it. Level filters
   and the counts are unaffected.
 - **Scrolling**: the wheel moves the list (a quarter of the visible height per
-  notch; Cohtml reports the wheel with the opposite sign to a browser, so the
-  direction is flipped in game), the thumb can be dragged, a click on the
+  notch; Cohtml reports the wheel with the opposite sign to a browser, positive
+  is up, and the console is built for that), the thumb can be dragged, a click on the
   scrollbar track jumps there. The newest line is
   followed until you scroll away; a **LATEST** chip then appears and brings you
   back. Cohtml scrolls nothing by itself, so the console owns all of this and
@@ -128,10 +130,10 @@ python -m unittest discover -s tests -v
   the JavaScript style rules.
 - `tests/test_console_browser.py` - runs `tests/console/harness.html` in a
   headless Edge or Chrome with a fake animation clock and fake `localStorage`:
-  20 behavioural cases covering pre-attach buffering, rendering and its skip
+  21 behavioural cases covering pre-attach buffering, rendering and its skip
   of unchanged rows, filters, the prompt (results, statements, errors,
   history), clear, the row cap, the scrollbar and wheel scrolling with the
-  follow/LATEST behaviour, thumb dragging, the text filter, the toggle key, hidden HUD, drag exclusions and
+  follow/LATEST behaviour, thumb dragging, the text filter, scaling, the toggle key, hidden HUD, drag exclusions and
   lifecycle. Skipped if no browser is found (`ACE_BROWSER=<path>`
   overrides). The runner, shared from `ACEUIModLoader/tools/headless.py`,
   uses a throwaway profile, kills the process tree on timeout and verifies no

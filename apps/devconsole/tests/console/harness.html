@@ -208,7 +208,10 @@ console.warn("early warning");
     const thumb = root.querySelector(".dc-thumb");
     const followChip = root.querySelector(".dc-follow");
     const atBottom = function () { return Math.abs(body.scrollTop - (body.scrollHeight - body.clientHeight)) <= 1; };
+    // Cohtml convention (what the console is built for): a positive deltaY scrolls UP.
     const wheel = function (deltaY) { body.dispatchEvent(new WheelEvent("wheel", { deltaY: deltaY, bubbles: true, cancelable: true })); };
+    const wheelUp = function () { wheel(100); };
+    const wheelDown = function () { wheel(-100); };
 
     t("scrollbar: with overflowing content the thumb is shown, sized to the visible fraction, and the newest line is followed", function () {
         ok(body.scrollHeight > body.clientHeight, "content overflows in the harness");
@@ -223,7 +226,7 @@ console.warn("early warning");
     t("wheel up scrolls back by a quarter view, stops following and shows LATEST; new lines do not yank the view", function () {
         const before = body.scrollTop;
         const yBefore = thumb.style.transform;
-        wheel(-100);
+        wheelUp();
         ok(Math.abs((before - body.scrollTop) - body.clientHeight * DevConsole.WHEEL_STEP) <= 1, "one notch = WHEEL_STEP of the view");
         eq(state.follow, false, "not following"); ok(!followChip.classList.contains("dc-hidden"), "LATEST shown");
         ok(thumb.style.transform !== yBefore, "thumb moved");
@@ -233,12 +236,12 @@ console.warn("early warning");
     });
 
     t("wheel down to the bottom resumes following; the LATEST chip does the same; clear resets to following", function () {
-        wheel(100); wheel(100); wheel(100); wheel(100);
+        wheelDown(); wheelDown(); wheelDown(); wheelDown();
         ok(atBottom(), "back at the bottom"); eq(state.follow, true); ok(followChip.classList.contains("dc-hidden"));
-        wheel(-100); eq(state.follow, false);
+        wheelUp(); eq(state.follow, false);
         followChip.dispatchEvent(new MouseEvent("click", { bubbles: true }));
         eq(state.follow, true, "chip resumes"); nextFrame(); ok(atBottom(), "rendered at the bottom");
-        wheel(-100); eq(state.follow, false);
+        wheelUp(); eq(state.follow, false);
         root.querySelector('[data-action="clear"]').dispatchEvent(new MouseEvent("click", { bubbles: true })); nextFrame();
         eq(state.follow, true, "clear follows again"); ok(track.classList.contains("dc-nofit"), "no thumb when nothing overflows");
         let i; for (i = 0; i < MAX; i += 1) { console.log("refill " + i); }
@@ -246,7 +249,7 @@ console.warn("early warning");
     });
 
     t("thumb never leaves the track and is red while dragged; dragging it scrolls proportionally and releases on mouseup", function () {
-        eq(DevConsole.WHEEL_SIGN, 1, "browser wheel sign (Cohtml flips it)");
+        eq(DevConsole.WHEEL_SIGN, -1, "Cohtml wheel sign: positive deltaY is up");
         DevConsole.setFollow(state, true); nextFrame(); ok(atBottom());
         const y = parseFloat(thumb.style.transform.replace(/[^0-9.-]/g, ""));
         ok(y + parseFloat(thumb.style.height) <= track.clientHeight + 0.5, "thumb end within the track: " + (y + parseFloat(thumb.style.height)) + " <= " + track.clientHeight);
@@ -279,6 +282,25 @@ console.warn("early warning");
         eq(visibleRows(root).length, 0, "no match, nothing shown"); ok(track.classList.contains("dc-nofit"), "no thumb when nothing is shown");
         key(search, { key: "Escape" }); nextFrame();
         eq(search.value, "", "Escape clears"); eq(state.query, ""); ok(texts(root).length > 2, "all lines back");
+    });
+
+    t("- and + scale the whole panel in steps, clamped, persisted and restored; the thumb is re-applied", function () {
+        eq(state.scale, 1); eq(root.style.fontSize, "1rem", "root font-size drives every em inside");
+        const w = root.offsetWidth; const rowH = visibleRows(root)[0].offsetHeight;
+        root.querySelector('[data-action="larger"]').dispatchEvent(new MouseEvent("click", { bubbles: true }));
+        eq(state.scale, 1.1); eq(root.style.fontSize, "1.1rem"); eq(localStorage.getItem(DevConsole.SCALE_KEY), "1.1", "persisted");
+        ok(root.offsetWidth > w, "panel wider"); ok(visibleRows(root)[0].offsetHeight > rowH, "rows taller");
+        eq(state.thumbHeight, -1, "thumb geometry invalidated"); nextFrame(); ok(state.thumbHeight > 0, "thumb re-applied");
+        let i; for (i = 0; i < 30; i += 1) { root.querySelector('[data-action="smaller"]').dispatchEvent(new MouseEvent("click", { bubbles: true })); }
+        eq(state.scale, DevConsole.SCALE_MIN, "clamped at the minimum");
+        for (i = 0; i < 30; i += 1) { root.querySelector('[data-action="larger"]').dispatchEvent(new MouseEvent("click", { bubbles: true })); }
+        eq(state.scale, DevConsole.SCALE_MAX, "clamped at the maximum");
+        DevConsole.setScale(state, 1.3);
+        const root3 = document.createElement("div"); center.appendChild(root3);
+        const state3 = DevConsole.attach(root3);
+        eq(state3.scale, 1.3, "restored on attach"); eq(root3.style.fontSize, "1.3rem");
+        DevConsole.detach(state3); root3.remove();
+        DevConsole.setScale(state, 1); nextFrame();
     });
 
     t("a click on the scrollbar track jumps to that fraction; the top holds, the bottom follows", function () {
@@ -333,7 +355,7 @@ console.warn("early warning");
         const cancelled = clock.cancelled;
         DevConsole.detach(state);
         eq(clock.cancelled, cancelled + 1); eq(state.loop.running, false); eq(ACEUIModLoader.console.listenerCount(), listeners - 1, "unsubscribed");
-        const follow = state.follow; wheel(-100); eq(state.follow, follow, "wheel released");
+        const follow = state.follow; wheelUp(); eq(state.follow, follow, "wheel released");
         const search = root.querySelector(".dc-search"); search.value = "zzz"; search.dispatchEvent(new Event("input", { bubbles: true }));
         eq(state.query, "", "search released"); search.value = "";
         const open = state.open;
