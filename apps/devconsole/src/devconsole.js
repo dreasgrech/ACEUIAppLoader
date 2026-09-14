@@ -40,13 +40,18 @@ const DevConsole = (function () {
     /** Element id of the console's root (mod.js creates it; the preview page carries one). */
     const ROOT_ID = "devconsole";
 
-    /** Keyboard: toggle by `e.code`, with `e.key` as fallback for engines without `code`. */
+    /**
+     * Keyboard. Names are `e.key` / `e.code` values; the numbers are the legacy
+     * `e.keyCode` the stock bundle relies on exclusively (it never reads `key` or
+     * `code`), so every check accepts either form.
+     */
     const TOGGLE_CODE = "Backquote";
     const TOGGLE_KEY = "`";
     const RUN_KEY = "Enter";
     const HISTORY_PREV_KEY = "ArrowUp";
     const HISTORY_NEXT_KEY = "ArrowDown";
     const BLUR_KEY = "Escape";
+    const KEY_CODES = { Backquote: 192, Enter: 13, ArrowUp: 38, ArrowDown: 40, Escape: 27 };
 
     /** Row elements created once and recycled; the buffer itself is AceMods.console's. */
     const MAX_ROWS = 200;
@@ -386,18 +391,23 @@ const DevConsole = (function () {
         state.input.value = next === state.history.length ? state.draft : state.history[next];
     };
 
+    /** True when the event is the named key, by `key`, `code` or legacy `keyCode`. */
+    const keyIs = function (e, name) {
+        return e.key === name || e.code === name || e.keyCode === KEY_CODES[name];
+    };
+
     const onInputKey = function (state, e) {
-        if (e.key === RUN_KEY) {
+        if (keyIs(e, RUN_KEY)) {
             evaluate(state, state.input.value);
             state.input.value = "";
             e.preventDefault();
-        } else if (e.key === HISTORY_PREV_KEY) {
+        } else if (keyIs(e, HISTORY_PREV_KEY)) {
             recall(state, -1);
             e.preventDefault();
-        } else if (e.key === HISTORY_NEXT_KEY) {
+        } else if (keyIs(e, HISTORY_NEXT_KEY)) {
             recall(state, 1);
             e.preventDefault();
-        } else if (e.key === BLUR_KEY) {
+        } else if (keyIs(e, BLUR_KEY)) {
             state.input.blur();
         }
     };
@@ -405,7 +415,7 @@ const DevConsole = (function () {
     // ---- input -----------------------------------------------------------------------
 
     const isToggleKey = function (e) {
-        return e.code === TOGGLE_CODE || e.key === TOGGLE_KEY;
+        return keyIs(e, TOGGLE_CODE) || e.key === TOGGLE_KEY;
     };
 
     const onWindowKey = function (state, e) {
@@ -494,6 +504,7 @@ const DevConsole = (function () {
         FILTER_KEY: FILTER_KEY,
         TOGGLE_CODE: TOGGLE_CODE,
         TOGGLE_KEY: TOGGLE_KEY,
+        KEY_CODES: KEY_CODES,
         MAX_ROWS: MAX_ROWS,
         CLASS: CLASS,
         FILTERS: FILTERS,

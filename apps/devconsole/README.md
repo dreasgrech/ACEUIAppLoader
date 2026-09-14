@@ -68,9 +68,13 @@ Edits to `src/` need only a re-run of `install.py` and a HUD reload in game
 - Drag anywhere except the buttons and the prompt to move it; the position
   persists like the stock widgets' (see the loader's `AceMods.panel`).
 
-Known unknown for the first in-game run: whether keyboard focus reaches the
-prompt while driving (the game may keep consuming keys). If it does not, the
-log view and the toggle still work; the prompt is the part to test.
+Keyboard in game: the first launch showed typing reaches the prompt, but Enter
+did nothing because the game's engine reports keys through the legacy
+`keyCode` only (the stock bundle's chat input checks `keyCode == 13` and never
+reads `key` or `code`). Every key check therefore accepts `key`, `code` or
+`keyCode` (`KEY_CODES` in the script). Whether typed keys also reach the car
+(W/A/S/D while the prompt has focus) is still to be observed; the stock chat
+input has the same exposure.
 
 ## Preview outside the game
 

@@ -168,6 +168,22 @@ console.warn("early warning");
         eq(state.history.length, 4);
     });
 
+    t("Enter without a key name and with an unrelated keyCode does nothing", function () {
+        input.value = "should stay"; key(input, { keyCode: 65 });
+        eq(input.value, "should stay"); eq(state.dirty, false);
+        input.value = "";
+    });
+
+    t("legacy keyCode-only events work for Enter, arrows and the toggle (the game's engine reports keyCode)", function () {
+        input.value = "2 * 21"; key(input, { keyCode: 13 }); nextFrame();
+        eq(texts(root).pop(), "42", "Enter by keyCode");
+        key(input, { keyCode: 38 }); eq(input.value, "2 * 21", "ArrowUp by keyCode");
+        key(input, { keyCode: 40 }); eq(input.value, "", "ArrowDown by keyCode");
+        key(window, { keyCode: 192 }); eq(state.open, false, "toggle by keyCode");
+        key(window, { keyCode: 192 }); eq(state.open, true);
+        eq(DevConsole.KEY_CODES.Enter, 13);
+    });
+
     t("clear button empties the buffer and the rows", function () {
         root.querySelector('[data-action="clear"]').dispatchEvent(new MouseEvent("click", { bubbles: true }));
         eq(AceMods.console.entries().length, 0); nextFrame();
