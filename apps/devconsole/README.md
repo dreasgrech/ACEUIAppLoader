@@ -44,7 +44,7 @@ The loader package must be installed once (from `ACEUIModLoader`:
 `python tools/build_loader.py --install`). Then:
 
 ```
-python tools/install.py            # copy src/ into the mods folder and register it
+python tools/install.py            # copy src/ into the mods folder and write its empty marker
 python tools/install.py --remove
 ```
 

@@ -2,8 +2,8 @@
 """
 install.py - install DevConsole as a loose ACEUIModLoader mod.
 
-Thin wrapper: copies src/ into the game's mods folder and registers the mod in the
-loader's manifest, via ../ACEUIModLoader/tools/install_mod.py (or ACE_LOADER_DIR).
+Thin wrapper: copies src/ into the game mods folder and writes the empty marker file the
+loader discovers it by, via ../ACEUIModLoader/tools/install_mod.py (or ACE_LOADER_DIR).
 The loader package itself is built and installed from the ACEUIModLoader repo.
 
 Usage:
