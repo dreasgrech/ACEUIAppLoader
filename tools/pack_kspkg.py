@@ -39,6 +39,9 @@ Usage:
   --no-verify  skip re-reading the package to check every entry
   --no-pad     do not compute/add padding (builds a package the game may ignore)
   --game-dir   where content.kspkg lives (default: Steam path, or ACE_GAME_DIR)
+  --mods-dir   the installed mod packages to keep working (default: Saved Games\\ACE\\mods);
+               every other *.kspkg there joins the simulated lookup, and their overrides
+               must still win with this package added
 
 Every file below <source_dir> is stored with its path relative to <source_dir>,
 so <source_dir>/uiresources/hud.html becomes "uiresources\\hud.html" in the package.
@@ -129,10 +132,31 @@ def make_entry(path: str, flags: int, size: int, offset: int) -> bytes:
             + struct.pack("<qq", size, offset))
 
 
-def plan_padding(files, dirs, game_dir=None):
+def default_mods_dir():
+    return os.path.join(os.path.expanduser("~"), "Saved Games", "ACE", "mods")
+
+
+def installed_packages(mods_dir, exclude_name):
+    """
+    [(file name, all hashes, file hashes)] of the other *.kspkg in the mods folder (the
+    one being rebuilt excluded). Only their FILE overrides must keep winning.
+    """
+    if not mods_dir or not os.path.isdir(mods_dir):
+        return []
+    found = []
+    for name in sorted(os.listdir(mods_dir)):
+        if not name.lower().endswith(".kspkg") or name.lower() == (exclude_name or "").lower():
+            continue
+        path = os.path.join(mods_dir, name)
+        found.append((name, lookup_sim.read_base_hashes(path), lookup_sim.file_hashes(path)))
+    return found
+
+
+def plan_padding(files, dirs, game_dir=None, mods_dir=None, package_name="mod"):
     """
     Decide which dummy directory entries to add so that every file that also
-    exists in the game's base package resolves to OUR copy (see lookup_sim).
+    exists in the game's base package resolves to OUR copy (see lookup_sim), with
+    every other installed package's overrides still winning too.
     Returns (pad_paths, report_lines). Raises SystemExit if no layout wins.
     """
     base_pkg = lookup_sim.find_base_package(game_dir)
@@ -145,29 +169,46 @@ def plan_padding(files, dirs, game_dir=None):
     overrides = [rel for rel, _ in files if path_hash(rel) in base_set]
     if not overrides:
         return [], ["no base-package files are overridden; no padding needed"]
-    pad, win = lookup_sim.find_padding(base, mod_paths, overrides, path_hash)
     lines = [f"base package: {base_pkg} ({len(base)} entries)",
              f"overrides of base files: {', '.join(overrides)}"]
+    our_hashes = {path_hash(rel) for rel in overrides}
+    others = []
+    for name, hashes, file_list in installed_packages(mods_dir, package_name):
+        if our_hashes & set(file_list):
+            # the same file overridden twice can only be the same mod being rebuilt under another name
+            lines.append(f"installed alongside: {name} overrides the same file(s); treated as the package being replaced")
+            continue
+        others.append((name, hashes, file_list))
+    pad, win = lookup_sim.find_padding(base, mod_paths, overrides, path_hash, others=others, mod_name=package_name)
+    for name, hashes, file_list in others:
+        theirs = [h for h in file_list if h in base_set]
+        lines.append(f"installed alongside: {name} ({len(hashes)} entries, {len(theirs)} file override(s) of base files)")
     if pad is None:
-        lines.append("NO padding layout found that makes every override win")
+        lines.append("NO padding layout found that makes every override win (ours and the installed packages')")
         for rel in overrides:
             lines.append(f"  {rel}: resolves to {win[path_hash(rel)]}")
         raise SystemExit("\n".join(lines) + "\nRefusing to build a package the game would ignore. "
                          "Rename/add a file to change the layout, or pass --no-pad to build anyway.")
-    lines.append(f"padding: {len(pad)} directory entries under {lookup_sim.PAD_PARENT}\\")
+    lines.append(f"padding: {len(pad)} directory entries under {pad[0] if pad else lookup_sim.PAD_PARENT}\\")
     for rel, _ in files:
         lines.append(f"  {rel}: resolves to {win[path_hash(rel)]}")
+    for name, hashes, file_list in others:
+        theirs = [h for h in file_list if h in base_set]
+        if theirs:
+            lines.append(f"  {name}: its {len(theirs)} file override(s) still resolve to it")
     return pad, lines
 
 
-def pack(source_dir: str, out_path: str, encrypt: bool = False, pad: bool = True, game_dir=None) -> list:
+def pack(source_dir: str, out_path: str, encrypt: bool = False, pad: bool = True, game_dir=None, mods_dir=None) -> list:
     files, dirs = collect(source_dir)
     if not files:
         raise SystemExit(f"no files found under {source_dir}")
 
     pad_paths = []
     if pad:
-        pad_paths, report = plan_padding(files, dirs, game_dir)
+        if mods_dir is None:
+            mods_dir = default_mods_dir()
+        pad_paths, report = plan_padding(files, dirs, game_dir, mods_dir, os.path.basename(out_path))
         for line in report:
             print("  " + line)
 
@@ -289,12 +330,13 @@ if __name__ == "__main__":
     flags = {a for a in sys.argv[1:] if a.startswith("--")}
     args = [a for a in sys.argv[1:] if not a.startswith("--")]
     game_dir = next((a.split("=", 1)[1] for a in flags if a.startswith("--game-dir=")), None)
-    unknown = {a for a in flags if not a.startswith("--game-dir=")} - {"--encrypt", "--install", "--no-verify", "--no-pad"}
+    mods_dir = next((a.split("=", 1)[1] for a in flags if a.startswith("--mods-dir=")), None)
+    unknown = {a for a in flags if not a.startswith("--game-dir=") and not a.startswith("--mods-dir=")} - {"--encrypt", "--install", "--no-verify", "--no-pad"}
     if len(args) != 2 or unknown:
         print(__doc__)
         sys.exit(1)
     print(f"mod version {read_version(args[0])} (from VERSION next to {args[0]})")
-    written = pack(args[0], args[1], encrypt="--encrypt" in flags, pad="--no-pad" not in flags, game_dir=game_dir)
+    written = pack(args[0], args[1], encrypt="--encrypt" in flags, pad="--no-pad" not in flags, game_dir=game_dir, mods_dir=mods_dir)
     if "--no-verify" not in flags:
         verify(args[1], written)
     if "--install" in flags:

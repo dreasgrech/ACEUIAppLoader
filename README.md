@@ -132,6 +132,14 @@ the loose mod folders are then simply never read. Library changes need a
 rebuild and reinstall of the package (the padding depends only on the file
 paths, so it stays the same).
 
+A mod that must override a packed game file (ACEDOOM's `gui_events.table`)
+ships its own package. The game re-sorts its shared file table after every
+package it adds, so such a package is named `ACEUIModLoaderMods-<name>.kspkg`
+to list after the loader, and `pack_kspkg.py` searches its padding with every
+installed package in the vector (`--mods-dir`), keeping their file overrides
+winning too. Adding a package can still need the others rebuilt; the
+`check_ingame_log.py` verdict after a launch is the test.
+
 ## Layout
 
 | Path | Contents |
@@ -169,8 +177,9 @@ python -m unittest discover -s tests -v
 
 ## Roadmap
 
-1. `tools/repad.py`: recompute the loader's padding against every package
-   installed on a machine (needed when car-mod packages are present).
+1. Repadding: `pack_kspkg.py` already searches against the installed
+   packages; a `repad` command that rebuilds every installed package in one go
+   is still missing (needed when car-mod packages are present).
 2. Verify the package listing order assumption and compare the notes in
    `ACEGameInternals` against Coherent's official Gameface documentation.
 3. Console capture on menu pages is already there (the hook runs on every
