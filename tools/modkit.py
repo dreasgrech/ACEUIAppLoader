@@ -35,7 +35,7 @@ import unittest
 import headless
 
 MOD_FILE = "mod.json"
-KNOWN_KEYS = {"name", "version", "title", "pages", "scripts", "styles", "root"}
+KNOWN_KEYS = {"name", "version", "title", "pages", "scripts", "styles", "files", "root"}
 STOCK_FILES = ("hud.html", "cohtml.js", "components.js")
 LEGACY = ("VERSION", os.path.join("tools", "install.py"))
 LIBRARY_OWNED = ("requestAnimationFrame", "cancelAnimationFrame", "localStorage", "window.HUD", "getBoundingClientRect", "JSON.stringify")
@@ -117,15 +117,15 @@ class ModTests(unittest.TestCase):
         if "name" in info:
             self.assertEqual(info["name"], self.name, "a name key must match the folder name (or be left out)")
         self.assertRegex(self.name, r"^[a-z0-9][a-z0-9_.-]*$", "folder name: lower-case letters, digits, _ . -")
-        for key in ("scripts", "styles", "pages"):
+        for key in ("scripts", "styles", "files", "pages"):
             self.assertIsInstance(info.get(key, []), list, key)
-        for rel in info.get("scripts", []) + info.get("styles", []):
+        for rel in info.get("scripts", []) + info.get("styles", []) + info.get("files", []):
             self.assertEqual(os.path.basename(rel), rel, f"{rel}: plain file names only (folders crash the game)")
             self.assertTrue(os.path.isfile(os.path.join(self.mod_dir, rel)), f"{rel} listed but missing")
         self.assertTrue(info.get("scripts"), "at least one script")
 
     def test_nothing_ships_that_is_not_listed(self):
-        listed = set(self.info.get("scripts", [])) | set(self.info.get("styles", [])) | {MOD_FILE}
+        listed = set(self.info.get("scripts", [])) | set(self.info.get("styles", [])) | set(self.info.get("files", [])) | {MOD_FILE}
         present = {n for n in os.listdir(self.mod_dir) if not n.startswith(".")}
         self.assertEqual(present, listed, "mod.json must list exactly the files in the mod folder")
         for stock in STOCK_FILES:

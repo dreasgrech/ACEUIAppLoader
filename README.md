@@ -56,7 +56,9 @@ A mod's `mod.json` holds only what cannot be inferred:
 
 The mod's name is its folder's (and its marker's). Optional keys: `title` (the
 log prefix, default the name), `pages` (default `["hud.html"]`, `"*"` = every
-page), `root: false` (no root element), `name` (must equal the folder if given).
+page), `files` (other plain file names the mod fetches itself, e.g. a `.wasm`;
+copied by the install tool, never injected), `root: false` (no root element),
+`name` (must equal the folder if given).
 Scripts run in order as classic scripts; the loader waits for each before adding
 the next.
 

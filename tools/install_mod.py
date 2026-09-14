@@ -33,7 +33,7 @@ MARKER_DIR = "Video"
 MARKER_PREFIX = "ACEUIModLoaderMods-"
 MARKER_EXT = ".settingspreset"
 MOD_FILE = "mod.json"
-KNOWN_KEYS = {"name", "version", "title", "pages", "scripts", "styles", "root"}
+KNOWN_KEYS = {"name", "version", "title", "pages", "scripts", "styles", "files", "root"}
 LEGACY_MANIFEST = "manifest.json"
 NAME_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9_.-]*$")
 IGNORE = shutil.ignore_patterns("__pycache__", "*.swp", "*~", ".*")
@@ -115,7 +115,7 @@ def load_mod_info(src_dir):
     unknown = sorted(set(info) - KNOWN_KEYS)
     if unknown:
         raise SystemExit(f"{MOD_FILE}: unknown key(s) {unknown}; known: {sorted(KNOWN_KEYS)}")
-    for key in ("scripts", "styles"):
+    for key in ("scripts", "styles", "files"):
         for rel in info.get(key, []):
             if os.path.basename(rel) != rel or not rel:
                 raise SystemExit(f"{MOD_FILE} lists {rel!r}: entries must be plain file names in the mod folder")
