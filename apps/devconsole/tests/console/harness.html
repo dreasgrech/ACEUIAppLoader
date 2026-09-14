@@ -330,7 +330,36 @@ console.warn("early warning");
         eq(root.querySelectorAll(".dc-row").length, MAX, "markup reused"); DevConsole.detach(state);
     });
 
-    H.finish();
+    t("prompt: .run refuses anything but a plain name, unknown commands print the list, a good name adds the script", function () {
+        state = DevConsole.attach(root);
+        input.value = ".run ../x"; key(input, { key: "Enter" }); nextFrame();
+        eq(texts(root).pop(), "run: plain file names only, e.g. .run probe"); eq(lastRow(root).getAttribute("data-level"), "error");
+        input.value = ".what"; key(input, { key: "Enter" }); nextFrame();
+        ok(texts(root).pop().indexOf("commands: .run <name>") === 0, "command list"); eq(lastRow(root).getAttribute("data-level"), "error");
+        input.value = ".5 + 1"; key(input, { key: "Enter" }); nextFrame();
+        eq(texts(root).pop(), "1.5", "a number starting with a dot is still JavaScript");
+        input.value = ".run hello"; key(input, { key: "Enter" }); nextFrame();
+        eq(texts(root).pop(), "run: loading ACEUIModLoaderMods/snippets/hello.js", "loading line");
+        eq(document.querySelectorAll("script[src$='snippets/hello.js']").length, 1, "script tag added");
+        eq(state.history.pop(), ".run hello", "commands are in the history too");
+    });
+
+    const finishAfterSnippet = function (tries) {
+        if (window.__snippet !== 1 && tries > 0) {
+            setTimeout(function () { finishAfterSnippet(tries - 1); }, 20);
+            return;
+        }
+
+        nextFrame();
+        t("the snippet ran once and its completion was reported", function () {
+            eq(window.__snippet, 1, "snippet executed");
+            eq(texts(root).pop(), "run: hello.js done"); eq(lastRow(root).getAttribute("data-level"), "result");
+            DevConsole.detach(state);
+        });
+        H.finish();
+    };
+
+    finishAfterSnippet(100);
 }());
 </script>
 </body>

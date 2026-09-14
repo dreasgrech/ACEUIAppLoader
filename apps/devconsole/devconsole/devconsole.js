@@ -42,6 +42,15 @@ const DevConsole = (function () {
     const TOGGLE_CODE = "Backquote";
     const TOGGLE_KEY = "`";
     const RUN_KEY = "Enter";
+    /** `.word ...` typed into the prompt is a console command, not JavaScript. */
+    const COMMAND_PREFIX = ".";
+    const COMMAND_RE = /^\.[a-z]+(\s|$)/;
+    const WHITESPACE_RE = /\s+/;
+    const RUN_COMMAND = "run";
+    /** Snippets live next to the mod folders, outside any mod, so reinstalling a mod never removes them. */
+    const SNIPPET_DIR = ACEUIModLoader.ROOT + "snippets/";
+    const SNIPPET_EXT = ".js";
+    const SNIPPET_NAME_RE = /^[A-Za-z0-9_.-]+$/;
     const HISTORY_PREV_KEY = "ArrowUp";
     const HISTORY_NEXT_KEY = "ArrowDown";
     const BLUR_KEY = "Escape";
@@ -583,6 +592,42 @@ const DevConsole = (function () {
     };
 
     /** Run `code` against the page; echo and result (or error) go into the shared buffer. */
+    /**
+     * `.run <name>` loads `ACEUIModLoaderMods/snippets/<name>.js` as a script: write it in
+     * an editor, run it in game, no reinstall and no pasting. Only plain file names are
+     * accepted (a folder URL crashes the game); a missing file is one warning in the log.
+     */
+    const runSnippet = function (name) {
+        if (!SNIPPET_NAME_RE.test(name)) {
+            lines.capture(ERROR_LEVEL, "run: plain file names only, e.g. .run probe");
+            return;
+        }
+
+        const file = name.slice(-SNIPPET_EXT.length) === SNIPPET_EXT ? name : name + SNIPPET_EXT;
+        const url = SNIPPET_DIR + file;
+
+        lines.capture(RESULT_LEVEL, "run: loading " + url);
+        ACEUIModLoader.addScript(url, function (ok) {
+            if (ok) {
+                lines.capture(RESULT_LEVEL, "run: " + file + " done");
+            } else {
+                lines.capture(ERROR_LEVEL, "run: " + file + " failed to load; it belongs in mods/uiresources/" + SNIPPET_DIR);
+            }
+        });
+    };
+
+    /** Console commands: a dot and a word, so they never collide with JavaScript. */
+    const command = function (trimmed) {
+        const parts = trimmed.slice(COMMAND_PREFIX.length).split(WHITESPACE_RE);
+
+        if (parts[0] === RUN_COMMAND && parts[1]) {
+            runSnippet(parts[1]);
+            return;
+        }
+
+        lines.capture(ERROR_LEVEL, "commands: .run <name>  loads " + SNIPPET_DIR + "<name>" + SNIPPET_EXT + " as a script");
+    };
+
     const evaluate = function (state, code) {
         const trimmed = code.trim();
 
@@ -590,6 +635,11 @@ const DevConsole = (function () {
 
         lines.capture(ECHO_LEVEL, ECHO_PREFIX + trimmed);
         remember(state, trimmed);
+
+        if (COMMAND_RE.test(trimmed)) {
+            command(trimmed);
+            return;
+        }
 
         try {
             lines.capture(RESULT_LEVEL, lines.format(compile(trimmed)()));

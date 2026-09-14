@@ -46,6 +46,15 @@ class ConsoleContractTests(unittest.TestCase):
         self.assertIn('const ECHO_LEVEL = "input";', self.js)
         self.assertIn('const RESULT_LEVEL = "result";', self.js)
 
+    def test_run_command_only_ever_requests_plain_snippet_files(self):
+        # a URL that resolves to a folder crashes the game (ACEGameInternals, game-internals.md section 7)
+        self.assertIn("const SNIPPET_NAME_RE = /^[A-Za-z0-9_.-]+$/;", self.js)
+        self.assertIn('const SNIPPET_DIR = ACEUIModLoader.ROOT + "snippets/";', self.js)
+        self.assertIn("if (!SNIPPET_NAME_RE.test(name)) {", self.js)
+        self.assertIn("ACEUIModLoader.addScript(url, function (ok) {", self.js)
+        self.assertLess(self.js.find("if (COMMAND_RE.test(trimmed)) {"), self.js.find("lines.format(compile(trimmed)())"),
+                        "commands are taken before JavaScript")
+
 
 if __name__ == "__main__":
     unittest.main()

@@ -82,6 +82,14 @@ resume).
   expression first so its value is printed (`ModelCurrentCar.speed`); if that
   is not valid syntax it runs as statements (`window.x = 1`). Errors are shown
   in red. Arrow up/down walk the history (50 entries). Escape leaves the prompt.
+- **`.run <name>`**: loads `<name>.js` from the snippets folder,
+  `Saved Games/ACE/mods/uiresources/ACEUIModLoaderMods/snippets/`, as a script.
+  Write anything longer than a line in an editor, save, type `.run name` in
+  game: no reinstall, no pasting. The folder sits next to the mod folders and
+  outside every mod, so reinstalling a mod never touches it. Only plain file
+  names are accepted (a folder URL would crash the game); a missing file is one
+  warning in the log and a red line in the console. Commands start with a dot
+  and a word so they never collide with JavaScript (`.5 + 1` is still a number).
 - The buffer holds the last 500 lines and lives in the page: it starts fresh
   whenever the HUD page is reloaded (Escape/resume), but everything the loader
   and other mods logged while the page was loading is already in it.
