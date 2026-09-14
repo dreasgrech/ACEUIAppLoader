@@ -105,7 +105,7 @@ console.warn("early warning");
     t("attach builds header, 3 filters, MAX_ROWS rows and the prompt; open by default; panel and loop wired", function () {
         eq(root.querySelectorAll(".dc-filter").length, 3, "filters"); eq(root.querySelectorAll(".dc-row").length, MAX, "row pool");
         ok(input, "prompt input"); eq(input.getAttribute("data-nodrag"), "", "prompt does not drag");
-        eq(root.querySelector(".dc-title").textContent, "CONSOLE" + DevConsole.VERSION, "title + version span");
+        eq(root.querySelector(".dc-title").textContent, "ACE Dev Console" + DevConsole.VERSION, "title + version span");
         eq(root.querySelector(".dc-version").textContent, DevConsole.VERSION, "version span");
         ok(root.querySelector(".dc-scrollbar") && root.querySelector(".dc-thumb"), "scrollbar markup");
         eq(root.querySelector(".dc-scrollbar").getAttribute("data-nodrag"), "", "scrollbar does not drag the panel");

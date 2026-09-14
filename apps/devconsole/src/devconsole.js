@@ -58,7 +58,7 @@ const DevConsole = (function () {
     const HISTORY_MAX = 50;
     const TIME_DIGITS = 2;
 
-    const TITLE_TEXT = "CONSOLE";
+    const TITLE_TEXT = "ACE Dev Console";
     const CLEAR_TEXT = "CLEAR";
     const CLOSE_TEXT = "×";
     const FOLLOW_TEXT = "LATEST";
