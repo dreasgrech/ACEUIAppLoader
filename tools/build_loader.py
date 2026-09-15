@@ -31,6 +31,9 @@ SRC_DIR = os.path.join(_repos.REPO, "src")
 LIB_ORDER = [
     "ACEUIModLoader.core.js",
     "ACEUIModLoader.console.js",
+    "ACEUIModLoader.dom.js",
+    "ACEUIModLoader.keys.js",
+    "ACEUIModLoader.scroll.js",
     "ACEUIModLoader.persist.js",
     "ACEUIModLoader.panel.js",
     "ACEUIModLoader.loop.js",

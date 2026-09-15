@@ -92,7 +92,7 @@ ACEUIModLoader.input = (function () {
                 menu[lever](want);
                 taken += 1;
             } catch (e) {
-                ACEUIModLoader.log("[input] " + lever + "(" + want + ") failed: " + (e && e.message ? e.message : e));
+                ACEUIModLoader.log("[input] " + lever + "(" + want + ") failed: " + ACEUIModLoader.errorText(e));
             }
         });
 
@@ -208,7 +208,7 @@ ACEUIModLoader.input = (function () {
 
             return true;
         } catch (e) {
-            ACEUIModLoader.log("[input] cannot watch " + ACTION_EVENT + ": " + (e && e.message ? e.message : e));
+            ACEUIModLoader.log("[input] cannot watch " + ACTION_EVENT + ": " + ACEUIModLoader.errorText(e));
 
             return false;
         }

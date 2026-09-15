@@ -51,6 +51,41 @@ document.addEventListener("DOMContentLoaded", function () {
     const t = H.t, eq = H.eq, ok = H.ok, near = H.near;
     const last = function (arr) { return arr[arr.length - 1]; };
 
+    /*
+     * A real 100px window onto 500px of content, so the scroller's arithmetic is checked
+     * against layout rather than against a mock. Cohtml ignores `overflow: auto`, which is
+     * why this behaviour exists at all.
+     */
+    const scrollFixture = function (follow, onFollow) {
+        const dv = function (props) { return ACEUIModLoader.dom.div(props); };
+        const box = dv({ position: "absolute", left: "0", top: "0", width: "200px" });
+        const body = dv({ height: "100px", overflow: "hidden" });
+        const track = dv({ height: "100px", width: "8px" });
+        const thumb = dv({ width: "8px" });
+
+        body.appendChild(dv({ height: "500px" }));
+        track.appendChild(thumb);
+        box.appendChild(body);
+        box.appendChild(track);
+        center.appendChild(box);
+
+        return {
+            box: box,
+            body: body,
+            track: track,
+            thumb: thumb,
+            scroller: ACEUIModLoader.scroll.attach({
+                body: body,
+                track: track,
+                thumb: thumb,
+                follow: follow,
+                nofitClass: "nofit",
+                draggingClass: "dragging",
+                onFollow: onFollow
+            })
+        };
+    };
+
     const clock = window.__clock;
     const center = document.getElementById("center");
     const mouse = function (type, x, y, target) {
@@ -143,6 +178,193 @@ document.addEventListener("DOMContentLoaded", function () {
     });
 
     // ---- persist -------------------------------------------------------------------------
+
+    t("core: errorText reads anything that was thrown, safely runs someone else's callback", function () {
+        const core = ACEUIModLoader;
+        const before = window.__log.length;
+
+        eq(core.errorText(new Error("boom")), "Error: boom", "an Error");
+        eq(core.errorText("boom"), "boom", "a thrown string");
+        eq(core.errorText({ message: "no name" }), "no name", "an error-shaped object");
+        eq(core.safely("a test", function () { return 42; }), 42, "the value comes back");
+        eq(core.safely("a test", function () { throw new Error("nope"); }), undefined, "a thrower returns undefined");
+        ok(window.__log.length > before, "and says so in the log");
+        ok(last(window.__log).indexOf("a test failed: Error: nope") >= 0, "naming what failed");
+    });
+
+    t("dom: elements with inline styles, class toggles and emptying", function () {
+        const dom = ACEUIModLoader.dom;
+        const node = dom.make("span", { color: "rgb(1, 2, 3)" }, "hi");
+
+        eq(node.tagName, "SPAN", "tag");
+        eq(node.textContent, "hi", "text");
+        eq(node.style.color, "rgb(1, 2, 3)", "inline style");
+        eq(dom.div({}).tagName, "DIV", "div shorthand");
+        dom.setClass(node, "on", true);
+        ok(node.classList.contains("on"), "class added");
+        dom.setClass(node, "on", false);
+        ok(!node.classList.contains("on"), "class removed");
+        dom.setClass(null, "on", true);
+        node.appendChild(dom.div({}));
+        eq(dom.clear(node).childNodes.length, 0, "cleared");
+        ok(typeof dom.THEME.ink === "string", "the palette is here once, not once per surface");
+    });
+
+    t("dom: a listener bag lets go of everything in one call", function () {
+        const dom = ACEUIModLoader.dom;
+        const bag = dom.listeners();
+        const target = dom.div({});
+        let hits = 0;
+        const count = function () { hits += 1; };
+
+        bag.on(target, "click", count);
+        bag.on(target, "mousedown", count);
+        bag.on(window, "ace-test", count);
+        eq(bag.count(), 3, "three held");
+        target.dispatchEvent(new Event("click"));
+        target.dispatchEvent(new Event("mousedown"));
+        window.dispatchEvent(new Event("ace-test"));
+        eq(hits, 3, "all three fired");
+        eq(bag.off(), 3, "three released");
+        target.dispatchEvent(new Event("click"));
+        window.dispatchEvent(new Event("ace-test"));
+        eq(hits, 3, "and none fired again");
+        eq(bag.off(), 0, "releasing twice is harmless");
+        eq(typeof dom.on(null, "click", count), "function", "a missing target still returns an undo");
+    });
+
+    t("keys: a key is recognised by code, by character and by the legacy keyCode", function () {
+        const keys = ACEUIModLoader.keys;
+
+        ok(keys.is({ code: "Backquote" }, "Backquote"), "by code");
+        ok(keys.is({ key: "`" }, "Backquote"), "by the character the engine sends as key");
+        ok(keys.is({ keyCode: 192 }, "Backquote"), "by the legacy keyCode the stock bundle reads");
+        ok(keys.is({ key: " " }, "Space"), "space as a character");
+        ok(!keys.is({ code: "KeyA" }, "Backquote"), "a different key");
+        ok(!keys.is({ code: "KeyA" }, ""), "no key wanted");
+        eq(keys.nameOf({ key: "," }), "Comma", "characters fold onto names");
+        eq(keys.nameOf({ code: "KeyA", key: "a" }), "KeyA", "code wins over character");
+    });
+
+    t("keys: bind follows a key kept in settings and stays out of a text box", function () {
+        const keys = ACEUIModLoader.keys;
+        const field = document.createElement("input");
+        let wanted = "Backquote";
+        let fired = 0;
+        const unbind = keys.bind(function () { return wanted; }, function () { fired += 1; });
+
+        document.body.appendChild(field);
+        window.dispatchEvent(new KeyboardEvent("keydown", { code: "Backquote" }));
+        eq(fired, 1, "the bound key fires");
+        window.dispatchEvent(new KeyboardEvent("keydown", { code: "KeyJ" }));
+        eq(fired, 1, "another key does not");
+        wanted = "KeyJ";
+        window.dispatchEvent(new KeyboardEvent("keydown", { code: "KeyJ" }));
+        eq(fired, 2, "moving the setting moves the hotkey, with no rebinding");
+        field.dispatchEvent(new KeyboardEvent("keydown", { code: "KeyJ", bubbles: true }));
+        eq(fired, 2, "and it never fires while someone is typing");
+        ok(keys.isTyping({ target: field }), "an input is a typing target");
+        ok(!keys.isTyping({ target: document.body }), "the body is not");
+        unbind();
+        window.dispatchEvent(new KeyboardEvent("keydown", { code: "KeyJ" }));
+        eq(fired, 2, "unbind releases it");
+        field.parentNode.removeChild(field);
+    });
+
+    t("scroll: the wheel moves the box against the browser's sign, and the thumb only moves when it must", function () {
+        const f = scrollFixture(false, null);
+        let was;
+
+        eq(f.body.clientHeight, 100, "the fixture has real geometry");
+        eq(f.body.scrollHeight, 500, "and real content");
+        f.body.dispatchEvent(new WheelEvent("wheel", { deltaY: -3, bubbles: true, cancelable: true }));
+        eq(f.body.scrollTop, 25, "a negative deltaY scrolls down here (the engine inverts it)");
+        f.scroller.sync();
+        eq(f.thumb.style.height, "20px", "thumb sized to the visible fraction");
+        eq(f.thumb.style.transform, "translateY(5px)", "and placed by the scroll position");
+        was = f.thumb.style.height;
+        f.scroller.sync();
+        eq(f.thumb.style.height, was, "an unchanged thumb is not rewritten");
+        f.body.dispatchEvent(new WheelEvent("wheel", { deltaY: 3, bubbles: true, cancelable: true }));
+        eq(f.body.scrollTop, 0, "and back up, clamped at the top");
+        ok(!f.track.classList.contains("nofit"), "the track is in use while the content overflows");
+        f.scroller.detach();
+        f.box.parentNode.removeChild(f.box);
+    });
+
+    t("scroll: following sticks to the newest content until you scroll away", function () {
+        const seen = [];
+        const f = scrollFixture(true, function (on) { seen.push(on); });
+
+        f.scroller.toBottom();
+        eq(f.body.scrollTop, 400, "at the bottom");
+        ok(f.scroller.following(), "still following");
+        f.scroller.scrollBy(-100);
+        ok(!f.scroller.following(), "scrolling away stops it");
+        eq(seen.length, 1, "the mod is told once");
+        eq(seen[0], false, "that following stopped");
+        f.scroller.scrollBy(100);
+        ok(f.scroller.following(), "reaching the bottom resumes it");
+        eq(seen.length, 2, "and told again");
+        f.scroller.detach();
+        f.box.parentNode.removeChild(f.box);
+    });
+
+    t("scroll: the thumb is dragged on the window, and detach lets go of everything", function () {
+        const f = scrollFixture(false, null);
+
+        f.scroller.sync();
+        f.thumb.dispatchEvent(new MouseEvent("mousedown", { clientY: 0, bubbles: true, cancelable: true }));
+        ok(f.track.classList.contains("dragging"), "the track knows it is being dragged");
+        mouse("mousemove", 0, 10);
+        eq(f.body.scrollTop, 50, "the body follows the pointer, scaled by the travel");
+        mouse("mouseup", 0, 10);
+        ok(!f.track.classList.contains("dragging"), "and lets go");
+        mouse("mousemove", 0, 40);
+        eq(f.body.scrollTop, 50, "a move after the release does nothing");
+        f.track.dispatchEvent(new MouseEvent("mousedown", { clientY: 90, bubbles: true, cancelable: true }));
+        ok(f.body.scrollTop !== 50, "a press on the track itself jumps");
+        eq(f.scroller.detach(), 2, "detach releases the wheel and the track listener");
+        f.box.parentNode.removeChild(f.box);
+    });
+
+    /*
+     * In game: a mod switched off in the app drawer is detached within milliseconds of
+     * loading, while its own probes are still in flight. The capabilities probe's
+     * three-second WebSocket check then came back and re-filtered its list against a
+     * scroller that was gone -- "Cannot read properties of null (reading 'scrollBy')".
+     */
+    t("scroll: a detached scroller is inert, so work that outlives the panel cannot throw", function () {
+        const f = scrollFixture(true, null);
+
+        f.scroller.scrollBy(40);
+        eq(f.body.scrollTop, 40, "it scrolls while attached");
+        f.scroller.detach();
+        ok(f.scroller.detached(), "it knows it is detached");
+        f.scroller.scrollBy(40);
+        f.scroller.sync();
+        f.scroller.toBottom();
+        f.scroller.setFollow(false);
+        eq(f.body.scrollTop, 40, "and every call after that does nothing at all");
+        f.box.parentNode.removeChild(f.box);
+    });
+
+    t("persist: whenHudReady fires as soon as the store is there, and can be cancelled", function () {
+        const persist = ACEUIModLoader.persist;
+        const hadHud = window.HUD;
+        let fired = 0;
+        let cancel;
+
+        window.HUD = makeHud({});
+        persist.whenHudReady(function () { fired += 1; });
+        eq(fired, 1, "the store is already there: no polling at all");
+        window.HUD = undefined;
+        cancel = persist.whenHudReady(function () { fired += 1; });
+        eq(fired, 1, "nothing to report yet");
+        eq(typeof cancel, "function", "a mod that detaches first can cancel");
+        cancel();
+        window.HUD = hadHud;
+    });
 
     t("persist: local round trip, hud store when present", function () {
         window.HUD = null; localStorage.clear();
@@ -952,7 +1174,7 @@ document.addEventListener("DOMContentLoaded", function () {
             d.state.touched = false;
             eq(d.isVisible("restarty"), true, "with nothing loaded it would default back to on");
 
-            d.adoptHudStore(Date.now() + 1000);
+            d.adoptHudStore();
             eq(d.isVisible("restarty"), false, "adopted from the HUD store");
             eq(P.readLocal(d.STORE_KEY).restarty, false, "and mirrored back so the next reload is instant");
             window.HUD = null;
@@ -962,7 +1184,7 @@ document.addEventListener("DOMContentLoaded", function () {
             const d = ACEUIModLoader.drawer;
             d.setVisible("racy", false);          // user acts first
             d.state.touched = true;
-            d.adoptHudStore(Date.now() + 1000);   // disk copy turns up afterwards
+            d.adoptHudStore();                    // disk copy turns up afterwards
             eq(d.isVisible("racy"), false, "the newer choice wins over what was on disk");
         });
 

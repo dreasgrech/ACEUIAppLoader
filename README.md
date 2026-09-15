@@ -2,7 +2,7 @@
 
 The single package that lets several UI mods coexist in Assetto Corsa EVO, the
 shared library those mods are built on, and the tools that build it and install
-mods for it. Version 0.11.1.
+mods for it. Version 0.12.1.
 
 Why a loader is needed at all, and why it has this shape, is in
 [`docs/design.md`](docs/design.md); the game mechanics it relies on are
@@ -104,6 +104,26 @@ toggle and DOOM's show/hide key are both rebindable from the drawer.
 Values are written to both stores: the HUD layout container, which the game writes to disk
 and is the only thing that survives a restart, and `localStorage`, read synchronously so a
 value is there the moment a mod asks for it.
+
+## Do not write these twice
+
+Five things every panel in this project needed, and that two or three mods had each grown
+their own copy of before they moved into the library. If you are about to write one of
+them, it is already here:
+
+| you want to | use |
+|---|---|
+| scroll a list (Cohtml ignores `overflow: auto`) | `ACEUIModLoader.scroll.attach(...)` |
+| a hotkey that respects the player's setting and stays out of text boxes | `ACEUIModLoader.keys.bind(...)` |
+| recognise a key the engine may report three ways | `ACEUIModLoader.keys.is(e, "Backquote")` |
+| let go of every listener in `detach` | `ACEUIModLoader.dom.listeners()` |
+| a switch, a slider, a hotkey or a button in your own settings window | `ACEUIModLoader.settings.define(...)` |
+
+The last one matters most: a declared setting is stored in both stores, drawn in the mod's
+own window, reachable from the app drawer, and announced to the mod when it changes. A
+hand-built toggle is markup, a class, a click handler and a storage key that you then have
+to keep in step -- which is what PedalGraph's attract mode was until it became four lines
+of `define`.
 
 ## Three places to keep state
 
@@ -310,9 +330,12 @@ in this order because each builds on the previous:
 
 | File | Namespace | What it gives mods |
 |---|---|---|
-| `src/ACEUIModLoader.core.js` | `ACEUIModLoader` | `VERSION`, `page`, `log`, `logger(prefix)`, `clamp`, `el`/`close` (markup strings), `toArray`, `percentText`, `hudHidden()`, `closestWithAttribute`, `HUD_HIDDEN_CLASS` |
+| `src/ACEUIModLoader.core.js` | `ACEUIModLoader` | `VERSION`, `page`, `log`, `logger(prefix)`, `clamp`, `el`/`close` (markup strings), `toArray`, `percentText`, `errorText(e)`, `safely(what, fn)`, `hudHidden()`, `closestWithAttribute`, `HUD_HIDDEN_CLASS` |
 | `src/ACEUIModLoader.console.js` | `ACEUIModLoader.console` | hooks `console.log/info/debug/warn/error` before the stock bundle runs (originals still called, nothing echoed), ring buffer of the last 500 `{seq, t, level, text}` entries, uncaught errors and unhandled rejections captured, `entries()`, `subscribe(fn)`, `capture(level, text)`, `clear()`, `format(value)` |
-| `src/ACEUIModLoader.persist.js` | `ACEUIModLoader.persist` | three stores: the stock HUD layout store (`HUD.elementModified` / `HUD.StoredData`, saved by the game on HUD close), `localStorage`, and the engine's own key/value container under a top-level key of the mod's choosing: `readHud`, `writeHud`, `hudAvailable`, `readLocal`, `writeLocal`, `removeLocal`, `save(hudId, key, data)`, `storeLoaded`, `readStore`, `writeStore`, `removeStore` |
+| `src/ACEUIModLoader.dom.js` | `ACEUIModLoader.dom` | `make(tag, props, text)` / `div`, `css`, `setClass`, `clear`, `on(target, type, fn)` returning its own undo, `listeners()` -- a bag whose `off()` drops every listener it added -- and `THEME`, the one palette every loader-drawn surface uses |
+| `src/ACEUIModLoader.keys.js` | `ACEUIModLoader.keys` | `is(e, name)` (matches `code`, the character `key` sends, and the legacy `keyCode` the stock bundle reads), `nameOf(e)`, `isTyping(e)`, `bind(keyOrGetter, handler)` -> unbind: a hotkey that follows a key kept in settings and never fires while the player is typing; `CODES`, `ALIASES` |
+| `src/ACEUIModLoader.scroll.js` | `ACEUIModLoader.scroll` | `attach({body, track, thumb, follow, nofitClass, draggingClass, onFollow})`: the wheel (whose sign Cohtml inverts), a thumb written only when its geometry changes, click-to-jump on the track, drag on the window, and the follow-the-newest rule; `sync`, `scrollBy`, `toBottom`, `setFollow`, `invalidate`, `detach` |
+| `src/ACEUIModLoader.persist.js` | `ACEUIModLoader.persist` | three stores: the stock HUD layout store (`HUD.elementModified` / `HUD.StoredData`, saved by the game on HUD close), `localStorage`, and the engine's own key/value container under a top-level key of the mod's choosing: `readHud`, `writeHud`, `hudAvailable`, `readLocal`, `writeLocal`, `removeLocal`, `save(hudId, key, data)`, `whenHudReady(cb, {pollMs, waitMs, onTimeout})`, `storeLoaded`, `readStore`, `writeStore`, `removeStore` |
 | `src/ACEUIModLoader.panel.js` | `ACEUIModLoader.panel` | `attach(root, {hudId, storageKey, log, onSaved})`: drag inside the HUD container, clamped; position persisted as screen fractions; hidden until the stored position is applied (immediate `localStorage`, then the HUD store has the last word in `update(panel, now)`); `data-nodrag` on descendants that must not start a drag; `detach` |
 | `src/ACEUIModLoader.loop.js` | `ACEUIModLoader.loop` | `start(onFrame)` / `stop(handle)`; `sampler(hz, maxGapMs)` + `advance(sampler, now, onSample)` for fixed-rate sampling independent of frame rate, returning the 0..1 fraction towards the next sample |
 | `src/ACEUIModLoader.loader.js` | `ACEUIModLoader.loader` | mod discovery through the game's video preset list, the `engine.on` wrapper that hides markers from the stock presets menu, root creation, mod injection, `mod(name)`; aliases `ACEUIModLoader.mod`, `.ready(cb)`, `.mods`, `.addScript`, `.addStylesheet`, `.ROOT` |

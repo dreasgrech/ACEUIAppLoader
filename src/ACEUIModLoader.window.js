@@ -43,10 +43,7 @@ ACEUIModLoader.window = (function () {
     const HUD_SUFFIX = "_window";
     const LOCAL_PREFIX = "acewindow.";
 
-    const INK = "rgba(255, 255, 255, 0.85)";
-    const INK_DIM = "rgba(255, 255, 255, 0.5)";
-    const PANEL_BG = "rgba(0, 0, 0, 0.92)";
-    const HEADER_BG = "#1c1e1f";
+    const THEME = ACEUIModLoader.dom.THEME;
 
     const NO_DRAG_ATTR = ACEUIModLoader.panel.NO_DRAG_ATTR;
 
@@ -54,19 +51,7 @@ ACEUIModLoader.window = (function () {
     const open_windows = {};
     let loop = null;
 
-    const css = function (node, props) {
-        Object.keys(props).forEach(function (key) { node.style[key] = props[key]; });
-
-        return node;
-    };
-
-    const make = function (tag, props, text) {
-        const node = css(document.createElement(tag), props || {});
-
-        if (text !== undefined) { node.textContent = text; }
-
-        return node;
-    };
+    const make = ACEUIModLoader.dom.make;
 
     const ids = function () {
         return Object.keys(open_windows);
@@ -109,11 +94,7 @@ ACEUIModLoader.window = (function () {
         stopLoop();
 
         if (typeof win.options.onClose === "function") {
-            try {
-                win.options.onClose(id);
-            } catch (e) {
-                ACEUIModLoader.log("[window] " + id + " onClose failed: " + (e && e.message ? e.message : e));
-            }
+            ACEUIModLoader.safely("[window] " + id + " onClose", function () { win.options.onClose(id); });
         }
 
         return true;
@@ -148,11 +129,11 @@ ACEUIModLoader.window = (function () {
             width: opts.width || DEFAULT_WIDTH,
             display: "flex",
             flexDirection: "column",
-            background: PANEL_BG,
+            background: THEME.panelBg,
             border: "2px solid transparent",
             borderRadius: "0.25rem",
-            color: INK,
-            fontFamily: "var(--font-family-main)",
+            color: THEME.ink,
+            fontFamily: THEME.font,
             fontSize: "0.8rem",
             zIndex: Z_INDEX,
             cursor: "pointer"
@@ -163,18 +144,18 @@ ACEUIModLoader.window = (function () {
             alignItems: "center",
             justifyContent: "space-between",
             padding: "0.4rem 0.6rem",
-            background: HEADER_BG,
+            background: THEME.headerBg,
             borderRadius: "0.25rem 0.25rem 0 0"
         });
         const titleNode = make("span", {
-            color: "#fff",
+            color: THEME.white,
             fontSize: "0.75rem",
             fontWeight: "700",
             letterSpacing: "0.04em"
         }, opts.title || id);
         const shut = make("span", {
             padding: "0 0.3rem",
-            color: INK_DIM,
+            color: THEME.inkDim,
             fontWeight: "700",
             cursor: "pointer"
         }, CLOSE_TEXT);
@@ -213,11 +194,7 @@ ACEUIModLoader.window = (function () {
         startLoop();
 
         if (typeof opts.onOpen === "function") {
-            try {
-                opts.onOpen(win);
-            } catch (e) {
-                ACEUIModLoader.log("[window] " + id + " onOpen failed: " + (e && e.message ? e.message : e));
-            }
+            ACEUIModLoader.safely("[window] " + id + " onOpen", function () { opts.onOpen(win); });
         }
 
         return win;

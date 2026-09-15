@@ -329,7 +329,7 @@ ACEUIModLoader.loader = (function () {
         try {
             entry.detach(entry.instance);
         } catch (e) {
-            log("mod " + name + " detach threw: " + (e && e.message ? e.message : e));
+            log("mod " + name + " detach threw: " + ACEUIModLoader.errorText(e));
         }
 
         entry.instance = null;

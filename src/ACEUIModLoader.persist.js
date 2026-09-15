@@ -21,6 +21,9 @@
 ACEUIModLoader.persist = (function () {
 
     const DEFAULT_LAYOUT = "default";
+    /** How often, and for how long, whenHudReady looks for the store. */
+    const POLL_MS = 50;
+    const WAIT_MS = 8000;
 
     /** The stock HUD's element map for the current layout, or null when not ready. */
     const hudElements = function () {
@@ -147,6 +150,46 @@ ACEUIModLoader.persist = (function () {
         return true;
     };
 
+    /**
+     * Call `onReady` once the stock HUD's layout store exists, or `onTimeout` (if given)
+     * when it never turns up. Three separate pollers for this had grown in the library --
+     * the drawer waiting to adopt stored switches, input waiting for `ksUI`, the panel
+     * checking every frame -- each with its own interval and deadline. The store appears
+     * a little after mod scripts run, so this is the shape every one of them needed.
+     *
+     * Returns a cancel function, for a mod that detaches before the store shows up.
+     */
+    const whenHudReady = function (onReady, options) {
+        const opts = options || {};
+        const pollMs = opts.pollMs || POLL_MS;
+        const deadline = Date.now() + (opts.waitMs || WAIT_MS);
+        const handle = { cancelled: false, timer: 0 };
+        const poll = function () {
+            if (handle.cancelled) { return; }
+
+            if (hudAvailable()) {
+                onReady();
+
+                return;
+            }
+
+            if (Date.now() > deadline) {
+                if (typeof opts.onTimeout === "function") { opts.onTimeout(); }
+
+                return;
+            }
+
+            handle.timer = window.setTimeout(poll, pollMs);
+        };
+
+        poll();
+
+        return function () {
+            handle.cancelled = true;
+            window.clearTimeout(handle.timer);
+        };
+    };
+
     /** Write to both stores; returns the names of the ones that took it, for logging. */
     const save = function (hudId, localKey, data) {
         const where = [];
@@ -161,6 +204,7 @@ ACEUIModLoader.persist = (function () {
     return {
         hudElements: hudElements,
         hudAvailable: hudAvailable,
+        whenHudReady: whenHudReady,
         readHud: readHud,
         writeHud: writeHud,
         readLocal: readLocal,

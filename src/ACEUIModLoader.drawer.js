@@ -67,15 +67,8 @@ ACEUIModLoader.drawer = (function () {
     /** Above the stock HUD, below nothing in particular; the HUD does not use z-index much. */
     const Z_INDEX = "9000";
 
-    const INK = "rgba(255, 255, 255, 0.85)";
-    const INK_DIM = "rgba(255, 255, 255, 0.45)";
-    const INK_OFF = "rgba(255, 255, 255, 0.3)";
-    const ACCENT = "#bd0000";
-    const ON_COLOUR = "#44ea78";
-    const PANEL_BG = "rgba(0, 0, 0, 0.92)";
-    const HEADER_BG = "#1c1e1f";
-    const ROW_HOVER = "rgba(255, 255, 255, 0.08)";
-    const BORDER = "1px solid rgba(255, 255, 255, 0.1)";
+    /** One palette for every surface the loader draws; see ACEUIModLoader.dom. */
+    const THEME = ACEUIModLoader.dom.THEME;
 
     const TITLE_TEXT = "APPS";
     /**
@@ -120,16 +113,10 @@ ACEUIModLoader.drawer = (function () {
 
     // ---- tiny DOM helpers ----------------------------------------------------------
 
-    const css = function (node, props) {
-        Object.keys(props).forEach(function (name) { node.style[name] = props[name]; });
+    const css = ACEUIModLoader.dom.css;
+    const div = ACEUIModLoader.dom.div;
 
-        return node;
-    };
-
-    const div = function (props) {
-        return css(document.createElement("div"), props || {});
-    };
-
+    /** Set the text of an element we already have; `dom.make` covers the create-and-fill case. */
     const text = function (node, value) {
         node.textContent = value;
 
@@ -190,10 +177,10 @@ ACEUIModLoader.drawer = (function () {
         const on = isVisible(app.name);
 
         css(app.box, {
-            background: on ? ON_COLOUR : "transparent",
-            borderColor: on ? ON_COLOUR : INK_OFF
+            background: on ? THEME.on : "transparent",
+            borderColor: on ? THEME.on : THEME.inkOff
         });
-        app.label.style.color = on ? INK : INK_OFF;
+        app.label.style.color = on ? THEME.ink : THEME.inkOff;
     };
 
     const setVisible = function (name, on) {
@@ -219,30 +206,24 @@ ACEUIModLoader.drawer = (function () {
     };
 
     /**
-     * The HUD layout container is the only store that survives a game restart, but it
-     * appears a little after mod scripts run, so it cannot be read at load time. Poll for
-     * it, adopt it once, and mirror it into localStorage so the *next* HUD reload in this
-     * session hides switched-off apps instantly. A switch the user flipped in the
-     * meantime wins -- their intent is newer than anything on disk.
+     * Take the switches from the HUD layout container -- the only store that survives a
+     * game restart -- and mirror them into localStorage, so the *next* HUD reload in this
+     * session hides switched-off apps instantly. A switch the user flipped in the meantime
+     * wins: their intent is newer than anything on disk.
+     *
+     * The container appears a little after mod scripts run, so this is called through
+     * `persist.whenHudReady` rather than polling for it here.
      */
-    const adoptHudStore = function (deadline) {
-        if (state.touched) { return; }
+    const adoptHudStore = function () {
+        const stored = state.touched ? null : persist.readHud(HUD_ID);
 
-        if (persist.hudAvailable()) {
-            const stored = persist.readHud(HUD_ID);
+        if (!stored) { return false; }
 
-            if (stored) {
-                state.visible = stored;
-                persist.writeLocal(STORE_KEY, stored);
-                refreshAll();
-            }
+        state.visible = stored;
+        persist.writeLocal(STORE_KEY, stored);
+        refreshAll();
 
-            return;                 // the store is ready; nothing more to wait for
-        }
-
-        if (Date.now() > deadline) { return; }
-
-        window.setTimeout(function () { adoptHudStore(deadline); }, HUD_POLL_MS);
+        return true;
     };
 
     const toggleApp = function (name) {
@@ -287,12 +268,12 @@ ACEUIModLoader.drawer = (function () {
             try {
                 state.options[app.name](app.pane);
             } catch (e) {
-                text(app.pane, "options failed: " + (e && e.message ? e.message : e));
+                text(app.pane, "options failed: " + ACEUIModLoader.errorText(e));
             }
         }
 
         app.pane.style.display = showing ? "none" : "";
-        app.gear.style.color = showing ? INK_DIM : ACCENT;
+        app.gear.style.color = showing ? THEME.inkDim : THEME.accent;
     };
 
     // ---- opening and closing -------------------------------------------------------
@@ -348,12 +329,12 @@ ACEUIModLoader.drawer = (function () {
             width: "0.6rem",
             height: "0.6rem",
             marginRight: "0.5rem",
-            border: "1px solid " + INK_OFF,
+            border: "1px solid " + THEME.inkOff,
             borderRadius: "0.15rem"
         });
         const label = css(text(document.createElement("span"), app.title), {
             flex: "1 1 auto",
-            color: INK,
+            color: THEME.ink,
             fontSize: "0.75rem",
             overflow: "hidden",
             textOverflow: "ellipsis",
@@ -363,7 +344,7 @@ ACEUIModLoader.drawer = (function () {
             flex: "0 0 auto",
             marginLeft: "0.4rem",
             padding: "0 0.2rem",
-            color: INK_DIM,
+            color: THEME.inkDim,
             fontSize: "0.8rem",
             display: state.options[app.name] || state.openers[app.name] ? "" : "none"
         });
@@ -372,7 +353,7 @@ ACEUIModLoader.drawer = (function () {
         row.appendChild(label);
         row.appendChild(gear);
 
-        row.addEventListener("mouseenter", function () { row.style.background = ROW_HOVER; });
+        row.addEventListener("mouseenter", function () { row.style.background = THEME.hoverBg; });
         row.addEventListener("mouseleave", function () { row.style.background = "transparent"; });
         row.addEventListener("click", function (e) {
             if (e.target !== gear) {
@@ -398,7 +379,7 @@ ACEUIModLoader.drawer = (function () {
     const buildStatus = function (app) {
         return css(text(document.createElement("div"), app.status), {
             padding: "0 0.6rem 0.3rem 1.7rem",
-            color: INK_DIM,
+            color: THEME.inkDim,
             fontSize: "0.6rem"
         });
     };
@@ -411,11 +392,11 @@ ACEUIModLoader.drawer = (function () {
             status: entry.status,
             filled: false
         };
-        const holder = div({ borderBottom: BORDER });
+        const holder = div({ borderBottom: THEME.border });
         const pane = div({
             display: "none",
             padding: "0.2rem 0.6rem 0.5rem 1.7rem",
-            color: INK_DIM,
+            color: THEME.inkDim,
             fontSize: "0.7rem"
         });
 
@@ -443,11 +424,11 @@ ACEUIModLoader.drawer = (function () {
             width: PANEL_WIDTH,
             display: "flex",
             flexDirection: "column",
-            background: PANEL_BG,
-            borderLeft: BORDER,
+            background: THEME.panelBg,
+            borderLeft: THEME.border,
             borderRadius: "0.25rem 0 0 0.25rem",
-            color: INK,
-            fontFamily: "var(--font-family-main)",
+            color: THEME.ink,
+            fontFamily: THEME.font,
             zIndex: Z_INDEX,
             transform: "translateX(100%)",
             opacity: "0",
@@ -461,10 +442,10 @@ ACEUIModLoader.drawer = (function () {
             alignItems: "baseline",
             justifyContent: "space-between",
             padding: "0.45rem 0.6rem",
-            background: HEADER_BG
+            background: THEME.headerBg
         });
         const list = div({ flex: "1 1 auto", overflow: "hidden" });
-        const count = css(document.createElement("span"), { color: INK_DIM, fontSize: "0.65rem" });
+        const count = css(document.createElement("span"), { color: THEME.inkDim, fontSize: "0.65rem" });
         const hot = div({
             position: "fixed",
             top: "0",
@@ -498,7 +479,7 @@ ACEUIModLoader.drawer = (function () {
 
         if (!mods.length) {
             list.appendChild(css(text(document.createElement("div"), EMPTY_TEXT), {
-                padding: "0.5rem 0.6rem", color: INK_DIM, fontSize: "0.65rem"
+                padding: "0.5rem 0.6rem", color: THEME.inkDim, fontSize: "0.65rem"
             }));
         }
 
@@ -524,7 +505,7 @@ ACEUIModLoader.drawer = (function () {
     };
 
     // the HUD store shows up shortly after this file runs; adopt it when it does
-    adoptHudStore(Date.now() + HUD_WAIT_MS);
+    persist.whenHudReady(adoptHudStore, { pollMs: HUD_POLL_MS, waitMs: HUD_WAIT_MS });
 
     /** Build once the loader knows what is installed. */
     if (typeof ACEUIModLoader.ready === "function") {

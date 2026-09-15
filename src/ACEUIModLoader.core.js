@@ -13,7 +13,7 @@
 const ACEUIModLoader = (function () {
 
     /** Loader/library version -- keep in step with the VERSION file at the repo root. */
-    const VERSION = "0.11.1";
+    const VERSION = "0.12.1";
 
     /** Prefix of every loader log line; the game log and check_ingame_log.py grep for it. */
     const LOG_PREFIX = "[ACEUIModLoader]";
@@ -65,6 +65,34 @@ const ACEUIModLoader = (function () {
         return Math.round(value * PERCENT_SCALE) + "%";
     };
 
+    /**
+     * What to print when something throws. `(e && e.message ? e.message : e)` was written
+     * out in eight places across the library before this existed, and a caught error that
+     * is not an Error at all (a string, a DOMException) still has to read sensibly.
+     */
+    const errorText = function (e) {
+        if (!e) { return String(e); }
+
+        if (e.message) { return e.name ? e.name + ": " + e.message : e.message; }
+
+        return String(e);
+    };
+
+    /**
+     * Run someone else's callback without letting it take the caller down: a mod's
+     * settings listener, a window's onClose, a drawer options pane. Returns what the
+     * function returned, or undefined when it threw -- and says where in the log.
+     */
+    const safely = function (what, fn) {
+        try {
+            return fn();
+        } catch (e) {
+            log(what + " failed: " + errorText(e));
+        }
+
+        return undefined;
+    };
+
     /** True while the stock HUD is toggled off; mods keep recording but stop drawing. */
     const hudHidden = function () {
         return Boolean(document.body) && document.body.classList.contains(HUD_HIDDEN_CLASS);
@@ -100,6 +128,8 @@ const ACEUIModLoader = (function () {
         close: close,
         toArray: toArray,
         percentText: percentText,
+        errorText: errorText,
+        safely: safely,
         hudHidden: hudHidden,
         closestWithAttribute: closestWithAttribute
     };

@@ -62,31 +62,15 @@ ACEUIModLoader.settings = (function () {
     const WINDOW_ID_SUFFIX = ".settings";
     const WINDOW_WIDTH = "17rem";
 
-    const INK = "rgba(255, 255, 255, 0.85)";
-    const INK_DIM = "rgba(255, 255, 255, 0.5)";
-    const ON_COLOUR = "#44ea78";
-    const OFF_COLOUR = "rgba(255, 255, 255, 0.3)";
-    const CONTROL_BG = "rgba(255, 255, 255, 0.08)";
-    const CONTROL_BORDER = "1px solid rgba(255, 255, 255, 0.18)";
+    const THEME = ACEUIModLoader.dom.THEME;
 
     const persist = ACEUIModLoader.persist;
 
     /** name -> { specs, values, listeners } */
     const mods = {};
 
-    const css = function (node, props) {
-        Object.keys(props).forEach(function (key) { node.style[key] = props[key]; });
-
-        return node;
-    };
-
-    const make = function (tag, props, text) {
-        const node = css(document.createElement(tag), props || {});
-
-        if (text !== undefined) { node.textContent = text; }
-
-        return node;
-    };
+    const css = ACEUIModLoader.dom.css;
+    const make = ACEUIModLoader.dom.make;
 
     const hudId = function (mod) {
         return HUD_PREFIX + mod + HUD_SUFFIX;
@@ -162,11 +146,9 @@ ACEUIModLoader.settings = (function () {
         if (!held) { return; }
 
         held.listeners.forEach(function (listener) {
-            try {
+            ACEUIModLoader.safely("[settings] " + mod + " listener", function () {
                 listener(key, value, held.values);
-            } catch (e) {
-                ACEUIModLoader.log("[settings] " + mod + " listener failed: " + (e && e.message ? e.message : e));
-            }
+            });
         });
     };
 
@@ -246,14 +228,14 @@ ACEUIModLoader.settings = (function () {
         justifyContent: "space-between",
         padding: "0.2rem 0",
         fontSize: "0.68rem",
-        color: INK
+        color: THEME.ink
     };
 
     const buttonStyle = {
         padding: "0.1rem 0.4rem",
         marginLeft: "0.25rem",
-        background: CONTROL_BG,
-        border: CONTROL_BORDER,
+        background: THEME.controlBg,
+        border: THEME.controlBorder,
         borderRadius: "0.2rem",
         color: "#fff",
         cursor: "pointer",
@@ -273,7 +255,7 @@ ACEUIModLoader.settings = (function () {
             display: "inline-block",
             width: "0.6rem",
             height: "0.6rem",
-            border: "1px solid " + OFF_COLOUR,
+            border: "1px solid " + THEME.inkOff,
             borderRadius: "0.15rem",
             cursor: "pointer"
         });
@@ -281,8 +263,8 @@ ACEUIModLoader.settings = (function () {
         repaint.push(function () {
             const on = Boolean(get(mod, spec.key));
 
-            box.style.background = on ? ON_COLOUR : "transparent";
-            box.style.borderColor = on ? ON_COLOUR : OFF_COLOUR;
+            box.style.background = on ? THEME.on : "transparent";
+            box.style.borderColor = on ? THEME.on : THEME.inkOff;
         });
 
         box.addEventListener("click", function () { set(mod, spec.key, !get(mod, spec.key)); });
@@ -296,7 +278,7 @@ ACEUIModLoader.settings = (function () {
      */
     const rangeControl = function (mod, spec, repaint) {
         const wrap = make("span", { display: "flex", flexDirection: "row", alignItems: "center" });
-        const value = make("span", { minWidth: "2.2rem", textAlign: "right", color: INK_DIM });
+        const value = make("span", { minWidth: "2.2rem", textAlign: "right", color: THEME.inkDim });
         const step = typeof spec.step === "number" ? spec.step : 1;
         const digits = typeof spec.digits === "number" ? spec.digits : 2;
         const nudge = function (by) {
@@ -330,11 +312,11 @@ ACEUIModLoader.settings = (function () {
         const node = css(document.createElement("input"), {
             width: "6rem",
             padding: "0.1rem 0.3rem",
-            background: CONTROL_BG,
-            border: CONTROL_BORDER,
+            background: THEME.controlBg,
+            border: THEME.controlBorder,
             borderRadius: "0.2rem",
             color: "#fff",
-            fontFamily: "var(--font-family-main)",
+            fontFamily: THEME.font,
             fontSize: "0.68rem"
         });
 
@@ -380,11 +362,9 @@ ACEUIModLoader.settings = (function () {
         return button(spec.button || "Run", function () {
             if (typeof spec.press !== "function") { return; }
 
-            try {
+            ACEUIModLoader.safely("[settings] " + mod + " action " + spec.key, function () {
                 spec.press(mod);
-            } catch (e) {
-                ACEUIModLoader.log("[settings] " + mod + " action " + spec.key + " failed: " + (e && e.message ? e.message : e));
-            }
+            });
         });
     };
 
@@ -393,7 +373,7 @@ ACEUIModLoader.settings = (function () {
      * anything on the page repaints, so it can show live state.
      */
     const infoControl = function (mod, spec, repaint) {
-        const node = make("span", { color: INK_DIM });
+        const node = make("span", { color: THEME.inkDim });
 
         repaint.push(function () {
             try {
@@ -428,14 +408,14 @@ ACEUIModLoader.settings = (function () {
             const row = make("div", rowStyle);
             const control = CONTROLS[spec.type];
 
-            row.appendChild(make("span", { color: INK_DIM, marginRight: "0.5rem" }, spec.label || spec.key));
+            row.appendChild(make("span", { color: THEME.inkDim, marginRight: "0.5rem" }, spec.label || spec.key));
 
             if (control) { row.appendChild(control(mod, spec, held.repaint)); }
 
             container.appendChild(row);
 
             if (spec.hint) {
-                container.appendChild(make("div", { color: INK_DIM, fontSize: "0.6rem", paddingBottom: "0.2rem" }, spec.hint));
+                container.appendChild(make("div", { color: THEME.inkDim, fontSize: "0.6rem", paddingBottom: "0.2rem" }, spec.hint));
             }
         });
 
