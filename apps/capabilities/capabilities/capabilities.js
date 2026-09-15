@@ -5,9 +5,10 @@
  * to answer "what can JavaScript actually do inside the game's Cohtml/V8?" It runs
  * a wide battery of feature detections -- language and engine, timers, storage,
  * network, the pixel path (canvas, pixel readback, the Blob route ACEDOOM presents
- * frames with), workers, media and audio, crypto, DOM, input/gamepad, and the
- * Gameface engine bridge plus the telemetry model globals -- and shows each as
- * yes / no / partial / warn.
+ * frames with), workers, media and audio, DOM, input/gamepad, the Gameface engine
+ * bridge, and the live telemetry model globals (each with its field names and current
+ * values, so a mod can be built against what the game actually publishes) -- and shows
+ * each as yes / no / partial / warn.
  *
  * The results are also written to the game log with the mod's prefix, so
  * check_ingame_log.py can read off exactly what is available after an in-game run:
@@ -15,10 +16,11 @@
  * the panel is for reading it live. The list is long, so the body scrolls (wheel or
  * the scrollbar; drag the panel by its header).
  *
- * Two probes are *active* rather than presence-only: a fetch of a `data:` URI and a
- * Blob-URL Worker round-trip. Both are local (no network, no file lookup), both run
- * behind a timeout, and the worker is always terminated -- so nothing here can hang.
- * The summary is recomputed once those settle, so its counts are accurate.
+ * Three probes are *active* rather than presence-only: a fetch of a `data:` URI, a
+ * Blob-URL Worker round-trip, and a WebSocket connection to a loopback port. All are
+ * local (no external service, no file lookup), each runs behind a timeout, and the
+ * worker and the socket are always closed -- so nothing here can hang. The summary is
+ * recomputed once those settle, so its counts are accurate.
  *
  * Cohtml rules: the panel is built once at attach and never rebuilt per frame; the
  * only per-frame work is ACEUIModLoader.panel.update settling the restored position.
@@ -387,6 +389,48 @@ const CapabilitiesProbe = (function () {
         return { status: YES, detail: keys.length + ": " + keys.join(", ") };
     };
 
+    /** A compact one-token preview of a field value, for the model inspector rows. */
+    const previewValue = function (v) {
+        const t = typeof v;
+
+        if (v === null) { return "null"; }
+        if (t === "number" || t === "boolean") { return String(v); }
+        if (t === "string") { return "\"" + v.slice(0, 16) + "\""; }
+        if (t === "object") { return Array.isArray(v) ? "[" + v.length + "]" : "{obj}"; }
+
+        return t;
+    };
+
+    /**
+     * Inspect one live telemetry model global by name: list its field names with a
+     * current value each, so a dashboard can be built against the real schema. Absent
+     * outside a session (WARN), populated in game (YES). This is the point of the
+     * "Telemetry models (live)" category -- the field list lands in the log.
+     */
+    const inspectModel = function (path) {
+        return function () {
+            const model = resolve(path);
+            let keys = [];
+            let pairs = [];
+
+            if (model === null || model === undefined) { return { status: WARN, detail: "absent (not in a session yet?)" }; }
+
+            if (typeof model !== "object") { return { status: PARTIAL, detail: "not an object: typeof " + typeof model }; }
+
+            try {
+                keys = Object.keys(model);
+            } catch (e) {
+                return { status: WARN, detail: "cannot enumerate" };
+            }
+
+            if (!keys.length) { return { status: WARN, detail: "0 fields (not populated yet)" }; }
+
+            pairs = keys.map(function (k) { return k + "=" + previewValue(model[k]); });
+
+            return { status: YES, detail: keys.length + " fields -- " + pairs.join(", ") };
+        };
+    };
+
     // ---- active probes (deferred, timed, never hang) -------------------------------
 
     /** Fetch a local data: URI: proves fetch actually functions without any network. */
@@ -476,6 +520,60 @@ const CapabilitiesProbe = (function () {
         }
     };
 
+    /**
+     * Actually open a WebSocket to a loopback port. This upgrades "the constructor
+     * exists" to "the socket stack initiates a real TCP connection", without touching
+     * any external service. Nothing listens on the port, so we expect a fast refuse
+     * (error / close) -- still proof the stack is live. An `open` would need a listener;
+     * a full round-trip needs a real endpoint (a local relay you run), a separate step.
+     */
+    const socketConnectProbe = function (setResult) {
+        if (typeof window.WebSocket !== "function") { setResult(NO, "no WebSocket"); return; }
+
+        let settled = false;
+        let socket = null;
+
+        const finishProbe = function (status, detail) {
+            if (settled) { return; }
+
+            settled = true;
+
+            if (socket && typeof socket.close === "function") {
+                try { socket.close(); } catch (e) { log("socket close threw: " + (e && e.message || e)); }
+            }
+
+            setResult(status, detail);
+        };
+
+        const timer = window.setTimeout ? window.setTimeout(function () { finishProbe(WARN, "no open, close or error in 3s (inconclusive)"); }, 3000) : 0;
+        const clear = function () { if (timer && window.clearTimeout) { window.clearTimeout(timer); } };
+
+        try {
+            // slashes from char codes so the linter's comment-stripper does not eat the line
+            const url = "ws:" + String.fromCharCode(47, 47) + "127.0.0.1:47800";
+
+            socket = new WebSocket(url);
+
+            socket.onopen = function () {
+                clear();
+                finishProbe(YES, "connected -- something is listening on 127.0.0.1:47800");
+            };
+
+            socket.onerror = function () {
+                clear();
+                finishProbe(PARTIAL, "stack live: TCP attempted, refused (no listener) -- a real endpoint is the next step");
+            };
+
+            socket.onclose = function (e) {
+                clear();
+                finishProbe(PARTIAL, "stack live: socket closed" + (e && typeof e.code === "number" ? " (code " + e.code + ")" : "") + " -- needs a real endpoint");
+            };
+        } catch (e) {
+            clear();
+            finishProbe(NO, "threw: " + (e && e.message || e));
+        }
+    };
+
     // ---- the battery ---------------------------------------------------------------
 
     const CATEGORIES = [
@@ -540,7 +638,8 @@ const CapabilitiesProbe = (function () {
             p("RTCPeerConnection (WebRTC)", "RTCPeerConnection"),
             p("WebTransport", "WebTransport"),
             p("navigator.onLine", "navigator.onLine"),
-            active("fetch(data:) round-trip", "probing data: URI...", fetchDataProbe)
+            active("fetch(data:) round-trip", "probing data: URI...", fetchDataProbe),
+            active("WebSocket connect (loopback)", "opening ws to 127.0.0.1...", socketConnectProbe)
         ] },
         { cat: "Graphics & pixel path", checks: [
             f("canvas 2d context", canvas2d),
@@ -614,6 +713,16 @@ const CapabilitiesProbe = (function () {
             p("HUD (layout store)", "HUD"),
             p("ModelCurrentCar", "ModelCurrentCar"),
             f("Model* globals", modelGlobals)
+        ] },
+        { cat: "Telemetry models (live)", checks: [
+            f("ModelCurrentCar", inspectModel("ModelCurrentCar")),
+            f("ModelTiming", inspectModel("ModelTiming")),
+            f("ModelUIState", inspectModel("ModelUIState")),
+            f("ModelUISessionState", inspectModel("ModelUISessionState")),
+            f("ModelUIRadarState", inspectModel("ModelUIRadarState")),
+            f("ModelCarsOnTrack", inspectModel("ModelCarsOnTrack")),
+            f("ModelUIDriverState", inspectModel("ModelUIDriverState")),
+            f("ModelLeaderboard", inspectModel("ModelLeaderboard"))
         ] }
     ];
 
