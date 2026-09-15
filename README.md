@@ -2,7 +2,7 @@
 
 The single package that lets several UI mods coexist in Assetto Corsa EVO, the
 shared library those mods are built on, and the tools that build it and install
-mods for it. Version 0.9.1.
+mods for it. Version 0.10.0.
 
 Why a loader is needed at all, and why it has this shape, is in
 [`docs/design.md`](docs/design.md); the game mechanics it relies on are
@@ -83,6 +83,12 @@ mod. It can also be driven directly: `settings.open(mod)`, `.close(mod)`, `.togg
 unfold inside the drawer: with more than a couple of mods an inline pane pushes every row
 below it down the list and the drawer stops being usable. `registerOptions` still exists
 for a small bespoke pane; `registerOpener` is what the settings module uses.
+
+Besides the value types there are two that carry no value: **`action`** is a button the
+mod handles (`{ type: "action", label, button, press: fn }`) and **`info`** is a line the
+mod computes (`{ type: "info", label, text: fn }`, recomputed on every repaint, so it can
+show live state). Without those a mod needs a hand-built pane for a single button, which
+is exactly what the settings page is meant to replace.
 
 **Types are limited to controls this engine is known to render.** Cohtml is not a browser:
 `<input type="range">` and `<select>` are unproven here, so a `range` is a pair of −/+

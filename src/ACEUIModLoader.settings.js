@@ -42,7 +42,13 @@
  */
 ACEUIModLoader.settings = (function () {
 
-    const TYPES = ["toggle", "range", "choice", "text", "key"];
+    /**
+     * `action` and `info` carry no value: an action is a button the mod handles, an info
+     * is a line of text the mod computes. They are here because a settings page that can
+     * only hold values forces a mod back to hand-building a pane for one button.
+     */
+    const TYPES = ["toggle", "range", "choice", "text", "key", "action", "info"];
+    const VALUE_TYPES = ["toggle", "range", "choice", "text", "key"];
     const HUD_PREFIX = "hud_";
     const HUD_SUFFIX = "_settings";
     const LOCAL_PREFIX = "ace";
@@ -190,7 +196,7 @@ ACEUIModLoader.settings = (function () {
         const held = entry(mod);
         const spec = specFor(mod, key);
 
-        if (!held || !spec) { return undefined; }
+        if (!held || !spec || VALUE_TYPES.indexOf(spec.type) < 0) { return undefined; }
 
         const next = coerce(spec, value);
 
@@ -209,10 +215,14 @@ ACEUIModLoader.settings = (function () {
 
         if (!held) { return; }
 
-        held.specs.forEach(function (spec) { held.values[spec.key] = spec.value; });
+        held.specs.forEach(function (spec) {
+            if (VALUE_TYPES.indexOf(spec.type) >= 0) { held.values[spec.key] = spec.value; }
+        });
         save(mod);
         held.repaint.forEach(function (fn) { fn(); });
-        held.specs.forEach(function (spec) { notify(mod, spec.key, held.values[spec.key]); });
+        held.specs.forEach(function (spec) {
+            if (VALUE_TYPES.indexOf(spec.type) >= 0) { notify(mod, spec.key, held.values[spec.key]); }
+        });
     };
 
     const onChange = function (mod, listener) {
@@ -365,7 +375,40 @@ ACEUIModLoader.settings = (function () {
         return node;
     };
 
+    /** A button the mod handles: `{ type: "action", label, press: fn }`. */
+    const actionControl = function (mod, spec) {
+        return button(spec.button || "Run", function () {
+            if (typeof spec.press !== "function") { return; }
+
+            try {
+                spec.press(mod);
+            } catch (e) {
+                ACEUIModLoader.log("[settings] " + mod + " action " + spec.key + " failed: " + (e && e.message ? e.message : e));
+            }
+        });
+    };
+
+    /**
+     * A line the mod computes: `{ type: "info", label, text: fn }`. Recomputed whenever
+     * anything on the page repaints, so it can show live state.
+     */
+    const infoControl = function (mod, spec, repaint) {
+        const node = make("span", { color: INK_DIM });
+
+        repaint.push(function () {
+            try {
+                node.textContent = typeof spec.text === "function" ? String(spec.text(mod)) : String(spec.text || "");
+            } catch (e) {
+                node.textContent = "?";
+            }
+        });
+
+        return node;
+    };
+
     const CONTROLS = {
+        action: actionControl,
+        info: infoControl,
         toggle: toggleControl,
         range: rangeControl,
         choice: choiceControl,
@@ -461,7 +504,9 @@ ACEUIModLoader.settings = (function () {
         const saved = stored(mod);
         const values = {};
 
-        list.forEach(function (spec) { values[spec.key] = coerce(spec, saved[spec.key]); });
+        list.forEach(function (spec) {
+            if (VALUE_TYPES.indexOf(spec.type) >= 0) { values[spec.key] = coerce(spec, saved[spec.key]); }
+        });
 
         mods[mod] = {
             specs: list,
