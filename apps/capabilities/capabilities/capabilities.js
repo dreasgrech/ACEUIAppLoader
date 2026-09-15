@@ -35,7 +35,11 @@ const CapabilitiesProbe = (function () {
     const close = ACEUIModLoader.close;
     const toArray = ACEUIModLoader.toArray;
     const clamp = ACEUIModLoader.clamp;
+    const persist = ACEUIModLoader.persist;
     const log = me.log;
+
+    const FILTER_ATTR = "data-filter";
+    const FILTER_KEY = me.key("filters");
 
     /** Scrolling: Cohtml does not scroll an overflowing box by itself (see ACEDevConsole). */
     const WHEEL_STEP = 0.25;
@@ -57,6 +61,12 @@ const CapabilitiesProbe = (function () {
         summary: "cp-summary",
         tools: "cp-tools",
         btn: "cp-btn",
+        filters: "cp-filters",
+        filter: "cp-filter",
+        on: "cp-on",
+        count: "cp-count",
+        search: "cp-search",
+        hidden: "cp-hidden",
         body: "cp-body",
         scroll: "cp-scroll",
         scrollbar: "cp-scrollbar",
@@ -81,6 +91,14 @@ const CapabilitiesProbe = (function () {
     STATUS_CLASS[NO] = CLASS.statusNo;
     STATUS_CLASS[PARTIAL] = CLASS.statusPartial;
     STATUS_CLASS[WARN] = CLASS.statusWarn;
+
+    /** Status filter chips (each toggles the visibility of rows with that status). */
+    const STATUS_FILTERS = [
+        { id: YES, label: "available" },
+        { id: NO, label: "unavailable" },
+        { id: PARTIAL, label: "partial" },
+        { id: WARN, label: "warn" }
+    ];
 
     const ROW_ATTR = "data-row";
     const ACT_ATTR = "data-act";
@@ -318,20 +336,6 @@ const CapabilitiesProbe = (function () {
     };
 
     // ---- functional checks: media / crypto / bridge -------------------------------
-
-    const cryptoRandom = function () {
-        const c = window.crypto;
-
-        if (!c || typeof c.getRandomValues !== "function") { return { status: NO, detail: "no getRandomValues" }; }
-
-        try {
-            c.getRandomValues(new Uint8Array(4));
-
-            return { status: YES, detail: "filled 4 bytes" };
-        } catch (e) {
-            return { status: NO, detail: "threw" };
-        }
-    };
 
     const audioElement = function () {
         if (typeof window.Audio !== "function") { return { status: NO, detail: "no Audio constructor" }; }
@@ -572,14 +576,6 @@ const CapabilitiesProbe = (function () {
             p("MediaSource", "MediaSource"),
             f("engine audio bridge", engineTrigger)
         ] },
-        { cat: "Crypto & encoding", checks: [
-            p("crypto", "crypto"),
-            f("crypto.getRandomValues", cryptoRandom),
-            p("crypto.subtle", "crypto.subtle"),
-            p("crypto.randomUUID", "crypto.randomUUID"),
-            p("btoa", "btoa"),
-            p("atob", "atob")
-        ] },
         { cat: "DOM & observers", checks: [
             p("MutationObserver", "MutationObserver"),
             p("ResizeObserver", "ResizeObserver"),
@@ -664,13 +660,31 @@ const CapabilitiesProbe = (function () {
         return el("div", CLASS.btn, attrs) + label + close("div");
     };
 
+    const filterMarkup = function (filter) {
+        const attrs = {};
+
+        attrs[FILTER_ATTR] = filter.id;
+
+        return el("div", CLASS.filter, attrs)
+            + el("span", CLASS.dot + " " + STATUS_CLASS[filter.id]) + close("span")
+            + filter.label
+            + el("span", CLASS.count) + "0" + close("span")
+            + close("div");
+    };
+
+    const searchMarkup = function () {
+        return el("input", CLASS.search, { type: "text", placeholder: "filter..." });
+    };
+
     const markup = function () {
         const scrollAttrs = {};
+        const filtersAttrs = {};
         let body = "";
         let id = 0;
 
-        // data-nodrag so scrolling or grabbing the scrollbar does not start a panel drag
+        // data-nodrag so scrolling, grabbing the scrollbar, or typing does not start a panel drag
         scrollAttrs[NODRAG_ATTR] = "";
+        filtersAttrs[NODRAG_ATTR] = "";
 
         CATEGORIES.forEach(function (category) {
             body += catMarkup(category, id);
@@ -685,6 +699,10 @@ const CapabilitiesProbe = (function () {
                 + button("rerun", "Re-run")
                 + button("log", "Log to console")
                 + close("div")
+            + el("div", CLASS.filters, filtersAttrs)
+                + STATUS_FILTERS.map(filterMarkup).join("")
+                + searchMarkup()
+                + close("div")
             + el("div", CLASS.scroll, scrollAttrs)
                 + el("div", CLASS.body) + body + close("div")
                 + el("div", CLASS.scrollbar) + el("div", CLASS.thumb) + close("div") + close("div")
@@ -698,19 +716,42 @@ const CapabilitiesProbe = (function () {
 
         if (!root.querySelector("." + CLASS.body)) { root.innerHTML = markup(); }
 
-        const rows = toArray(root.querySelectorAll("[" + ROW_ATTR + "]")).map(function (rowEl) {
+        const rows = toArray(root.querySelectorAll("[" + ROW_ATTR + "]")).map(function (rowEl, i) {
             return {
+                el: rowEl,
                 dot: rowEl.querySelector("." + CLASS.dot),
-                detail: rowEl.querySelector("." + CLASS.detail)
+                detail: rowEl.querySelector("." + CLASS.detail),
+                name: CHECKS[i] ? CHECKS[i].name : ""
             };
+        });
+
+        const cats = toArray(root.querySelectorAll("." + CLASS.cat)).map(function (catEl) {
+            return { el: catEl, rows: toArray(catEl.querySelectorAll("." + CLASS.row)) };
+        });
+
+        const filters = {};
+        const filterEls = {};
+        const stored = persist.readLocal(FILTER_KEY);
+
+        STATUS_FILTERS.forEach(function (filter) {
+            const node = root.querySelector("[" + FILTER_ATTR + "=\"" + filter.id + "\"]");
+
+            filters[filter.id] = !(stored && stored[filter.id] === false);
+            filterEls[filter.id] = { el: node, count: node.querySelector("." + CLASS.count) };
+            node.classList.toggle(CLASS.on, filters[filter.id]);
         });
 
         return {
             root: root,
             rows: rows,
+            cats: cats,
+            filters: filters,
+            filterEls: filterEls,
+            query: "",                  // lower-cased search text, "" for none
             body: root.querySelector("." + CLASS.body),
             track: root.querySelector("." + CLASS.scrollbar),
             thumb: root.querySelector("." + CLASS.thumb),
+            search: root.querySelector("." + CLASS.search),
             summary: root.querySelector("." + CLASS.summary),
             results: [],
             pending: 0,
@@ -802,6 +843,8 @@ const CapabilitiesProbe = (function () {
 
         updateSummary(state);
         logSummary(state, "probe");
+        updateFilterCounts(state);
+        applyFilters(state);
 
         state.rows.forEach(function (row, i) {
             const check = CHECKS[i];
@@ -812,6 +855,8 @@ const CapabilitiesProbe = (function () {
                     record(state, i, check.name, status, detail);
                     log("probe " + check.name + " = " + status + " (" + detail + ")");
                     updateSummary(state);
+                    updateFilterCounts(state);
+                    applyFilters(state);
                     state.pending -= 1;
 
                     if (state.pending === 0) { logSummary(state, "probe complete"); }
@@ -919,6 +964,62 @@ const CapabilitiesProbe = (function () {
         e.preventDefault();
     };
 
+    // ---- filters: status chips + search box (mirrors ACEDevConsole) ----------------
+
+    const updateFilterCounts = function (state) {
+        const counts = recount(state);
+
+        STATUS_FILTERS.forEach(function (filter) {
+            state.filterEls[filter.id].count.textContent = counts[filter.id] || 0;
+        });
+    };
+
+    const rowVisible = function (state, row, res) {
+        const status = res ? res.status : WARN;
+
+        if (state.filters[status] === false) { return false; }
+
+        if (state.query === "") { return true; }
+
+        return (row.name + " " + (res ? res.detail : "")).toLowerCase().indexOf(state.query) >= 0;
+    };
+
+    /** Apply the status chips and search text: hide rows, then hide categories left empty. */
+    const applyFilters = function (state) {
+        state.rows.forEach(function (row, i) {
+            row.el.classList.toggle(CLASS.hidden, !rowVisible(state, row, state.results[i]));
+        });
+
+        state.cats.forEach(function (cat) {
+            const anyVisible = cat.rows.some(function (r) { return !r.classList.contains(CLASS.hidden); });
+
+            cat.el.classList.toggle(CLASS.hidden, !anyVisible);
+        });
+
+        scrollBy(state, 0);   // clamp scrollTop to the new content height and re-place the thumb
+    };
+
+    const setFilter = function (state, id, on) {
+        const store = {};
+
+        state.filters[id] = on;
+        state.filterEls[id].el.classList.toggle(CLASS.on, on);
+
+        STATUS_FILTERS.forEach(function (filter) { store[filter.id] = state.filters[filter.id]; });
+        persist.writeLocal(FILTER_KEY, store);
+
+        applyFilters(state);
+    };
+
+    const onSearchChange = function (state) {
+        const query = String(state.search.value || "").trim().toLowerCase();
+
+        if (query === state.query) { return; }
+
+        state.query = query;
+        applyFilters(state);
+    };
+
     // ---- rendering -----------------------------------------------------------------
 
     /** One animation frame: settle the panel position, then size the scrollbar once layout exists. */
@@ -936,15 +1037,25 @@ const CapabilitiesProbe = (function () {
     const onClick = function (state, e) {
         const btn = ACEUIModLoader.closestWithAttribute(e.target, ACT_ATTR, state.root);
 
-        if (!btn) { return; }
+        if (btn) {
+            const act = btn.getAttribute(ACT_ATTR);
 
-        const act = btn.getAttribute(ACT_ATTR);
+            if (act === "rerun") {
+                log("re-run requested");
+                runAll(state);
+            } else if (act === "log") {
+                logAll(state);
+            }
 
-        if (act === "rerun") {
-            log("re-run requested");
-            runAll(state);
-        } else if (act === "log") {
-            logAll(state);
+            return;
+        }
+
+        const chip = ACEUIModLoader.closestWithAttribute(e.target, FILTER_ATTR, state.root);
+
+        if (chip) {
+            const id = chip.getAttribute(FILTER_ATTR);
+
+            setFilter(state, id, state.filters[id] === false);
         }
     };
 
@@ -956,12 +1067,15 @@ const CapabilitiesProbe = (function () {
             wheel: function (e) { onWheel(state, e); },
             trackDown: function (e) { onTrackDown(state, e); },
             thumbMove: function (e) { onThumbMove(state, e); },
-            thumbUp: function () { onThumbUp(state); }
+            thumbUp: function () { onThumbUp(state); },
+            searchChange: function () { onSearchChange(state); }
         };
 
         root.addEventListener("click", state.handlers.click);
         state.body.addEventListener("wheel", state.handlers.wheel);
         state.track.addEventListener("mousedown", state.handlers.trackDown);
+        state.search.addEventListener("input", state.handlers.searchChange);
+        state.search.addEventListener("keyup", state.handlers.searchChange);
 
         state.panel = ACEUIModLoader.panel.attach(root, { hudId: me.hudId, storageKey: me.storageKey, log: log });
         state.loop = ACEUIModLoader.loop.start(function (now) { tick(state, now); });
@@ -980,6 +1094,8 @@ const CapabilitiesProbe = (function () {
             state.root.removeEventListener("click", state.handlers.click);
             state.body.removeEventListener("wheel", state.handlers.wheel);
             state.track.removeEventListener("mousedown", state.handlers.trackDown);
+            state.search.removeEventListener("input", state.handlers.searchChange);
+            state.search.removeEventListener("keyup", state.handlers.searchChange);
             window.removeEventListener("mousemove", state.handlers.thumbMove);
             window.removeEventListener("mouseup", state.handlers.thumbUp);
             state.handlers = null;

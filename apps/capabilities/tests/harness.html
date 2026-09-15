@@ -46,8 +46,8 @@
         eq(state.rows.length, CapabilitiesProbe.CHECKS.length, "one row per check");
         const summary = root.querySelector(".cp-summary").textContent;
         ok(summary.indexOf("yes") >= 0, "summary names a yes count");
-        ok(state.rows[rowIndex("Promise")].dot.className.indexOf("ex-yes") >= 0, "Promise detected present");
-        ok(state.rows[rowIndex("engine audio bridge")].dot.className.indexOf("ex-no") >= 0, "engine bridge absent outside the game");
+        ok(state.rows[rowIndex("Promise")].dot.className.indexOf("cp-yes") >= 0, "Promise detected present");
+        ok(state.rows[rowIndex("engine audio bridge")].dot.className.indexOf("cp-no") >= 0, "engine bridge absent outside the game");
     });
 
     t("re-run re-probes, log dumps the report, detach stops the loop", function () {

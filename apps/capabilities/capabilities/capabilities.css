@@ -15,7 +15,7 @@
     display: flex;
     flex-direction: column;
     height: 34rem;
-    background: rgba(0, 0, 0, 0.82);
+    background: rgba(0, 0, 0, 0.94);
     border: 2px solid transparent;
     border-radius: 0.25rem;
     color: rgba(255, 255, 255, 0.85);
@@ -76,6 +76,63 @@ body.hide-hud .ace-capabilities {
     font-size: 0.7rem;
     cursor: pointer;
     user-select: none;
+}
+
+/* ---- filters: status chips + search box ----------------------------------------- */
+
+.ace-capabilities .cp-filters {
+    display: flex;
+    flex-direction: row;
+    flex-wrap: wrap;
+    align-items: center;
+    padding: 0.35rem 0.75rem;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+.ace-capabilities .cp-filter {
+    display: flex;
+    flex-direction: row;
+    align-items: center;
+    margin: 0.15rem 0.4rem 0.15rem 0;
+    padding: 0.12rem 0.5rem;
+    border: 1px solid rgba(255, 255, 255, 0.18);
+    border-radius: 0.9rem;
+    font-size: 0.7rem;
+    cursor: pointer;
+    opacity: 0.45;
+    user-select: none;
+}
+
+.ace-capabilities .cp-filter.cp-on {
+    opacity: 1;
+    background: rgba(255, 255, 255, 0.1);
+}
+
+.ace-capabilities .cp-filter .cp-dot {
+    margin-right: 0.3rem;
+}
+
+.ace-capabilities .cp-count {
+    margin-left: 0.35rem;
+    color: rgba(255, 255, 255, 0.55);
+}
+
+.ace-capabilities .cp-search {
+    flex: 1 1 6rem;
+    min-width: 5rem;
+    margin: 0.15rem 0 0.15rem auto;
+    padding: 0.18rem 0.5rem;
+    background: rgba(255, 255, 255, 0.06);
+    border: 1px solid rgba(255, 255, 255, 0.2);
+    border-radius: 0.2rem;
+    color: #fff;
+    font-family: var(--font-family-main);
+    font-size: 0.72rem;
+}
+
+.ace-capabilities .cp-row.cp-hidden,
+.ace-capabilities .cp-cat.cp-hidden {
+    display: none;
 }
 
 /* ---- body: scrolling list of categories and rows -------------------------------- */
