@@ -2,11 +2,41 @@
 
 The single package that lets several UI mods coexist in Assetto Corsa EVO, the
 shared library those mods are built on, and the tools that build it and install
-mods for it. Version 0.4.0.
+mods for it. Version 0.5.0.
 
 Why a loader is needed at all, and why it has this shape, is in
 [`docs/design.md`](docs/design.md); the game mechanics it relies on are
 documented in the `ACEGameInternals` repository.
+
+## The app drawer
+
+Every installed mod shows up in an **app drawer** that lives off the right edge of the
+screen and slides in when the pointer reaches that edge, in the spirit of Content
+Manager's app bar. Each row is a switch that shows or hides that mod, and the choice
+persists across the HUD reload on Escape/resume. A mod that failed to load still gets a
+row, saying why, rather than vanishing silently.
+
+The drawer is part of the loader rather than a mod, because the loader is the only thing
+that knows what is installed.
+
+A mod can add its own options pane, which the drawer opens from the gear on its row:
+
+```js
+ACEUIModLoader.drawer.registerOptions("telemetry", function (pane) {
+    pane.appendChild(myControls);     // called once, lazily, the first time it is opened
+});
+```
+
+If that callback throws, the failure is shown inside the pane and the rest of the drawer
+keeps working.
+
+API: `open()`, `close()`, `toggle()`, `isVisible(name)`, `setVisible(name, on)`,
+`toggleApp(name)`, `registerOptions(name, render)`, `build(mods)`.
+
+The drawer is styled with inline styles rather than a stylesheet: the loader ships as a
+single overriding file inside a package whose layout is delicate, so adding a CSS file to
+it is a risk not worth taking, and a script-created `<style>` element is unproven in this
+Cohtml build. Inline `transition` still animates the slide.
 
 ## How it works
 

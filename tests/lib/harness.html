@@ -391,6 +391,86 @@ document.addEventListener("DOMContentLoaded", function () {
         const handle = engine.on("SettingsResponseVideoPresetList", stockHandler, { tag: "stock" });
         engine.trigger("OnUICommand", "SettingsRequestVideoPresetList", { __Type: "SettingsRequestVideoPresetList", version: 0 });
 
+        t("drawer: builds a row per mod, parked off-screen behind a right-edge hot zone", function () {
+            const panel = ACEUIModLoader.drawer.build([
+                { name: "alpha", info: { title: "Alpha App" }, status: "loaded" },
+                { name: "beta", info: { title: "Beta App" }, status: "failed" }
+            ]);
+            eq(panel.style.transform, "translateX(100%)", "starts closed, off the right edge");
+            eq(panel.style.position, "fixed", "fixed to the screen, not the HUD layout");
+            ok(ACEUIModLoader.drawer.state.hot, "hot zone created");
+            eq(ACEUIModLoader.drawer.state.hot.style.right, "0px", "hot zone sits on the right edge");
+            eq(ACEUIModLoader.drawer.state.apps.length, 2, "one app per mod");
+            ok(panel.textContent.indexOf("Alpha App") >= 0, "uses the mod's title");
+            ok(panel.textContent.indexOf("failed") >= 0, "a mod that did not load says so");
+        });
+
+        t("drawer: the hot zone opens it, leaving closes it after a delay", function () {
+            const d = ACEUIModLoader.drawer;
+            d.close();
+            d.state.hot.dispatchEvent(new Event("mouseenter"));
+            eq(d.state.open, true, "pointer at the edge opens it");
+            ok(d.state.panel.style.transform.indexOf("translateX(0") === 0, "slid in");
+            d.state.panel.dispatchEvent(new Event("mouseleave"));
+            eq(d.state.open, true, "still open: the close is delayed, not instant");
+            ok(d.state.closeTimer !== 0, "a close is pending");
+            d.state.panel.dispatchEvent(new Event("mouseenter"));
+            eq(d.state.closeTimer, 0, "coming back cancels the pending close");
+            d.close();
+            eq(d.state.panel.style.transform, "translateX(100%)", "closed again");
+        });
+
+        t("drawer: a switch hides the mod's own root element and remembers the choice", function () {
+            const d = ACEUIModLoader.drawer;
+            let root = document.getElementById("alpha");
+            if (!root) {
+                root = document.createElement("div");
+                root.id = "alpha";
+                document.getElementById("center").appendChild(root);
+            }
+
+            eq(d.isVisible("alpha"), true, "on by default");
+            d.toggleApp("alpha");
+            eq(d.isVisible("alpha"), false, "switched off");
+            eq(root.style.display, "none", "the mod's root is hidden");
+            eq(ACEUIModLoader.persist.readLocal(d.STORE_KEY).alpha, false, "and the choice is persisted");
+
+            d.toggleApp("alpha");
+            eq(root.style.display, "", "switched back on, the mod's own CSS decides again");
+            eq(d.isVisible("alpha"), true);
+        });
+
+        t("drawer: a mod's options pane is built lazily, only when it is first opened", function () {
+            const d = ACEUIModLoader.drawer;
+            let built = 0;
+            d.registerOptions("alpha", function (pane) {
+                built += 1;
+                pane.appendChild(document.createTextNode("my options"));
+            });
+            const app = d.state.apps.filter(function (a) { return a.name === "alpha"; })[0];
+            eq(app.gear.style.display, "", "registering reveals the gear");
+            eq(built, 0, "nothing built until asked");
+
+            app.gear.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+            eq(built, 1, "built on first open");
+            eq(app.pane.style.display, "", "pane shown");
+            ok(app.pane.textContent.indexOf("my options") >= 0, "the mod filled it");
+
+            app.gear.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+            eq(app.pane.style.display, "none", "closes again");
+            app.gear.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+            eq(built, 1, "and is not rebuilt on reopen");
+        });
+
+        t("drawer: a mod whose options throw does not take the drawer down", function () {
+            const d = ACEUIModLoader.drawer;
+            d.registerOptions("beta", function () { throw new Error("boom"); });
+            const app = d.state.apps.filter(function (a) { return a.name === "beta"; })[0];
+            app.gear.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+            ok(app.pane.textContent.indexOf("boom") >= 0, "the failure is shown in the pane");
+            eq(d.state.apps.length, 2, "the rest of the drawer is intact");
+        });
+
         waitFor(function () { return seen !== null; }, function () {
             t("loader: stock handlers get the list without our markers", function () {
                 ok(seen, "stock handler ran");

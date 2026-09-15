@@ -41,7 +41,9 @@ class LibrarySourceTests(unittest.TestCase):
         self.assertEqual(sorted(n for n in os.listdir(SRC) if n.endswith(".js")), sorted(build_loader.LIB_ORDER))
         self.assertEqual(build_loader.LIB_ORDER[0], "ACEUIModLoader.core.js", "core defines the namespace")
         self.assertEqual(build_loader.LIB_ORDER[1], "ACEUIModLoader.console.js", "console hook must run before the stock bundle")
-        self.assertEqual(build_loader.LIB_ORDER[-1], "ACEUIModLoader.loader.js", "loader starts mods last")
+        self.assertEqual(build_loader.LIB_ORDER[-2], "ACEUIModLoader.loader.js", "loader starts mods")
+        # the drawer registers an ACEUIModLoader.ready callback, so it must load after the loader
+        self.assertEqual(build_loader.LIB_ORDER[-1], "ACEUIModLoader.drawer.js", "drawer needs ready()")
 
     def test_version_matches_version_file_and_readme(self):
         v = read(os.path.join(ROOT, "VERSION")).strip()
@@ -82,8 +84,13 @@ class LibrarySourceTests(unittest.TestCase):
 
     def test_console_hook_chains_and_never_echoes(self):
         js = self.files["ACEUIModLoader.console.js"]
-        self.assertIn('const LEVELS = ["log", "info", "debug", "warn", "error"];', js)
-        self.assertNotIn('"trace"', js, "console.trace is wrapped by the stock bundle; leave it alone")
+        # trace/dir/table are wrapped too: this file runs BEFORE the stock bundle, so when
+        # the bundle wraps console.trace itself its wrapper calls ours, which calls the
+        # original -- the line is captured once and the bundle's behaviour is unchanged.
+        self.assertIn('const LEVELS = ["log", "info", "debug", "warn", "error", "trace", "dir", "table"];', js)
+        # console.assert must only record when the condition is false, so it is wrapped apart
+        self.assertIn("if (!condition) { push(ASSERT_LEVEL, ASSERT_PREFIX + formatArgs(args)); }", js)
+        self.assertIn("wrapAssert();", js, "the assert wrapper is installed by hook()")
         self.assertIn("original.apply(console, args);", js)
         self.assertIn("const MAX_ENTRIES = 500;", js)
         self.assertIn('window.addEventListener("error", onError);', js)

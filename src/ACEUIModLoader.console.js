@@ -1,13 +1,18 @@
 /**
  * ACEUIModLoader.console -- captures everything the UI logs, for in-game display.
  *
- * Wraps console.log/info/debug/warn/error as soon as this file runs (before the
- * stock bundle, which calls them hundreds of times), keeps the last MAX_ENTRIES
+ * Wraps every console method the engine offers as soon as this file runs (before
+ * the stock bundle, which calls them hundreds of times), keeps the last MAX_ENTRIES
  * lines in a ring buffer and notifies subscribers. The originals are still
  * called, so the game log is unchanged; nothing is echoed twice. Uncaught errors
  * and unhandled promise rejections are captured as "error" entries.
  *
- * `console.trace` is left alone: the stock bundle wraps it itself.
+ * `console.trace`, `dir` and `table` are wrapped too. The stock bundle wraps
+ * `console.trace` itself, but it does so *after* this file runs, so its wrapper
+ * calls ours and the line is still captured. `console.assert` is wrapped
+ * separately, since it must only record when its condition is falsy.
+ * Methods this engine does not provide are skipped; the debug console's `.logtest`
+ * command reports what actually arrives, from the inside.
  *
  * Entries are { seq, t, level, text }; `capture(level, text)` adds one without
  * going through console (used by the debug console for its own echo/result lines).
@@ -15,7 +20,10 @@
 ACEUIModLoader.console = (function () {
 
     const MAX_ENTRIES = 500;
-    const LEVELS = ["log", "info", "debug", "warn", "error"];
+    const LEVELS = ["log", "info", "debug", "warn", "error", "trace", "dir", "table"];
+    /** console.assert only says anything when its condition is false. */
+    const ASSERT_LEVEL = "error";
+    const ASSERT_PREFIX = "assertion failed: ";
     /** Limits when turning objects into text: depth, keys per object, items per array, characters. */
     const MAX_DEPTH = 2;
     const MAX_KEYS = 20;
@@ -121,11 +129,28 @@ ACEUIModLoader.console = (function () {
         push("error", "unhandled rejection: " + formatValue(e.reason, 0));
     };
 
+    /** console.assert(cond, ...rest): record only the failures, as errors. */
+    const wrapAssert = function () {
+        const original = console.assert;
+
+        if (typeof original !== "function") { return; }
+
+        state.original.assert = original;
+        console.assert = function (condition) {
+            const args = ACEUIModLoader.toArray(arguments).slice(1);
+
+            if (!condition) { push(ASSERT_LEVEL, ASSERT_PREFIX + formatArgs(args)); }
+
+            original.apply(console, arguments);
+        };
+    };
+
     const hook = function () {
         if (state.hooked) { return; }
 
         state.hooked = true;
         LEVELS.forEach(wrap);
+        wrapAssert();
         window.addEventListener("error", onError);
         window.addEventListener("unhandledrejection", onRejection);
     };

@@ -7,7 +7,8 @@ build_loader.py - build the ACEUIModLoader package.
 2. Append the library files in LIB_ORDER (src/ACEUIModLoaderMods.*.js) to it
    -> build/uiresources/js/cohtml.js. The order matters: core defines the
    namespace, console hooks console.* before the stock bundle runs, loader
-   comes last and starts loading mods once the DOM exists.
+   comes second to last and starts loading mods once the DOM exists, and the
+   drawer comes last because it registers an ACEUIModLoader.ready callback.
 3. Pack build/ with tools/pack_kspkg.py (which adds the padding that makes this
    single override win the game's lookup) -> dist/ACEUIModLoader.kspkg.
 4. --install copies it to the game's mods folder.
@@ -34,6 +35,7 @@ LIB_ORDER = [
     "ACEUIModLoader.panel.js",
     "ACEUIModLoader.loop.js",
     "ACEUIModLoader.loader.js",
+    "ACEUIModLoader.drawer.js",
 ]
 BUILD_DIR = os.path.join(_repos.REPO, "build")
 OUT = os.path.join(_repos.REPO, "dist", "ACEUIModLoader.kspkg")

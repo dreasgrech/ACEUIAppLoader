@@ -1,0 +1,412 @@
+/**
+ * ACEUIModLoader.drawer -- the app drawer: every loaded mod in one place.
+ *
+ * A panel that lives off the right edge of the screen and slides in when the mouse
+ * reaches that edge, in the spirit of Assetto Corsa Content Manager's app bar. It lists
+ * every mod the loader discovered, with a switch that shows or hides it, and opens a
+ * mod's own options pane if it registered one. Choices persist, so a mod you switched
+ * off stays off across the HUD reload on Escape/resume.
+ *
+ * Why this lives in the loader rather than in a mod: the loader is the only thing that
+ * knows what is installed, and an app drawer that only listed *some* apps would be
+ * useless. It also gives mods somewhere to put settings without each one growing its own
+ * settings window.
+ *
+ * A mod adds its own options pane with:
+ *
+ *     ACEUIModLoader.drawer.registerOptions("telemetry", function (pane) {
+ *         pane.appendChild(myControls);      // called once, lazily, when first opened
+ *     });
+ *
+ * Styling note: everything here is styled with inline styles rather than a stylesheet.
+ * The loader ships as a single overriding file inside a package whose layout is delicate
+ * (see game-internals.md on the resource lookup), so adding a CSS file to it is a risk
+ * not worth taking; and a script-created <style> element is unproven in this Cohtml
+ * build. Inline styles need neither, and inline `transition` still animates the slide.
+ *
+ * Cohtml notes: the panel is built once, and the only per-interaction writes are a
+ * transform on the panel and colours on a row. Nothing is rebuilt per frame -- there is
+ * no frame loop here at all; the drawer reacts to mouse events only.
+ */
+ACEUIModLoader.drawer = (function () {
+
+    const STORE_KEY = "acedrawer.apps";
+
+    /** Geometry. The hot zone is a thin strip the pointer has to reach to open the drawer. */
+    const HOT_WIDTH = "10px";
+    const PANEL_WIDTH = "15rem";
+    const PANEL_TOP = "4rem";
+    const PANEL_BOTTOM = "4rem";
+    const SLIDE_MS = 180;
+    const CLOSE_DELAY_MS = 350;
+
+    /** Above the stock HUD, below nothing in particular; the HUD does not use z-index much. */
+    const Z_INDEX = "9000";
+
+    const INK = "rgba(255, 255, 255, 0.85)";
+    const INK_DIM = "rgba(255, 255, 255, 0.45)";
+    const INK_OFF = "rgba(255, 255, 255, 0.3)";
+    const ACCENT = "#bd0000";
+    const ON_COLOUR = "#44ea78";
+    const PANEL_BG = "rgba(0, 0, 0, 0.92)";
+    const HEADER_BG = "#1c1e1f";
+    const ROW_HOVER = "rgba(255, 255, 255, 0.08)";
+    const BORDER = "1px solid rgba(255, 255, 255, 0.1)";
+
+    const TITLE_TEXT = "APPS";
+    const OPTIONS_GLYPH = "⚙";
+    const EMPTY_TEXT = "no mods loaded on this page";
+
+    const state = {
+        built: false,
+        open: false,
+        panel: null,
+        list: null,
+        count: null,
+        hot: null,
+        apps: [],               // { name, title, status, row, box, pane, filled }
+        visible: {},            // name -> bool, persisted
+        options: {},            // name -> render function a mod registered
+        closeTimer: 0
+    };
+
+    const persist = ACEUIModLoader.persist;
+
+    // ---- tiny DOM helpers ----------------------------------------------------------
+
+    const css = function (node, props) {
+        Object.keys(props).forEach(function (name) { node.style[name] = props[name]; });
+
+        return node;
+    };
+
+    const div = function (props) {
+        return css(document.createElement("div"), props || {});
+    };
+
+    const text = function (node, value) {
+        node.textContent = value;
+
+        return node;
+    };
+
+    // ---- visibility ----------------------------------------------------------------
+
+    const rootOf = function (name) {
+        return document.getElementById(name);
+    };
+
+    const isVisible = function (name) {
+        return state.visible[name] !== false;
+    };
+
+    const store = function () {
+        persist.writeLocal(STORE_KEY, state.visible);
+    };
+
+    /** Show or hide a mod's root element. Restoring uses "" so the mod's own CSS wins again. */
+    const applyVisibility = function (name) {
+        const root = rootOf(name);
+        const on = isVisible(name);
+
+        if (root) { root.style.display = on ? "" : "none"; }
+
+        return on;
+    };
+
+    const paintSwitch = function (app) {
+        const on = isVisible(app.name);
+
+        css(app.box, {
+            background: on ? ON_COLOUR : "transparent",
+            borderColor: on ? ON_COLOUR : INK_OFF
+        });
+        app.label.style.color = on ? INK : INK_OFF;
+    };
+
+    const setVisible = function (name, on) {
+        state.visible[name] = Boolean(on);
+        applyVisibility(name);
+        store();
+
+        state.apps.forEach(function (app) {
+            if (app.name === name) { paintSwitch(app); }
+        });
+    };
+
+    const toggleApp = function (name) {
+        setVisible(name, !isVisible(name));
+    };
+
+    // ---- options panes -------------------------------------------------------------
+
+    /** A mod registers a callback that fills its pane; it is called once, when first opened. */
+    const registerOptions = function (name, render) {
+        if (typeof render !== "function") { return; }
+
+        state.options[name] = render;
+
+        state.apps.forEach(function (app) {
+            if (app.name === name) { app.gear.style.display = ""; }
+        });
+    };
+
+    const togglePane = function (app) {
+        const showing = app.pane.style.display !== "none";
+
+        if (!showing && !app.filled && state.options[app.name]) {
+            app.filled = true;
+
+            try {
+                state.options[app.name](app.pane);
+            } catch (e) {
+                text(app.pane, "options failed: " + (e && e.message ? e.message : e));
+            }
+        }
+
+        app.pane.style.display = showing ? "none" : "";
+        app.gear.style.color = showing ? INK_DIM : ACCENT;
+    };
+
+    // ---- opening and closing -------------------------------------------------------
+
+    const cancelClose = function () {
+        if (!state.closeTimer) { return; }
+
+        window.clearTimeout(state.closeTimer);
+        state.closeTimer = 0;
+    };
+
+    const open = function () {
+        cancelClose();
+
+        if (!state.panel || state.open) { return; }
+
+        state.open = true;
+        state.panel.style.transform = "translateX(0)";
+    };
+
+    const close = function () {
+        cancelClose();
+
+        if (!state.panel || !state.open) { return; }
+
+        state.open = false;
+        state.panel.style.transform = "translateX(100%)";
+    };
+
+    const closeSoon = function () {
+        cancelClose();
+        state.closeTimer = window.setTimeout(close, CLOSE_DELAY_MS);
+    };
+
+    const toggle = function () {
+        if (state.open) { close(); } else { open(); }
+    };
+
+    // ---- building ------------------------------------------------------------------
+
+    const buildRow = function (app) {
+        const row = div({
+            display: "flex",
+            flexDirection: "row",
+            alignItems: "center",
+            padding: "0.3rem 0.6rem",
+            cursor: "pointer"
+        });
+        const box = div({
+            flex: "0 0 auto",
+            width: "0.6rem",
+            height: "0.6rem",
+            marginRight: "0.5rem",
+            border: "1px solid " + INK_OFF,
+            borderRadius: "0.15rem"
+        });
+        const label = css(text(document.createElement("span"), app.title), {
+            flex: "1 1 auto",
+            color: INK,
+            fontSize: "0.75rem",
+            overflow: "hidden",
+            textOverflow: "ellipsis",
+            whiteSpace: "nowrap"
+        });
+        const gear = css(text(document.createElement("span"), OPTIONS_GLYPH), {
+            flex: "0 0 auto",
+            marginLeft: "0.4rem",
+            padding: "0 0.2rem",
+            color: INK_DIM,
+            fontSize: "0.8rem",
+            display: state.options[app.name] ? "" : "none"
+        });
+
+        row.appendChild(box);
+        row.appendChild(label);
+        row.appendChild(gear);
+
+        row.addEventListener("mouseenter", function () { row.style.background = ROW_HOVER; });
+        row.addEventListener("mouseleave", function () { row.style.background = "transparent"; });
+        row.addEventListener("click", function (e) {
+            if (e.target === gear) { togglePane(app); } else { toggleApp(app.name); }
+
+            e.stopPropagation();
+        });
+
+        app.row = row;
+        app.box = box;
+        app.label = label;
+        app.gear = gear;
+
+        return row;
+    };
+
+    /** A mod that did not load gets a row that says why, rather than vanishing silently. */
+    const buildStatus = function (app) {
+        return css(text(document.createElement("div"), app.status), {
+            padding: "0 0.6rem 0.3rem 1.7rem",
+            color: INK_DIM,
+            fontSize: "0.6rem"
+        });
+    };
+
+    const buildApp = function (entry) {
+        const info = entry.info || {};
+        const app = {
+            name: entry.name,
+            title: info.title || entry.name,
+            status: entry.status,
+            filled: false
+        };
+        const holder = div({ borderBottom: BORDER });
+        const pane = div({
+            display: "none",
+            padding: "0.2rem 0.6rem 0.5rem 1.7rem",
+            color: INK_DIM,
+            fontSize: "0.7rem"
+        });
+
+        app.pane = pane;
+        holder.appendChild(buildRow(app));
+
+        if (entry.status !== "loaded") { holder.appendChild(buildStatus(app)); }
+
+        holder.appendChild(pane);
+        state.apps.push(app);
+        paintSwitch(app);
+
+        return holder;
+    };
+
+    const build = function (mods) {
+        const selector = ACEUIModLoader.loader ? ACEUIModLoader.loader.CONTAINER_SELECTOR : "";
+        const container = (selector && document.querySelector(selector)) || document.body;
+        const stored = persist.readLocal(STORE_KEY);
+        const panel = div({
+            position: "fixed",
+            top: PANEL_TOP,
+            bottom: PANEL_BOTTOM,
+            right: "0",
+            width: PANEL_WIDTH,
+            display: "flex",
+            flexDirection: "column",
+            background: PANEL_BG,
+            borderLeft: BORDER,
+            borderRadius: "0.25rem 0 0 0.25rem",
+            color: INK,
+            fontFamily: "var(--font-family-main)",
+            zIndex: Z_INDEX,
+            transform: "translateX(100%)",
+            transition: "transform " + SLIDE_MS + "ms ease",
+            overflow: "hidden"
+        });
+        const header = div({
+            flex: "0 0 auto",
+            display: "flex",
+            flexDirection: "row",
+            alignItems: "baseline",
+            justifyContent: "space-between",
+            padding: "0.45rem 0.6rem",
+            background: HEADER_BG
+        });
+        const list = div({ flex: "1 1 auto", overflow: "hidden" });
+        const count = css(document.createElement("span"), { color: INK_DIM, fontSize: "0.65rem" });
+        const hot = div({
+            position: "fixed",
+            top: "0",
+            bottom: "0",
+            right: "0",
+            width: HOT_WIDTH,
+            zIndex: Z_INDEX
+        });
+
+        // building again replaces the drawer rather than stacking a second one on top
+        if (state.panel && state.panel.parentNode) { state.panel.parentNode.removeChild(state.panel); }
+
+        if (state.hot && state.hot.parentNode) { state.hot.parentNode.removeChild(state.hot); }
+
+        cancelClose();
+        state.apps = [];
+
+        if (stored) { state.visible = stored; }
+
+        header.appendChild(css(text(document.createElement("span"), TITLE_TEXT), {
+            color: "#fff", fontSize: "0.75rem", fontWeight: "700", letterSpacing: "0.08em"
+        }));
+        header.appendChild(count);
+        panel.appendChild(header);
+        panel.appendChild(list);
+
+        mods.forEach(function (entry) {
+            list.appendChild(buildApp(entry));
+            applyVisibility(entry.name);
+        });
+
+        if (!mods.length) {
+            list.appendChild(css(text(document.createElement("div"), EMPTY_TEXT), {
+                padding: "0.5rem 0.6rem", color: INK_DIM, fontSize: "0.65rem"
+            }));
+        }
+
+        text(count, mods.length + " loaded");
+
+        // the pointer reaching the right edge opens it; leaving the panel closes it again
+        hot.addEventListener("mouseenter", function () {
+            if (!ACEUIModLoader.hudHidden()) { open(); }
+        });
+        panel.addEventListener("mouseenter", cancelClose);
+        panel.addEventListener("mouseleave", closeSoon);
+
+        container.appendChild(hot);
+        container.appendChild(panel);
+
+        state.panel = panel;
+        state.list = list;
+        state.count = count;
+        state.hot = hot;
+        state.built = true;
+
+        return panel;
+    };
+
+    /** Build once the loader knows what is installed. */
+    if (typeof ACEUIModLoader.ready === "function") {
+        ACEUIModLoader.ready(function (mods) {
+            if (state.built) { return; }
+
+            build(mods);
+        });
+    }
+
+    return {
+        STORE_KEY: STORE_KEY,
+        CLOSE_DELAY_MS: CLOSE_DELAY_MS,
+        state: state,
+        build: build,
+        open: open,
+        close: close,
+        toggle: toggle,
+        isVisible: isVisible,
+        setVisible: setVisible,
+        toggleApp: toggleApp,
+        registerOptions: registerOptions
+    };
+}());
