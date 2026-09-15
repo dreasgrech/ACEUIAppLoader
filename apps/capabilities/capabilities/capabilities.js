@@ -23,7 +23,7 @@
  * recomputed once those settle, so its counts are accurate.
  *
  * Cohtml rules: the panel is built once at attach and never rebuilt per frame; the
- * only per-frame work is ACEUIModLoader.panel.update settling the restored position.
+ * only per-frame work is the shared panel lifecycle settling the restored position.
  * Rows are rewritten once, when a probe settles, not on a loop.
  *
  * Identity (name, version, title, root, logger, storage keys) comes from
@@ -41,7 +41,6 @@ const CapabilitiesProbe = (function () {
     const log = me.log;
 
     const FILTER_ATTR = "data-filter";
-    const FILTER_KEY = me.key("filters");
 
     /**
      * Scrolling: Cohtml does not scroll an overflowing box by itself, and the wheel's sign
@@ -907,7 +906,7 @@ const CapabilitiesProbe = (function () {
 
         const filters = {};
         const filterEls = {};
-        const stored = persist.readLocal(FILTER_KEY);
+        const stored = me.recall("filters", null);
 
         STATUS_FILTERS.forEach(function (filter) {
             const node = root.querySelector("[" + FILTER_ATTR + "=\"" + filter.id + "\"]");
@@ -934,8 +933,7 @@ const CapabilitiesProbe = (function () {
             scroller: null,             // ACEUIModLoader.scroll handle (wheel, thumb, track)
             laidOut: false,             // the scrollbar has been sized once layout exists
             bag: null,                  // every listener this panel added, for detach
-            panel: null,
-            loop: null
+            ui: null                    // me.panel handle: the panel and its frame loop
         };
     };
 
@@ -1091,7 +1089,7 @@ const CapabilitiesProbe = (function () {
         state.filterEls[id].el.classList.toggle(CLASS.on, on);
 
         STATUS_FILTERS.forEach(function (filter) { store[filter.id] = state.filters[filter.id]; });
-        persist.writeLocal(FILTER_KEY, store);
+        me.remember("filters", store);
 
         applyFilters(state);
     };
@@ -1107,10 +1105,8 @@ const CapabilitiesProbe = (function () {
 
     // ---- rendering -----------------------------------------------------------------
 
-    /** One animation frame: settle the panel position, then size the scrollbar once layout exists. */
-    const tick = function (state, now) {
-        ACEUIModLoader.panel.update(state.panel, now);
-
+    /** One animation frame: size the scrollbar once layout exists. The panel settles itself. */
+    const tick = function (state) {
         if (!state.laidOut && state.body.clientHeight > 0) {
             state.laidOut = true;
             syncScrollbar(state);
@@ -1161,8 +1157,7 @@ const CapabilitiesProbe = (function () {
         state.bag.on(state.search, "input", function () { onSearchChange(state); });
         state.bag.on(state.search, "keyup", function () { onSearchChange(state); });
 
-        state.panel = ACEUIModLoader.panel.attach(root, { hudId: me.hudId, storageKey: me.storageKey, log: log });
-        state.loop = ACEUIModLoader.loop.start(function (now) { tick(state, now); });
+        state.ui = me.panel(root, function () { tick(state); });
 
         runAll(state);
         log("attached, " + CHECKS.length + " checks, lib=" + ACEUIModLoader.VERSION);
@@ -1171,8 +1166,7 @@ const CapabilitiesProbe = (function () {
     };
 
     const detach = function (state) {
-        ACEUIModLoader.loop.stop(state.loop);
-        ACEUIModLoader.panel.detach(state.panel);
+        state.ui.stop();
 
         // kept, not nulled: the probe's own checks finish after a detach and still
         // re-filter the list, and a detached scroller is a no-op rather than a crash
@@ -1183,8 +1177,6 @@ const CapabilitiesProbe = (function () {
             state.bag = null;
         }
     };
-
-    log("script loaded, version=" + me.version + ", lib=" + ACEUIModLoader.VERSION + ", url=" + location.href);
 
     return {
         CLASS: CLASS,

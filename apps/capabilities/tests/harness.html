@@ -38,7 +38,7 @@
         ok(root.querySelector(".cp-body"), "body built");
         eq(root.querySelector(".cp-title").textContent, "capabilities", "title falls back to the name outside the game");
         eq(root.style.visibility, "hidden", "hidden until positioned");
-        ok(state.loop.running, "loop running");
+        ok(state.ui.loop.running, "loop running");
         ok(window.__log.some(function (l) { return l.indexOf("[capabilities] attached") === 0; }), "prefixed log");
     });
 
@@ -58,7 +58,7 @@
         const cancelled = window.__clock.cancelled;
         CapabilitiesProbe.detach(state);
         eq(window.__clock.cancelled, cancelled + 1, "raf cancelled");
-        eq(state.loop.running, false, "loop stopped");
+        eq(state.ui.loop.running, false, "loop stopped");
     });
 
     H.finish();
