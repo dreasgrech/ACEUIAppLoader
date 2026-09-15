@@ -72,7 +72,6 @@ const DevConsole = (function () {
     const HISTORY_NEXT_KEY = "ArrowDown";
     const BLUR_KEY = "Escape";
     const COMPLETE_KEY = "Tab";
-    const KEY_CODES = { Backquote: 192, Enter: 13, ArrowUp: 38, ArrowDown: 40, Escape: 27, Tab: 9 };
 
 
     /**
@@ -113,20 +112,13 @@ const DevConsole = (function () {
     const ECHO_PREFIX = "> ";
 
     /**
-     * Scrolling. Cohtml does not scroll an overflowing box by itself, so the console
-     * owns it: the wheel moves the body by a fraction of its visible height per
-     * notch, a click on the track jumps, and the newest line is followed until the
-     * user scrolls away (the LATEST chip brings them back).
+     * Scrolling is ACEUIModLoader.scroll's job. Cohtml does not scroll an overflowing box
+     * by itself, so this panel has to move the body and draw its own thumb -- and the
+     * capabilities probe needed exactly the same behaviour, so it lives in the library
+     * rather than in two mods. The wheel's inverted sign and the "follow the newest line
+     * until you scroll away" rule are both in there.
      */
-    const WHEEL_STEP = 0.25;
-    const MIN_THUMB_PX = 12;
-    /**
-     * Cohtml reports the wheel with the opposite sign to a browser: a positive deltaY
-     * is "up" (observed in game twice; the stock bundle reads it the same way), so
-     * the direction is flipped. The first wheel event is logged so the game log shows
-     * the delta and the user agent it came with.
-     */
-    const WHEEL_SIGN = -1;
+    const scrolling = ACEUIModLoader.scroll;
 
     /** Text filter: rows whose text does not contain the query (case-insensitive) are hidden. */
     const SEARCH_TEXT = "filter text";
@@ -237,6 +229,10 @@ const DevConsole = (function () {
     const ERROR_LEVEL = "error";
 
     const NO_DRAG_ATTR = ACEUIModLoader.panel.NO_DRAG_ATTR;
+    /** Key names arrive three ways in this engine; ACEUIModLoader.keys knows all three. */
+    const keys = ACEUIModLoader.keys;
+    const dom = ACEUIModLoader.dom;
+    const setClass = dom.setClass;
     const clamp = ACEUIModLoader.clamp;
     const el = ACEUIModLoader.el;
     const close = ACEUIModLoader.close;
@@ -278,14 +274,6 @@ const DevConsole = (function () {
         out[NO_DRAG_ATTR] = "";
 
         return out;
-    };
-
-    const setClass = function (node, className, on) {
-        if (on) {
-            node.classList.add(className);
-        } else {
-            node.classList.remove(className);
-        }
     };
 
     // ---- markup ------------------------------------------------------------------
@@ -394,11 +382,8 @@ const DevConsole = (function () {
             search: root.querySelector("." + CLASS.search),
             query: "",                  // lower-cased text filter, "" for none
             scale: SCALE_DEFAULT,       // root font-size in rem, see setScale
-            wheelLogged: false,         // the first wheel event is logged once
-            drag: null,                 // thumb drag in progress: { startY, startTop }
-            follow: true,               // keep the newest line in view
-            thumbHeight: -1,            // last applied thumb geometry, so frames only touch it on change
-            thumbY: -1,
+            follow: true,               // mirrors the scroller, for the LATEST chip and the tests
+            scroller: null,             // ACEUIModLoader.scroll handle (wheel, thumb, follow)
             rows: toArray(root.querySelectorAll("." + CLASS.row)).map(function (row) {
                 return { el: row, time: row.querySelector("." + CLASS.time), text: row.querySelector("." + CLASS.text), seq: -1, level: "" };
             }),
@@ -417,7 +402,8 @@ const DevConsole = (function () {
             completeSource: "",         // the prompt text we last produced, to spot edits
             unsubscribe: null,
             unsubscribeSettings: null,
-            handlers: null,
+            unbindToggle: null,
+            bag: null,                  // every listener this console added, for detach
             panel: null,                // ACEUIModLoader.panel state (drag + position)
             loop: null                  // ACEUIModLoader.loop handle
         };
@@ -494,9 +480,11 @@ const DevConsole = (function () {
             }
         });
 
-        if (state.follow) { state.body.scrollTop = state.body.scrollHeight; }
-
-        syncScrollbar(state);
+        if (state.follow) {
+            state.scroller.toBottom();
+        } else {
+            state.scroller.sync();
+        }
     };
 
     /** One animation frame: settle the position, then redraw if anything changed. */
@@ -582,119 +570,30 @@ const DevConsole = (function () {
             persist.writeLocal(SCALE_KEY, value);
         }
 
-        state.thumbHeight = -1;         // geometry changed: re-apply the thumb on the next render
-        state.thumbY = -1;
+        // the panel's size changed, so the thumb's cached geometry is stale
+        if (state.scroller) { state.scroller.invalidate(); }
+
         state.dirty = true;
     };
 
-    // ---- scrollbar -----------------------------------------------------------------------
-
-    /** Size and place the thumb from the body's scroll geometry; touches style only on change. */
-    const syncScrollbar = function (state) {
-        const body = state.body;
-        const visible = body.clientHeight;
-        const total = body.scrollHeight;
-        const trackHeight = state.track.clientHeight;
-        const fits = total <= visible || trackHeight === 0;
-        let thumbHeight;
-        let y;
-
-        setClass(state.track, CLASS.nofit, fits);
-
-        if (fits) { return; }
-
-        thumbHeight = Math.min(trackHeight, Math.max(MIN_THUMB_PX, Math.round(trackHeight * visible / total)));
-        y = Math.round((trackHeight - thumbHeight) * clamp(body.scrollTop / (total - visible), 0, 1));
-
-        if (thumbHeight !== state.thumbHeight) {
-            state.thumbHeight = thumbHeight;
-            state.thumb.style.height = thumbHeight + "px";
-        }
-
-        if (y !== state.thumbY) {
-            state.thumbY = y;
-            state.thumb.style.transform = "translateY(" + y + "px)";
-        }
-    };
+    // ---- scrolling ------------------------------------------------------------------
 
     /** Follow the newest line (true) or hold the current scroll position (false). */
     const setFollow = function (state, on) {
-        state.follow = on;
-        setClass(state.followButton, CLASS.hidden, on);
-
-        if (on) { state.dirty = true; }
+        state.scroller.setFollow(on);
     };
 
     /** Scroll the body by `dy` pixels; following resumes when the bottom is reached. */
     const scrollBy = function (state, dy) {
-        const body = state.body;
-        const max = Math.max(0, body.scrollHeight - body.clientHeight);
-        const top = clamp(body.scrollTop + dy, 0, max);
-
-        body.scrollTop = top;
-        setFollow(state, top >= max);
-        syncScrollbar(state);
+        state.scroller.scrollBy(dy);
     };
 
-    const onWheel = function (state, e) {
-        const direction = e.deltaY > 0 ? 1 : (e.deltaY < 0 ? -1 : 0);
+    /** The scroller tells us when following starts or stops; the LATEST chip follows it. */
+    const onFollowChanged = function (state, on) {
+        state.follow = on;
+        setClass(state.followButton, CLASS.hidden, on);
 
-        if (!state.wheelLogged) {
-            state.wheelLogged = true;
-            log("first wheel event deltaY=" + e.deltaY + " (positive is treated as up), userAgent=" + navigator.userAgent);
-        }
-
-        if (direction === 0) { return; }
-
-        scrollBy(state, direction * WHEEL_SIGN * state.body.clientHeight * WHEEL_STEP);
-        e.preventDefault();
-    };
-
-    /** Drag start on the thumb: remember where, and follow the mouse on the window until release. */
-    const onThumbDown = function (state, e) {
-        state.drag = { startY: e.clientY, startTop: state.body.scrollTop };
-        setClass(state.track, CLASS.dragging, true);
-        window.addEventListener("mousemove", state.handlers.thumbMove);
-        window.addEventListener("mouseup", state.handlers.thumbUp);
-        e.preventDefault();
-    };
-
-    const onThumbMove = function (state, e) {
-        const body = state.body;
-        const travel = state.track.clientHeight - state.thumbHeight;
-        const max = Math.max(0, body.scrollHeight - body.clientHeight);
-
-        if (!state.drag || travel <= 0) { return; }
-
-        scrollBy(state, state.drag.startTop + (e.clientY - state.drag.startY) * max / travel - body.scrollTop);
-    };
-
-    const onThumbUp = function (state) {
-        if (!state.drag) { return; }
-
-        state.drag = null;
-        setClass(state.track, CLASS.dragging, false);
-        window.removeEventListener("mousemove", state.handlers.thumbMove);
-        window.removeEventListener("mouseup", state.handlers.thumbUp);
-    };
-
-    /** A click on the track centres the thumb on the click point; on the thumb it starts a drag. */
-    const onTrackDown = function (state, e) {
-        const body = state.body;
-        const travel = state.track.clientHeight - state.thumbHeight;
-        const max = Math.max(0, body.scrollHeight - body.clientHeight);
-        let ratio = 1;
-
-        if (e.target === state.thumb) {
-            onThumbDown(state, e);
-
-            return;
-        }
-
-        if (typeof e.offsetY === "number" && travel > 0) { ratio = clamp((e.offsetY - state.thumbHeight / 2) / travel, 0, 1); }
-
-        scrollBy(state, ratio * max - body.scrollTop);
-        e.preventDefault();
+        if (on) { state.dirty = true; }
     };
 
     // ---- text filter ---------------------------------------------------------------------
@@ -714,7 +613,7 @@ const DevConsole = (function () {
     };
 
     const onSearchKey = function (state, e) {
-        if (keyIs(e, BLUR_KEY)) {
+        if (keys.is(e, BLUR_KEY)) {
             state.search.value = "";
             setQuery(state, "");
             state.search.blur();
@@ -1210,13 +1109,8 @@ const DevConsole = (function () {
         state.input.value = next === state.history.length ? state.draft : state.history[next];
     };
 
-    /** True when the event is the named key, by `key`, `code` or legacy `keyCode`. */
-    const keyIs = function (e, name) {
-        return e.key === name || e.code === name || e.keyCode === KEY_CODES[name];
-    };
-
     const onInputKey = function (state, e) {
-        if (keyIs(e, COMPLETE_KEY)) {
+        if (keys.is(e, COMPLETE_KEY)) {
             // Tab would move focus out of the prompt, so it never reaches the browser
             completeNext(state);
             e.preventDefault();
@@ -1224,20 +1118,20 @@ const DevConsole = (function () {
             return;
         }
 
-        if (keyIs(e, RUN_KEY)) {
+        if (keys.is(e, RUN_KEY)) {
             resetCompletion(state);
             evaluate(state, state.input.value);
             state.input.value = "";
             e.preventDefault();
-        } else if (keyIs(e, HISTORY_PREV_KEY)) {
+        } else if (keys.is(e, HISTORY_PREV_KEY)) {
             resetCompletion(state);
             recall(state, -1);
             e.preventDefault();
-        } else if (keyIs(e, HISTORY_NEXT_KEY)) {
+        } else if (keys.is(e, HISTORY_NEXT_KEY)) {
             resetCompletion(state);
             recall(state, 1);
             e.preventDefault();
-        } else if (keyIs(e, BLUR_KEY)) {
+        } else if (keys.is(e, BLUR_KEY)) {
             resetCompletion(state);
             state.input.blur();
         } else {
@@ -1252,24 +1146,13 @@ const DevConsole = (function () {
      * The toggle key is a setting, not a constant: a hardcoded backquote collides with
      * whatever the player has bound in the game, and their bindings are not ours to
      * shadow. The default stays `Backquote`; the settings pane in the app drawer moves it.
+     *
+     * `keys.bind` takes a function rather than a name, so moving the setting moves the
+     * hotkey with no rebinding, and it never fires while the player is typing -- which is
+     * what the prompt and the filter box used to need their own guard for.
      */
-    const isToggleKey = function (e) {
-        const want = options.toggleKey || TOGGLE_CODE;
-
-        if (e.code === want || e.key === want) { return true; }
-
-        // the engine reports legacy keyCode most reliably, so honour it for keys we know
-        if (KEY_CODES[want] !== undefined && e.keyCode === KEY_CODES[want]) { return true; }
-
-        // the backquote's `key` is the character, not the code
-        return want === TOGGLE_CODE && e.key === TOGGLE_KEY;
-    };
-
-    const onWindowKey = function (state, e) {
-        if (e.target === state.input || e.target === state.search || !isToggleKey(e)) { return; }
-
-        setOpen(state, !state.open);
-        e.preventDefault();
+    const toggleKey = function () {
+        return options.toggleKey || TOGGLE_CODE;
     };
 
     const onClick = function (state, e) {
@@ -1319,31 +1202,35 @@ const DevConsole = (function () {
             ? ACEUIModLoader.settings.get(me.name, "scale")
             : persist.readLocal(SCALE_KEY);
 
-        state.handlers = {
-            key: function (e) { onWindowKey(state, e); },
-            inputKey: function (e) { onInputKey(state, e); },
-            click: function (e) { onClick(state, e); },
-            wheel: function (e) { onWheel(state, e); },
-            trackDown: function (e) { onTrackDown(state, e); },
-            thumbMove: function (e) { onThumbMove(state, e); },
-            thumbUp: function () { onThumbUp(state); },
-            searchChange: function () { onSearchChange(state); },
-            searchKey: function (e) { onSearchKey(state, e); },
-            grabKeys: function () { captureKeyboard(true); },
-            releaseKeys: function () { captureKeyboard(false); }
-        };
-        window.addEventListener("keydown", state.handlers.key);
-        state.input.addEventListener("keydown", state.handlers.inputKey);
-        root.addEventListener("click", state.handlers.click);
-        state.body.addEventListener("wheel", state.handlers.wheel);
-        state.track.addEventListener("mousedown", state.handlers.trackDown);
-        state.search.addEventListener("input", state.handlers.searchChange);
-        state.search.addEventListener("keyup", state.handlers.searchChange);
-        state.search.addEventListener("keydown", state.handlers.searchKey);
-        state.input.addEventListener("focus", state.handlers.grabKeys);
-        state.input.addEventListener("blur", state.handlers.releaseKeys);
-        state.search.addEventListener("focus", state.handlers.grabKeys);
-        state.search.addEventListener("blur", state.handlers.releaseKeys);
+        const grab = function () { captureKeyboard(true); };
+        const release = function () { captureKeyboard(false); };
+
+        state.scroller = scrolling.attach({
+            body: state.body,
+            track: state.track,
+            thumb: state.thumb,
+            follow: true,
+            nofitClass: CLASS.nofit,
+            draggingClass: CLASS.dragging,
+            onFollow: function (on) { onFollowChanged(state, on); },
+            log: log
+        });
+
+        // one bag rather than fourteen add/remove pairs kept in step by hand
+        state.bag = dom.listeners();
+        state.bag.on(state.input, "keydown", function (e) { onInputKey(state, e); });
+        state.bag.on(root, "click", function (e) { onClick(state, e); });
+        state.bag.on(state.search, "input", function () { onSearchChange(state); });
+        state.bag.on(state.search, "keyup", function () { onSearchChange(state); });
+        state.bag.on(state.search, "keydown", function (e) { onSearchKey(state, e); });
+        state.bag.on(state.input, "focus", grab);
+        state.bag.on(state.input, "blur", release);
+        state.bag.on(state.search, "focus", grab);
+        state.bag.on(state.search, "blur", release);
+        state.unbindToggle = keys.bind(toggleKey, function (e) {
+            setOpen(state, !state.open);
+            e.preventDefault();
+        });
 
         state.open = storedOpen === null ? true : Boolean(storedOpen);
         setClass(root, CLASS.closed, !state.open);
@@ -1379,22 +1266,18 @@ const DevConsole = (function () {
             state.unsubscribeSettings = null;
         }
 
-        if (state.handlers) {
-            window.removeEventListener("keydown", state.handlers.key);
-            state.input.removeEventListener("keydown", state.handlers.inputKey);
-            state.root.removeEventListener("click", state.handlers.click);
-            state.body.removeEventListener("wheel", state.handlers.wheel);
-            state.track.removeEventListener("mousedown", state.handlers.trackDown);
-            state.search.removeEventListener("input", state.handlers.searchChange);
-            state.search.removeEventListener("keyup", state.handlers.searchChange);
-            state.search.removeEventListener("keydown", state.handlers.searchKey);
-            state.input.removeEventListener("focus", state.handlers.grabKeys);
-            state.input.removeEventListener("blur", state.handlers.releaseKeys);
-            state.search.removeEventListener("focus", state.handlers.grabKeys);
-            state.search.removeEventListener("blur", state.handlers.releaseKeys);
+        if (state.unbindToggle) {
+            state.unbindToggle();
+            state.unbindToggle = null;
+        }
+
+        // kept, not nulled: anything still in flight finds a scroller that does nothing
+        if (state.scroller) { state.scroller.detach(); }
+
+        if (state.bag) {
+            state.bag.off();
             captureKeyboard(false);          // never leave the game's controls captured
-            onThumbUp(state);
-            state.handlers = null;
+            state.bag = null;
         }
     };
 
@@ -1406,11 +1289,12 @@ const DevConsole = (function () {
         SCALE_STEP: SCALE_STEP,
         TOGGLE_CODE: TOGGLE_CODE,
         TOGGLE_KEY: TOGGLE_KEY,
-        KEY_CODES: KEY_CODES,
+        /* the library's, re-exported: the console no longer keeps its own copies */
+        KEY_CODES: keys.CODES,
         MAX_ROWS: MAX_ROWS,
-        WHEEL_STEP: WHEEL_STEP,
-        WHEEL_SIGN: WHEEL_SIGN,
-        MIN_THUMB_PX: MIN_THUMB_PX,
+        WHEEL_STEP: scrolling.WHEEL_STEP,
+        WHEEL_SIGN: scrolling.WHEEL_SIGN,
+        MIN_THUMB_PX: scrolling.MIN_THUMB_PX,
         CLASS: CLASS,
         FILTERS: FILTERS,
         SHOWN_COMPLETIONS: SHOWN_COMPLETIONS,
@@ -1432,7 +1316,6 @@ const DevConsole = (function () {
         setQuery: setQuery,
         setScale: setScale,
         scrollBy: scrollBy,
-        syncScrollbar: syncScrollbar,
         tick: tick,
         attach: attach,
         detach: detach

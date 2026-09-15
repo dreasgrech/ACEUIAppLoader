@@ -31,15 +31,36 @@ class ConsoleContractTests(unittest.TestCase):
         self.assertIn("if (row.seq === entry.seq) { return; }", self.js, "unchanged rows are skipped")
         self.assertIn("if (!state.open || !state.dirty || ACEUIModLoader.hudHidden()) { return; }", self.js, "render only when dirty")
 
-    def test_keys_are_checked_by_legacy_keycode_too(self):
-        # the game's engine reports legacy keyCode only (the stock bundle checks `keyCode == 13`)
-        self.assertIn("const KEY_CODES = { Backquote: 192, Enter: 13, ArrowUp: 38, ArrowDown: 40, Escape: 27, Tab: 9 };", self.js)
-        self.assertIn("e.keyCode === KEY_CODES[name]", self.js)
-        self.assertIsNone(re.search(r"e\.key === RUN_KEY", self.js), "use keyIs()")
+    def test_keys_go_through_the_library_rather_than_a_private_table(self):
+        """The engine reports legacy keyCode only (the stock bundle checks `keyCode == 13`)
+        and sends the backquote as a character under `key`. Both facts, and the table that
+        encodes them, now live in ACEUIModLoader.keys, so the console must use it and must
+        not grow another copy."""
+        self.assertIn("const keys = ACEUIModLoader.keys;", self.js)
+        self.assertIn("keys.is(e, ", self.js, "key checks go through the library")
+        self.assertNotIn("const KEY_CODES = {", self.js, "no private keyCode table")
+        self.assertIsNone(re.search(r"e\.key === RUN_KEY", self.js), "use keys.is()")
+        self.assertIn("KEY_CODES: keys.CODES", self.js, "what it exports is the library's table")
 
-    def test_cohtml_wheel_sign_and_typing_guards(self):
-        self.assertIn("const WHEEL_SIGN = -1;", self.js, "Cohtml: a positive deltaY is up (observed in game)")
-        self.assertIn("if (e.target === state.input || e.target === state.search || !isToggleKey(e)) { return; }", self.js)
+    def test_scrolling_and_the_toggle_key_come_from_the_library(self):
+        """Cohtml does not scroll an overflowing box and reports the wheel with the
+        opposite sign to a browser; the capabilities probe needed the same behaviour, so
+        it is ACEUIModLoader.scroll's now. The toggle key binds through the library too,
+        which is what keeps it from firing while the player is typing."""
+        self.assertIn("const scrolling = ACEUIModLoader.scroll;", self.js)
+        self.assertIn("scrolling.attach({", self.js, "the scrollbar is the library's")
+        self.assertNotIn("const WHEEL_SIGN", self.js, "no private wheel handling")
+        self.assertNotIn("const syncScrollbar", self.js, "no private thumb geometry")
+        self.assertIn("keys.bind(toggleKey,", self.js, "the hotkey binds through the library")
+        self.assertNotIn("isToggleKey", self.js, "no private hotkey matching")
+
+    def test_every_listener_it_adds_goes_into_one_bag(self):
+        """Fourteen addEventListener calls once had fourteen removeEventListener calls
+        mirroring them by hand in detach; one missed pair leaks into a HUD that reloads on
+        every Escape."""
+        self.assertIn("state.bag = dom.listeners();", self.js)
+        self.assertIn("state.bag.off();", self.js)
+        self.assertEqual(self.js.count("removeEventListener"), 0, "detach empties the bag instead")
 
     def test_prompt_never_echoes_into_the_game_log(self):
         self.assertIn('new Function("return (" + code + "\\n);")', self.js)

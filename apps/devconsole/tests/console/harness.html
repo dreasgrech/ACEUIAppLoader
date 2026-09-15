@@ -295,7 +295,7 @@ console.warn("early warning");
         ok(y + parseFloat(thumb.style.height) <= track.clientHeight + 0.5, "thumb end within the track: " + (y + parseFloat(thumb.style.height)) + " <= " + track.clientHeight);
         const rect = thumb.getBoundingClientRect();
         thumb.dispatchEvent(new MouseEvent("mousedown", { clientX: rect.left + 2, clientY: rect.top + 2, bubbles: true }));
-        ok(track.classList.contains("dragging"), "dragging class"); ok(state.drag, "drag state");
+        ok(track.classList.contains("dragging"), "dragging class"); ok(state.scroller.state.drag, "drag state");
         ok(!root.classList.contains("dragging"), "panel itself not dragging");
         const startTop = body.scrollTop;
         mouse("mousemove", rect.left + 2, rect.top + 2 - 40);
@@ -304,7 +304,7 @@ console.warn("early warning");
         const expected = startTop - 40 * (body.scrollHeight - body.clientHeight) / travel;
         ok(Math.abs(body.scrollTop - Math.max(0, expected)) <= 1, "proportional: " + body.scrollTop + " vs " + expected);
         mouse("mouseup", 0, 0);
-        ok(!track.classList.contains("dragging")); eq(state.drag, null);
+        ok(!track.classList.contains("dragging")); eq(state.scroller.state.drag, null);
         const held = body.scrollTop; mouse("mousemove", 0, 0); eq(body.scrollTop, held, "released");
     });
 
@@ -340,7 +340,7 @@ console.warn("early warning");
         root.querySelector('[data-action="larger"]').dispatchEvent(new MouseEvent("click", { bubbles: true }));
         eq(state.scale, 1.1); eq(root.style.fontSize, "1.1rem"); eq(ACEUIModLoader.settings.get("devconsole", "scale"), 1.1, "persisted through the settings store");
         ok(root.offsetWidth > w, "panel wider"); ok(visibleRows(root)[0].offsetHeight > rowH, "rows taller");
-        eq(state.thumbHeight, -1, "thumb geometry invalidated"); nextFrame(); ok(state.thumbHeight > 0, "thumb re-applied");
+        eq(state.scroller.state.thumbHeight, -1, "thumb geometry invalidated"); nextFrame(); ok(state.scroller.state.thumbHeight > 0, "thumb re-applied");
         let i; for (i = 0; i < 30; i += 1) { root.querySelector('[data-action="smaller"]').dispatchEvent(new MouseEvent("click", { bubbles: true })); }
         eq(state.scale, DevConsole.SCALE_MIN, "clamped at the minimum");
         for (i = 0; i < 30; i += 1) { root.querySelector('[data-action="larger"]').dispatchEvent(new MouseEvent("click", { bubbles: true })); }
