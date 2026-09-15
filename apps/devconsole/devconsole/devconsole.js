@@ -478,44 +478,27 @@ const DevConsole = (function () {
      * controls, or typing an expression toggles headlights, wipers and everything else
      * bound to a letter.
      *
-     * The stock chat box has the same problem and solves it by flipping
-     * `ModelMenuState.is_chat_active` and pushing the menu state back to the engine
-     * (`ksUI.menuState.toggleKeyboardInput` -> `save()` ->
-     * `triggerUICommand("UIMenuState", ...)`; components.js:4056 and 35038). We use that
-     * same path rather than inventing one -- it is what the engine already listens to.
+     * The mechanism lives in ACEUIModLoader.input, shared with any mod that needs it --
+     * it sets both of the engine's flags (`is_chat_active` for letters and
+     * `ignore_gameplay_input_actions` for bound actions such as the arrow keys) and
+     * counts holders so two mods can want the keyboard at once.
      *
      * Releasing matters more than taking: a console left holding the capture would leave
      * the car deaf to its own controls, so blur, close and detach all release it.
      */
-    const callMenuState = function (menu, method, want) {
-        if (typeof menu[method] !== "function") { return false; }
-
-        try {
-            menu[method](want);
-
-            return true;
-        } catch (e) {
-            log(method + "(" + want + ") failed: " + (e && e.message ? e.message : e));
-
-            return false;
-        }
-    };
-
+    /**
+     * Hold or release the keyboard through the shared library, under this mod's name.
+     * ACEUIModLoader.input counts holders, so releasing here cannot take the keyboard
+     * away from another mod that still wants it (DOOM holds it while it is open).
+     */
     const captureKeyboard = function (on) {
-        const menu = window.ksUI && window.ksUI.menuState;
-        const want = Boolean(on);
-        let taken = 0;
+        const input = ACEUIModLoader.input;
 
-        if (!menu) { return false; }
+        if (!input) { return false; }
 
-        // the text path: letters, what the stock chat box flips (is_chat_active)
-        if (callMenuState(menu, "toggleKeyboardInput", want)) { taken += 1; }
+        if (on) { input.capture(me.name); } else { input.release(me.name); }
 
-        // bound gameplay actions: with only the flag above, the arrow keys still moved the
-        // seat while typing (ignore_gameplay_input_actions, UIMenuState field 7)
-        if (callMenuState(menu, "ignoreInputActions", want)) { taken += 1; }
-
-        return taken > 0;
+        return input.available();
     };
 
     const setOpen = function (state, open) {
