@@ -37,6 +37,8 @@ LIB_ORDER = [
     "ACEUIModLoader.input.js",
     "ACEUIModLoader.loader.js",
     "ACEUIModLoader.drawer.js",
+    "ACEUIModLoader.window.js",
+    "ACEUIModLoader.settings.js",
 ]
 BUILD_DIR = os.path.join(_repos.REPO, "build")
 OUT = os.path.join(_repos.REPO, "dist", "ACEUIModLoader.kspkg")

@@ -37,13 +37,28 @@ class LibrarySourceTests(unittest.TestCase):
     def setUp(self):
         self.files = {name: read(os.path.join(SRC, name)) for name in build_loader.LIB_ORDER}
 
+    def test_the_library_follows_the_project_style_too(self):
+        """The same conventions the kit enforces on mods: IIFE modules, no classes, no
+        `this`, no var, no arrows, 4-space indent, double quotes. This was only ever
+        checked on mods, so the loader's own source -- the most-edited code here -- was
+        the one place the rule lived on memory rather than on a test."""
+        from modkit import check_style
+
+        for name, js in self.files.items():
+            with self.subTest(source=name):
+                check_style(self, name, js)
+
     def test_every_source_file_is_in_load_order_and_present(self):
         self.assertEqual(sorted(n for n in os.listdir(SRC) if n.endswith(".js")), sorted(build_loader.LIB_ORDER))
         self.assertEqual(build_loader.LIB_ORDER[0], "ACEUIModLoader.core.js", "core defines the namespace")
         self.assertEqual(build_loader.LIB_ORDER[1], "ACEUIModLoader.console.js", "console hook must run before the stock bundle")
-        self.assertEqual(build_loader.LIB_ORDER[-2], "ACEUIModLoader.loader.js", "loader starts mods")
+        self.assertEqual(build_loader.LIB_ORDER[-4], "ACEUIModLoader.loader.js", "loader starts mods")
         # the drawer registers an ACEUIModLoader.ready callback, so it must load after the loader
-        self.assertEqual(build_loader.LIB_ORDER[-1], "ACEUIModLoader.drawer.js", "drawer needs ready()")
+        self.assertEqual(build_loader.LIB_ORDER[-3], "ACEUIModLoader.drawer.js", "drawer needs ready()")
+        # settings registers its pane with the drawer, so it loads after it
+        # settings opens its pane as an ACEUIModLoader.window, so windows load before it
+        self.assertEqual(build_loader.LIB_ORDER[-2], "ACEUIModLoader.window.js", "settings builds on window")
+        self.assertEqual(build_loader.LIB_ORDER[-1], "ACEUIModLoader.settings.js", "settings needs the drawer")
 
     def test_version_matches_version_file_and_readme(self):
         v = read(os.path.join(ROOT, "VERSION")).strip()

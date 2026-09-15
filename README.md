@@ -2,11 +2,102 @@
 
 The single package that lets several UI mods coexist in Assetto Corsa EVO, the
 shared library those mods are built on, and the tools that build it and install
-mods for it. Version 0.7.3.
+mods for it. Version 0.9.1.
 
 Why a loader is needed at all, and why it has this shape, is in
 [`docs/design.md`](docs/design.md); the game mechanics it relies on are
 documented in the `ACEGameInternals` repository.
+
+## House style
+
+Modules are self-invoking functions assigned onto the namespace — **no classes, no
+`this`, no `var`, no arrow functions, no function declarations**; 4-space indent, double
+quotes, braces on every `if`. The shared test kit (`tools/modkit.py`, `check_style`)
+enforces this on every mod, and as of 0.9.1 on the loader's own `src/` too — that was the
+one place the rule lived on memory rather than on a test.
+
+## Windows
+
+Any mod that needs a second surface — settings, help, a picker, a report — gets one
+without hand-building a panel, wiring dragging, remembering where the player put it or
+running a frame loop:
+
+```js
+const win = ACEUIModLoader.window.open("doom.help", { title: "DOOM help" });
+win.body.appendChild(myContent);      // fill it with whatever you like
+win.setTitle("DOOM help (page 2)");
+win.close();
+
+ACEUIModLoader.window.toggle("doom.help", { title: "DOOM help" });
+ACEUIModLoader.window.isOpen("doom.help");
+ACEUIModLoader.window.get("doom.help");
+ACEUIModLoader.window.closeAll();
+ACEUIModLoader.window.ids();
+```
+
+| | |
+|---|---|
+| `open(id, options)` | opens it and returns the handle; opening one already open returns the same handle rather than stacking a copy |
+| `close(id)` / `closeAll()` | `close` returns false if it was not open |
+| `toggle(id, options)` | returns true when it ended up open |
+| `isOpen(id)` / `get(id)` / `ids()` | |
+
+The handle is `{ id, root, header, body, close(), setTitle(text), isOpen() }` — put your
+content in `body`.
+
+Options, all optional: `title`, `width`, `left`, `top`, `onOpen(win)`, `onClose(id)`. A
+hook that throws is logged and ignored rather than breaking the window.
+
+**The id is per window, not per mod** — a mod can have several. It is also the storage
+key, so each window remembers its own position; prefix it with the mod name
+(`"doom.help"`, `"telemetry.laps"`) to keep them apart.
+
+Dragging and position persistence come from `ACEUIModLoader.panel`, which settles a
+restored position over a few frames, so one shared frame loop runs while any window is
+open and stops when the last one closes.
+
+## A settings page per mod
+
+A mod declares what it has; the loader stores the values, draws the controls in the app
+drawer's options pane, and tells the mod when something changes. The mod never touches
+storage or builds a form.
+
+```js
+const opts = ACEUIModLoader.settings.define("devconsole", [
+    { key: "toggleKey", type: "key",    label: "Toggle key",    value: "Backquote" },
+    { key: "scale",     type: "range",  label: "Panel scale",   value: 1, min: 0.6, max: 2, step: 0.1 },
+    { key: "follow",    type: "toggle", label: "Follow newest", value: true },
+    { key: "theme",     type: "choice", label: "Theme", value: "dark", options: ["dark", "light"] }
+]);
+
+opts.scale;                                    // stored value, already merged over the default
+ACEUIModLoader.settings.get("devconsole", "scale");
+ACEUIModLoader.settings.onChange("devconsole", function (key, value) { ... });
+```
+
+Declaring settings is all it takes for a way in to appear on that mod's drawer row.
+Clicking it opens **that mod's own settings window** — an `ACEUIModLoader.window`, so it
+is a normal draggable panel with an [X] at its top right, whose position is remembered per
+mod. It can also be driven directly: `settings.open(mod)`, `.close(mod)`, `.toggle(mod)`,
+`.isOpen(mod)`. Settings deliberately do *not*
+unfold inside the drawer: with more than a couple of mods an inline pane pushes every row
+below it down the list and the drawer stops being usable. `registerOptions` still exists
+for a small bespoke pane; `registerOpener` is what the settings module uses.
+
+**Types are limited to controls this engine is known to render.** Cohtml is not a browser:
+`<input type="range">` and `<select>` are unproven here, so a `range` is a pair of −/+
+buttons and a `choice` cycles on click — both patterns already proven in the dev console
+and DOOM. `text` uses a plain `<input>` (proven by the console prompt) and takes the
+keyboard through `ACEUIModLoader.input` while focused, so typing a value cannot drive the
+car.
+
+**`key` is why this exists.** Mods that hardcode hotkeys collide with whatever the player
+has bound in the game, and their bindings are not ours to shadow — so the dev console's
+toggle and DOOM's show/hide key are both rebindable from the drawer.
+
+Values are written to both stores: the HUD layout container, which the game writes to disk
+and is the only thing that survives a restart, and `localStorage`, read synchronously so a
+value is there the moment a mod asks for it.
 
 ## Keeping keystrokes out of the car
 

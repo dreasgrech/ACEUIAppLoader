@@ -374,6 +374,208 @@ document.addEventListener("DOMContentLoaded", function () {
         eq(ACEUIModLoader.input.isCaptured(), false, "and nothing is left holding");
     });
 
+    t("window: open gives a handle with a body to fill, a title bar and a close button", function () {
+        const W = ACEUIModLoader.window;
+        const win = W.open("demo.help", { title: "Demo help", width: "12rem" });
+
+        ok(win, "a handle comes back");
+        eq(win.id, "demo.help");
+        ok(win.body, "with a body to fill");
+        ok(win.header, "and a header");
+        eq(win.root.style.width, "12rem", "width honoured");
+        ok(W.isOpen("demo.help"), "and it is open");
+        eq(W.get("demo.help"), win, "get returns the same handle");
+
+        win.body.appendChild(document.createTextNode("my content"));
+        ok(win.root.textContent.indexOf("Demo help") >= 0, "titled");
+        ok(win.root.textContent.indexOf("my content") >= 0, "and filled");
+
+        win.setTitle("Renamed");
+        ok(win.root.textContent.indexOf("Renamed") >= 0, "setTitle works");
+
+        win.root.querySelector("[data-ace-window-close]").dispatchEvent(new MouseEvent("click", { bubbles: true }));
+        eq(W.isOpen("demo.help"), false, "the close button closes it");
+        eq(document.querySelector("[data-ace-window='demo.help']"), null, "and it leaves the page");
+    });
+
+    t("window: opening the same id twice returns the one window, and toggle flips it", function () {
+        const W = ACEUIModLoader.window;
+        const first = W.open("demo.twice", { title: "Twice" });
+        const second = W.open("demo.twice", { title: "Twice" });
+
+        eq(first, second, "no second copy is stacked");
+        eq(document.querySelectorAll("[data-ace-window='demo.twice']").length, 1, "one element");
+
+        eq(W.toggle("demo.twice"), false, "toggle shuts an open one");
+        eq(W.isOpen("demo.twice"), false);
+        eq(W.toggle("demo.twice", { title: "Twice" }), true, "and opens a shut one");
+        W.close("demo.twice");
+    });
+
+    t("window: onOpen and onClose are called, and a throwing one does not break the window", function () {
+        const W = ACEUIModLoader.window;
+        const seen = [];
+
+        const win = W.open("demo.hooks", {
+            title: "Hooks",
+            onOpen: function (w) { seen.push("open:" + w.id); },
+            onClose: function (id) { seen.push("close:" + id); }
+        });
+        eq(seen.join(","), "open:demo.hooks", "onOpen fired with the handle");
+        win.close();
+        eq(seen.join(","), "open:demo.hooks,close:demo.hooks", "onClose fired with the id");
+
+        W.open("demo.bad", { title: "Bad", onOpen: function () { throw new Error("boom"); } });
+        ok(W.isOpen("demo.bad"), "a throwing onOpen still leaves a usable window");
+        W.close("demo.bad");
+    });
+
+    t("window: closeAll shuts every one, and the frame loop only runs while some are open", function () {
+        const W = ACEUIModLoader.window;
+        const before = clock.queue.length;
+
+        W.open("demo.a", { title: "A" });
+        W.open("demo.b", { title: "B" });
+        eq(W.ids().length, 2, "two open");
+        ok(clock.queue.length > before, "a frame loop is running");
+
+        W.closeAll();
+        eq(W.ids().length, 0, "all shut");
+        clock.step(9000);
+        eq(clock.queue.length, 0, "and the loop stopped, so nothing is scheduled");
+
+        eq(W.close("demo.nothing"), false, "closing one that was never open is harmless");
+        eq(W.open(""), null, "an empty id opens nothing");
+    });
+
+    t("settings: define returns live values, merging what was stored over the defaults", function () {
+        window.HUD = makeHud({});
+        const S = ACEUIModLoader.settings;
+
+        const values = S.define("demo", [
+            { key: "scale", type: "range", label: "Scale", value: 1, min: 0.5, max: 2, step: 0.5 },
+            { key: "follow", type: "toggle", label: "Follow", value: true },
+            { key: "theme", type: "choice", label: "Theme", value: "dark", options: ["dark", "light"] },
+            { key: "toggleKey", type: "key", label: "Toggle key", value: "Backquote" },
+            { key: "nonsense", type: "wat", label: "ignored" }
+        ]);
+
+        eq(values.scale, 1, "default applied");
+        eq(S.specs("demo").length, 4, "a control type we cannot render is dropped");
+
+        S.set("demo", "scale", 1.5);
+        eq(S.get("demo", "scale"), 1.5, "set stores it");
+
+        /* re-declaring (a HUD reload) must pick the stored value back up */
+        const again = S.define("demo", [
+            { key: "scale", type: "range", label: "Scale", value: 1, min: 0.5, max: 2, step: 0.5 }
+        ]);
+        eq(again.scale, 1.5, "stored value wins over the default");
+        window.HUD = null;
+    });
+
+    t("settings: values are coerced back into the shape the spec promises", function () {
+        const S = ACEUIModLoader.settings;
+        S.define("coerce", [
+            { key: "n", type: "range", value: 5, min: 0, max: 10 },
+            { key: "b", type: "toggle", value: false },
+            { key: "c", type: "choice", value: "a", options: ["a", "b"] }
+        ]);
+
+        S.set("coerce", "n", 99);
+        eq(S.get("coerce", "n"), 10, "clamped to max");
+        S.set("coerce", "n", -99);
+        eq(S.get("coerce", "n"), 0, "clamped to min");
+        S.set("coerce", "b", "yes");
+        eq(S.get("coerce", "b"), true, "made a boolean");
+        S.set("coerce", "c", "nope");
+        eq(S.get("coerce", "c"), "a", "an option that does not exist falls back to the default");
+        eq(S.set("coerce", "missing", 1), undefined, "an unknown key is not invented");
+    });
+
+    t("settings: changes are announced to the mod and survive as stored values", function () {
+        window.HUD = makeHud({});
+        const S = ACEUIModLoader.settings;
+        const seen = [];
+
+        S.define("announce", [{ key: "size", type: "range", value: 2, min: 1, max: 5, step: 1 }]);
+        const off = S.onChange("announce", function (key, value) { seen.push(key + "=" + value); });
+
+        S.set("announce", "size", 3);
+        eq(seen.join(","), "size=3", "the mod is told");
+        S.set("announce", "size", 3);
+        eq(seen.length, 1, "an unchanged value says nothing");
+
+        /* both stores, because localStorage dies with the game */
+        ok(ACEUIModLoader.persist.readLocal(S.localKey("announce")), "written to localStorage");
+        ok(ACEUIModLoader.persist.readHud(S.hudId("announce")), "and to the HUD store, which reaches disk");
+
+        off();
+        S.set("announce", "size", 4);
+        eq(seen.length, 1, "unsubscribed");
+        window.HUD = null;
+    });
+
+    t("settings: render draws a control per setting and the controls change the value", function () {
+        const S = ACEUIModLoader.settings;
+        const pane = document.createElement("div");
+        document.getElementById("center").appendChild(pane);
+
+        S.define("drawn", [
+            { key: "follow", type: "toggle", label: "Follow", value: false },
+            { key: "scale", type: "range", label: "Scale", value: 1, min: 0, max: 4, step: 1, digits: 0 },
+            { key: "theme", type: "choice", label: "Theme", value: "dark", options: ["dark", "light"] }
+        ]);
+        S.render("drawn", pane);
+
+        const rows = pane.querySelectorAll("div");
+        ok(rows.length >= 3, "a row per setting");
+        ok(pane.textContent.indexOf("Follow") >= 0 && pane.textContent.indexOf("Reset to defaults") >= 0, "labels and a reset");
+
+        /* the toggle box is the first clickable thing in the first row */
+        rows[0].querySelector("span:last-child").dispatchEvent(new MouseEvent("click", { bubbles: true }));
+        eq(S.get("drawn", "follow"), true, "clicking the box flips it");
+
+        S.reset("drawn");
+        eq(S.get("drawn", "follow"), false, "reset puts the defaults back");
+        pane.remove();
+    });
+
+    t("settings: a mod with settings gets a way in from the drawer, opening its own window", function () {
+        const S = ACEUIModLoader.settings;
+        const d = ACEUIModLoader.drawer;
+
+        d.build([{ name: "geary", info: { title: "Geary" }, status: "loaded" }]);
+        const app = d.state.apps.filter(function (a) { return a.name === "geary"; })[0];
+        eq(app.gear.style.display, "none", "nothing to configure, nothing offered");
+        ok(app.gear.textContent.length > 0, "and when shown it is a word, not a missing glyph");
+
+        S.define("geary", [{ key: "on", type: "toggle", label: "On", value: true }]);
+        eq(app.gear.style.display, "", "declaring settings reveals it");
+
+        /* a pane unfolding inside the drawer pushes every row below it down the list, so
+           with more than a couple of mods it has to be a window of its own */
+        app.gear.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+        ok(S.isOpen("geary"), "a window opened");
+        eq(app.pane.style.display, "none", "and nothing unfolded inside the drawer");
+
+        const win = document.querySelector("[data-ace-window='" + S.windowId("geary") + "']");
+        ok(win, "the window is in the page");
+        ok(win.textContent.indexOf("Geary settings") >= 0, "titled after the mod");
+        ok(win.textContent.indexOf("On") >= 0, "with its controls");
+
+        const shut = win.querySelector("[data-ace-window-close]");
+        ok(shut, "it has a close button");
+        shut.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+        eq(S.isOpen("geary"), false, "which closes it");
+        eq(document.querySelector("[data-ace-window='" + S.windowId("geary") + "']"), null, "and removes it from the page");
+
+        app.gear.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+        ok(S.isOpen("geary"), "clicking again reopens");
+        app.gear.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+        eq(S.isOpen("geary"), false, "and again closes: it toggles");
+    });
+
     t("panel: attach hides until placed; drag moves, clamps and saves fractions", function () {
         window.HUD = null; localStorage.clear();
         const p = makePanel(); const root = p.root;

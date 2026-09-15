@@ -66,7 +66,13 @@ ACEUIModLoader.drawer = (function () {
     const BORDER = "1px solid rgba(255, 255, 255, 0.1)";
 
     const TITLE_TEXT = "APPS";
-    const OPTIONS_GLYPH = "⚙";
+    /**
+     * A word, not a symbol. The main font has no gear glyph -- it rendered as a blank box
+     * in game -- and the stock UI's icon font ('icons', /fonts/acevoicons.ttf) addresses
+     * its glyphs by bare characters whose meanings are not documented anywhere we can
+     * check, so guessing one risks showing the wrong picture rather than none.
+     */
+    const OPTIONS_GLYPH = "OPTIONS";
     const EMPTY_TEXT = "no mods loaded on this page";
 
     const state = {
@@ -78,7 +84,8 @@ ACEUIModLoader.drawer = (function () {
         hot: null,
         apps: [],               // { name, title, status, row, box, pane, filled }
         visible: {},            // name -> bool, persisted
-        options: {},            // name -> render function a mod registered
+        options: {},            // name -> render function a mod registered (inline pane)
+        openers: {},            // name -> function that opens the mod's own settings window
         touched: false,         // the user flipped a switch: newer than anything on disk
         closeTimer: 0
     };
@@ -232,15 +239,31 @@ ACEUIModLoader.drawer = (function () {
 
     // ---- options panes -------------------------------------------------------------
 
+    const revealGear = function (name) {
+        state.apps.forEach(function (app) {
+            if (app.name === name) { app.gear.style.display = ""; }
+        });
+    };
+
     /** A mod registers a callback that fills its pane; it is called once, when first opened. */
     const registerOptions = function (name, render) {
         if (typeof render !== "function") { return; }
 
         state.options[name] = render;
+        revealGear(name);
+    };
 
-        state.apps.forEach(function (app) {
-            if (app.name === name) { app.gear.style.display = ""; }
-        });
+    /**
+     * A mod (or the settings module on its behalf) registers something to *open* instead
+     * of a pane that unfolds inside the drawer. With more than a couple of mods an inline
+     * pane pushes every row below it down the list, so anything with real settings opens
+     * its own window; the pane stays for small bespoke cases.
+     */
+    const registerOpener = function (name, open) {
+        if (typeof open !== "function") { return; }
+
+        state.openers[name] = open;
+        revealGear(name);
     };
 
     const togglePane = function (app) {
@@ -328,7 +351,7 @@ ACEUIModLoader.drawer = (function () {
             padding: "0 0.2rem",
             color: INK_DIM,
             fontSize: "0.8rem",
-            display: state.options[app.name] ? "" : "none"
+            display: state.options[app.name] || state.openers[app.name] ? "" : "none"
         });
 
         row.appendChild(box);
@@ -338,7 +361,13 @@ ACEUIModLoader.drawer = (function () {
         row.addEventListener("mouseenter", function () { row.style.background = ROW_HOVER; });
         row.addEventListener("mouseleave", function () { row.style.background = "transparent"; });
         row.addEventListener("click", function (e) {
-            if (e.target === gear) { togglePane(app); } else { toggleApp(app.name); }
+            if (e.target !== gear) {
+                toggleApp(app.name);
+            } else if (state.openers[app.name]) {
+                state.openers[app.name]();          // its own window
+            } else {
+                togglePane(app);                    // the old inline pane
+            }
 
             e.stopPropagation();
         });
@@ -506,6 +535,7 @@ ACEUIModLoader.drawer = (function () {
         HUD_ID: HUD_ID,
         setVisible: setVisible,
         toggleApp: toggleApp,
-        registerOptions: registerOptions
+        registerOptions: registerOptions,
+        registerOpener: registerOpener
     };
 }());
