@@ -43,11 +43,12 @@ const CapabilitiesProbe = (function () {
     const FILTER_ATTR = "data-filter";
     const FILTER_KEY = me.key("filters");
 
-    /** Scrolling: Cohtml does not scroll an overflowing box by itself (see ACEDevConsole). */
-    const WHEEL_STEP = 0.25;
-    const MIN_THUMB_PX = 12;
-    /** Cohtml reports wheel deltaY with the opposite sign to a browser (positive = up). */
-    const WHEEL_SIGN = -1;
+    /**
+     * Scrolling: Cohtml does not scroll an overflowing box by itself, and the wheel's sign
+     * is inverted here. Both are ACEUIModLoader.scroll's business now -- this panel used to
+     * carry its own copy of the dev console's version.
+     */
+    const scrolling = ACEUIModLoader.scroll;
 
     /** Result states, shared with the stylesheet through STATUS_CLASS. */
     const YES = "yes";
@@ -930,12 +931,9 @@ const CapabilitiesProbe = (function () {
             summary: root.querySelector("." + CLASS.summary),
             results: [],
             pending: 0,
-            drag: null,                 // thumb drag in progress: { startY, startTop }
-            thumbHeight: -1,            // last applied thumb geometry (only written on change)
-            thumbY: -1,
-            wheelLogged: false,         // the first wheel event is logged once
+            scroller: null,             // ACEUIModLoader.scroll handle (wheel, thumb, track)
             laidOut: false,             // the scrollbar has been sized once layout exists
-            handlers: null,
+            bag: null,                  // every listener this panel added, for detach
             panel: null,
             loop: null
         };
@@ -1040,103 +1038,15 @@ const CapabilitiesProbe = (function () {
         });
     };
 
-    // ---- scrolling (Cohtml needs the box scrolled by hand; mirrors ACEDevConsole) --
+    // ---- scrolling ------------------------------------------------------------------
 
-    /** Size and place the thumb from the body's scroll geometry; writes style only on change. */
+    /** Re-place the thumb after the list changed; the scroller owns the geometry. */
     const syncScrollbar = function (state) {
-        const body = state.body;
-        const visible = body.clientHeight;
-        const total = body.scrollHeight;
-        const trackHeight = state.track.clientHeight;
-        const fits = total <= visible || trackHeight === 0;
-        let thumbHeight;
-        let y;
-
-        state.track.classList.toggle(CLASS.nofit, fits);
-
-        if (fits) { return; }
-
-        thumbHeight = Math.min(trackHeight, Math.max(MIN_THUMB_PX, Math.round(trackHeight * visible / total)));
-        y = Math.round((trackHeight - thumbHeight) * clamp(body.scrollTop / (total - visible), 0, 1));
-
-        if (thumbHeight !== state.thumbHeight) {
-            state.thumbHeight = thumbHeight;
-            state.thumb.style.height = thumbHeight + "px";
-        }
-
-        if (y !== state.thumbY) {
-            state.thumbY = y;
-            state.thumb.style.transform = "translateY(" + y + "px)";
-        }
+        state.scroller.sync();
     };
 
-    /** Move the clipped body by `dy` pixels and re-place the thumb. */
     const scrollBy = function (state, dy) {
-        const body = state.body;
-        const max = Math.max(0, body.scrollHeight - body.clientHeight);
-
-        body.scrollTop = clamp(body.scrollTop + dy, 0, max);
-        syncScrollbar(state);
-    };
-
-    const onWheel = function (state, e) {
-        const direction = e.deltaY > 0 ? 1 : (e.deltaY < 0 ? -1 : 0);
-
-        if (!state.wheelLogged) {
-            state.wheelLogged = true;
-            log("first wheel deltaY=" + e.deltaY + " (positive is treated as up)");
-        }
-
-        if (direction === 0) { return; }
-
-        scrollBy(state, direction * WHEEL_SIGN * state.body.clientHeight * WHEEL_STEP);
-        e.preventDefault();
-    };
-
-    const onThumbDown = function (state, e) {
-        state.drag = { startY: e.clientY, startTop: state.body.scrollTop };
-        state.track.classList.toggle(CLASS.dragging, true);
-        window.addEventListener("mousemove", state.handlers.thumbMove);
-        window.addEventListener("mouseup", state.handlers.thumbUp);
-        e.preventDefault();
-    };
-
-    const onThumbMove = function (state, e) {
-        const body = state.body;
-        const travel = state.track.clientHeight - state.thumbHeight;
-        const max = Math.max(0, body.scrollHeight - body.clientHeight);
-
-        if (!state.drag || travel <= 0) { return; }
-
-        scrollBy(state, state.drag.startTop + (e.clientY - state.drag.startY) * max / travel - body.scrollTop);
-    };
-
-    const onThumbUp = function (state) {
-        if (!state.drag) { return; }
-
-        state.drag = null;
-        state.track.classList.toggle(CLASS.dragging, false);
-        window.removeEventListener("mousemove", state.handlers.thumbMove);
-        window.removeEventListener("mouseup", state.handlers.thumbUp);
-    };
-
-    /** A press on the track jumps to that point; on the thumb it starts a drag. */
-    const onTrackDown = function (state, e) {
-        const body = state.body;
-        const travel = state.track.clientHeight - state.thumbHeight;
-        const max = Math.max(0, body.scrollHeight - body.clientHeight);
-        let ratio = 1;
-
-        if (e.target === state.thumb) {
-            onThumbDown(state, e);
-
-            return;
-        }
-
-        if (typeof e.offsetY === "number" && travel > 0) { ratio = clamp((e.offsetY - state.thumbHeight / 2) / travel, 0, 1); }
-
-        scrollBy(state, ratio * max - body.scrollTop);
-        e.preventDefault();
+        state.scroller.scrollBy(dy);
     };
 
     // ---- filters: status chips + search box (mirrors ACEDevConsole) ----------------
@@ -1237,20 +1147,19 @@ const CapabilitiesProbe = (function () {
     const attach = function (root) {
         const state = create(root);
 
-        state.handlers = {
-            click: function (e) { onClick(state, e); },
-            wheel: function (e) { onWheel(state, e); },
-            trackDown: function (e) { onTrackDown(state, e); },
-            thumbMove: function (e) { onThumbMove(state, e); },
-            thumbUp: function () { onThumbUp(state); },
-            searchChange: function () { onSearchChange(state); }
-        };
+        state.scroller = scrolling.attach({
+            body: state.body,
+            track: state.track,
+            thumb: state.thumb,
+            nofitClass: CLASS.nofit,
+            draggingClass: CLASS.dragging,
+            log: log
+        });
 
-        root.addEventListener("click", state.handlers.click);
-        state.body.addEventListener("wheel", state.handlers.wheel);
-        state.track.addEventListener("mousedown", state.handlers.trackDown);
-        state.search.addEventListener("input", state.handlers.searchChange);
-        state.search.addEventListener("keyup", state.handlers.searchChange);
+        state.bag = ACEUIModLoader.dom.listeners();
+        state.bag.on(root, "click", function (e) { onClick(state, e); });
+        state.bag.on(state.search, "input", function () { onSearchChange(state); });
+        state.bag.on(state.search, "keyup", function () { onSearchChange(state); });
 
         state.panel = ACEUIModLoader.panel.attach(root, { hudId: me.hudId, storageKey: me.storageKey, log: log });
         state.loop = ACEUIModLoader.loop.start(function (now) { tick(state, now); });
@@ -1265,15 +1174,13 @@ const CapabilitiesProbe = (function () {
         ACEUIModLoader.loop.stop(state.loop);
         ACEUIModLoader.panel.detach(state.panel);
 
-        if (state.handlers) {
-            state.root.removeEventListener("click", state.handlers.click);
-            state.body.removeEventListener("wheel", state.handlers.wheel);
-            state.track.removeEventListener("mousedown", state.handlers.trackDown);
-            state.search.removeEventListener("input", state.handlers.searchChange);
-            state.search.removeEventListener("keyup", state.handlers.searchChange);
-            window.removeEventListener("mousemove", state.handlers.thumbMove);
-            window.removeEventListener("mouseup", state.handlers.thumbUp);
-            state.handlers = null;
+        // kept, not nulled: the probe's own checks finish after a detach and still
+        // re-filter the list, and a detached scroller is a no-op rather than a crash
+        if (state.scroller) { state.scroller.detach(); }
+
+        if (state.bag) {
+            state.bag.off();
+            state.bag = null;
         }
     };
 
