@@ -31,8 +31,6 @@ const DevConsole = (function () {
      * logger and the storage keys, so none of it is repeated here.
      */
     const me = ACEUIModLoader.mod("devconsole");
-    const OPEN_KEY = me.key("open");
-    const FILTER_KEY = me.key("filters");
 
     /**
      * Keyboard. Names are `e.key` / `e.code` values; the numbers are the legacy
@@ -123,18 +121,17 @@ const DevConsole = (function () {
     /** Text filter: rows whose text does not contain the query (case-insensitive) are hidden. */
     const SEARCH_TEXT = "filter text";
 
-    /** Panel scale: the root's font-size in rem; everything inside is sized in em. */
-    const SCALE_KEY = me.key("scale");
     /**
-     * The scale lived under its own key before it was a setting. Seed the setting's
-     * default from it so upgrading does not silently reset a panel someone had sized.
+     * Panel scale: the root's font-size in rem; everything inside is sized in em. It lived
+     * under its own key before it was a setting, so the default is seeded from that key --
+     * upgrading must not silently reset a panel someone had sized.
      */
+    const SCALE_DEFAULT = 1;
     const scaleWas = function () {
-        const was = ACEUIModLoader.persist.readLocal(SCALE_KEY);
+        const was = me.recall("scale", SCALE_DEFAULT);
 
         return typeof was === "number" ? was : SCALE_DEFAULT;
     };
-    const SCALE_DEFAULT = 1;
     const SCALE_MIN = 0.6;
     const SCALE_MAX = 2;
     const SCALE_STEP = 0.1;
@@ -147,8 +144,7 @@ const DevConsole = (function () {
      * here because a hardcoded hotkey collides with whatever the player has bound in the
      * game; this lets them move ours rather than lose theirs.
      */
-    const options = ACEUIModLoader.settings
-        ? ACEUIModLoader.settings.define("devconsole", [
+    const options = ACEUIModLoader.settings.define(me.name, [
             {
                 key: "toggleKey",
                 type: "key",
@@ -165,9 +161,8 @@ const DevConsole = (function () {
                 max: SCALE_MAX,
                 step: SCALE_STEP,
                 digits: SCALE_DIGITS
-            }
-        ])
-        : { toggleKey: TOGGLE_CODE, scale: scaleWas() };
+        }
+    ]);
 
     /** Class names shared with devconsole.css. */
     const CLASS = {
@@ -358,7 +353,7 @@ const DevConsole = (function () {
     const create = function (root) {
         const filters = {};
         const filterEls = {};
-        const stored = persist.readLocal(FILTER_KEY);
+        const stored = me.recall("filters", null);
 
         root.classList.add(CLASS.root);
 
@@ -404,8 +399,7 @@ const DevConsole = (function () {
             unsubscribeSettings: null,
             unbindToggle: null,
             bag: null,                  // every listener this console added, for detach
-            panel: null,                // ACEUIModLoader.panel state (drag + position)
-            loop: null                  // ACEUIModLoader.loop handle
+            ui: null                    // me.panel handle: the panel and its frame loop
         };
     };
 
@@ -489,8 +483,6 @@ const DevConsole = (function () {
 
     /** One animation frame: settle the position, then redraw if anything changed. */
     const tick = function (state, now) {
-        ACEUIModLoader.panel.update(state.panel, now);
-
         if (!state.open || !state.dirty || ACEUIModLoader.hudHidden()) { return; }
 
         state.dirty = false;
@@ -530,7 +522,7 @@ const DevConsole = (function () {
     const setOpen = function (state, open) {
         state.open = open;
         setClass(state.root, CLASS.closed, !open);
-        persist.writeLocal(OPEN_KEY, open);
+        me.remember("open", open);
 
         if (open) {
             state.dirty = true;
@@ -547,7 +539,7 @@ const DevConsole = (function () {
     const setFilter = function (state, id, on) {
         state.filters[id] = on;
         setClass(state.filterEls[id].el, CLASS.on, on);
-        persist.writeLocal(FILTER_KEY, state.filters);
+        me.remember("filters", state.filters);
         state.dirty = true;
     };
 
@@ -564,11 +556,7 @@ const DevConsole = (function () {
         state.scale = value;
         state.root.style.fontSize = value + "rem";
 
-        if (ACEUIModLoader.settings) {
-            ACEUIModLoader.settings.set(me.name, "scale", value);
-        } else {
-            persist.writeLocal(SCALE_KEY, value);
-        }
+        ACEUIModLoader.settings.set(me.name, "scale", value);
 
         // the panel's size changed, so the thumb's cached geometry is stale
         if (state.scroller) { state.scroller.invalidate(); }
@@ -1197,10 +1185,8 @@ const DevConsole = (function () {
      */
     const attach = function (root) {
         const state = create(root);
-        const storedOpen = persist.readLocal(OPEN_KEY);
-        const storedScale = ACEUIModLoader.settings
-            ? ACEUIModLoader.settings.get(me.name, "scale")
-            : persist.readLocal(SCALE_KEY);
+        const storedOpen = me.recall("open", null);
+        const storedScale = ACEUIModLoader.settings.get(me.name, "scale");
 
         const grab = function () { captureKeyboard(true); };
         const release = function () { captureKeyboard(false); };
@@ -1236,15 +1222,12 @@ const DevConsole = (function () {
         setClass(root, CLASS.closed, !state.open);
         setScale(state, typeof storedScale === "number" ? storedScale : SCALE_DEFAULT);
 
-        if (ACEUIModLoader.settings) {
-            state.unsubscribeSettings = ACEUIModLoader.settings.onChange(me.name, function (key, value) {
-                if (key === "scale" && value !== state.scale) { setScale(state, value); }
-            });
-        }
+        state.unsubscribeSettings = ACEUIModLoader.settings.onChange(me.name, function (key, value) {
+            if (key === "scale" && value !== state.scale) { setScale(state, value); }
+        });
 
-        state.panel = ACEUIModLoader.panel.attach(root, { hudId: me.hudId, storageKey: me.storageKey, log: log });
+        state.ui = me.panel(root, function (now) { tick(state, now); });
         state.unsubscribe = lines.subscribe(function () { state.dirty = true; });
-        state.loop = ACEUIModLoader.loop.start(function (now) { tick(state, now); });
         log("console attached, " + lines.entries().length + " buffered line(s), " + (state.open ? "open" : "closed")
             + ", scale " + state.scale + ", toggle key " + TOGGLE_CODE);
 
@@ -1253,8 +1236,7 @@ const DevConsole = (function () {
 
     /** Stop the loop, stop following the buffer and release the listeners. The DOM is left in place. */
     const detach = function (state) {
-        ACEUIModLoader.loop.stop(state.loop);
-        ACEUIModLoader.panel.detach(state.panel);
+        state.ui.stop();
 
         if (state.unsubscribe) {
             state.unsubscribe();
@@ -1280,8 +1262,6 @@ const DevConsole = (function () {
             state.bag = null;
         }
     };
-
-    log("script loaded, version=" + me.version + ", lib=" + ACEUIModLoader.VERSION + ", url=" + location.href);
 
     return {
         SCALE_MIN: SCALE_MIN,
