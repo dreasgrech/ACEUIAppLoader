@@ -136,6 +136,83 @@ console.warn("early warning");
         eq(state.history.length, 4);
     });
 
+    t("an object result is expanded over indented lines, not squashed onto one", function () {
+        input.value = "({ a: 1, b: { c: 2 }, d: \"hi\" })";
+        key(input, { key: "Enter" });
+        nextFrame();
+        const shown = texts(root);
+        const tree = shown.slice(shown.length - 8);
+        eq(tree[0], "> ({ a: 1, b: { c: 2 }, d: \"hi\" })", "echo first");
+        eq(tree[1], "Object {", "headline then brace");
+        eq(tree[2], "  a: 1", "one property per line, indented");
+        eq(tree[3], "  b: Object {", "nested object opens");
+        eq(tree[4], "    c: 2", "nested property indented further");
+        eq(tree[5], "  }", "nested close");
+        eq(tree[6], "  d: \"hi\"", "strings quoted");
+        eq(tree[7], "}", "closing brace");
+        eq(lastRow(root).getAttribute("data-level"), "result", "still a result line");
+    });
+
+    t("arrays show their length, deep values are capped and cycles are marked", function () {
+        const out = [];
+        DevConsole.treeLines([1, 2], "", 0, out, []);
+        eq(out[0], "Array(2) [", "length in the headline");
+        eq(out[1], "  0: 1", "index as the label");
+
+        const loop = { name: "root" };
+        loop.self = loop;
+        const cyc = [];
+        DevConsole.treeLines(loop, "", 0, cyc, []);
+        ok(cyc.some(function (l) { return l.indexOf("[circular]") >= 0; }), "cycle marked, not followed");
+
+        let deep = { v: 0 };
+        let i;
+        for (i = 0; i < DevConsole.TREE_MAX_DEPTH + 3; i += 1) { deep = { down: deep }; }
+        const capped = [];
+        DevConsole.treeLines(deep, "", 0, capped, []);
+        ok(capped.some(function (l) { return l.indexOf("...") >= 0; }), "depth capped");
+    });
+
+    t("Tab completes a name, cycles alternatives, and shows clickable chips", function () {
+        window.__accomplice = { alpha: 1, alfresco: 2, beta: 3 };
+        input.value = "__accomplice";
+        key(input, { key: "Tab" });
+        eq(input.value, "__accomplice", "an exact single match completes to itself");
+
+        input.value = "__accomplice.al";
+        key(input, { key: "Tab" });
+        eq(input.value, "__accomplice.alfresco", "first alternative inserted");
+        const chips = root.querySelectorAll(".dc-suggest-item:not(.dc-hidden)");
+        eq(chips.length, 2, "both alternatives offered");
+        ok(!root.querySelector(".dc-suggest").classList.contains("dc-hidden"), "strip shown");
+
+        key(input, { key: "Tab" });
+        eq(input.value, "__accomplice.alpha", "Tab cycles to the next");
+        key(input, { key: "Tab" });
+        eq(input.value, "__accomplice.alfresco", "and wraps around");
+
+        key(input, { key: "Escape" });
+        ok(root.querySelector(".dc-suggest").classList.contains("dc-hidden"), "Escape clears the strip");
+    });
+
+    t("completion traverses object paths and never calls anything", function () {
+        window.__called = 0;
+        window.__probe = function () { window.__called = 1; return { hidden: 1 }; };
+        window.__probe.tail = 1;
+
+        const found = DevConsole.completionsFor("__probe.ta");
+        eq(found.partial, "ta", "partial taken from after the dot");
+        ok(found.items.indexOf("tail") >= 0, "property of the function object offered");
+        eq(window.__called, 0, "the function was never invoked");
+
+        const nested = DevConsole.completionsFor("ModelCurrentCar.spe");
+        ok(nested.items.indexOf("speed") >= 0, "walks into a page global");
+
+        eq(DevConsole.completionsFor("").items.length, 0, "nothing typed, nothing offered");
+        eq(DevConsole.completionsFor("__nothing_here.x").items.length, 0, "unresolvable base offers nothing");
+        DevConsole.resetCompletion(state);
+    });
+
     t("Enter without a key name and with an unrelated keyCode does nothing", function () {
         input.value = "should stay"; key(input, { keyCode: 65 });
         eq(input.value, "should stay"); eq(state.dirty, false);
@@ -330,12 +407,60 @@ console.warn("early warning");
         eq(root.querySelectorAll(".dc-row").length, MAX, "markup reused"); DevConsole.detach(state);
     });
 
+    t(".fields shows the schema against the live object, and flags both kinds of mismatch", function () {
+        state = DevConsole.attach(root);   // the detach case above released the listeners
+        /* stand-in for the generated protofields.js, so no file load is needed here */
+        window.ACEProtoFields = {
+            version: "test",
+            messages: { UIDemoState: [["alpha", "int32", 1, ""], ["beta", "float", 2, ""], ["gamma", "string", 3, "repeated"]] },
+            enums: {},
+            origin: { UIDemoState: "Demo.proto" },
+            models: { ModelDemo: "UIDemoState" }
+        };
+        window.ModelDemo = { alpha: 7, gamma: "x", extra: 1 };
+
+        input.value = ".fields ModelDemo"; key(input, { key: "Enter" }); nextFrame();
+        const out = texts(root).join("\n");
+        ok(out.indexOf("alpha") >= 0 && out.indexOf("= 7") >= 0, "a live field shows its value");
+        ok(out.indexOf("beta") >= 0 && out.indexOf("(not published)") >= 0, "a documented field the game never fills is flagged");
+        ok(out.indexOf("repeated string") >= 0, "the label and type are shown");
+        ok(out.indexOf("#3") >= 0, "with the protobuf tag");
+        ok(out.indexOf("3 defined, 2 live") >= 0, "counts both sides");
+        ok(out.indexOf("live but not in the schema: extra") >= 0, "and what the game added on top");
+
+        input.value = ".fields Nonsense"; key(input, { key: "Enter" }); nextFrame();
+        ok(texts(root).pop().indexOf("no schema called Nonsense") >= 0, "unknown name explained");
+
+        input.value = ".fields"; key(input, { key: "Enter" }); nextFrame();
+        ok(texts(root).join("\n").indexOf("ModelDemo") >= 0, "bare .fields lists what is known");
+    });
+
+    t(".logtest reports which console methods actually reach the console", function () {
+        input.value = ".logtest"; key(input, { key: "Enter" }); nextFrame();
+        const out = texts(root).join(" ~ ");
+        DevConsole.detach(state);          // release before asserting, so a failure cannot leak handlers
+
+        ok(out.indexOf("logtest:") >= 0, "reports");
+        ok(/captured: [^~]*\blog\b/.test(out), "console.log is captured");
+        ok(/captured: [^~]*\bwarn\b/.test(out), "console.warn is captured");
+        ok(/captured: [^~]*\berror\b/.test(out), "console.error is captured");
+        /* the library wraps trace/dir/table too: it runs before the stock bundle, so the
+           bundle's own console.trace wrapper calls ours and the line is still captured */
+        if (typeof console.trace === "function") {
+            ok(/captured: [^~]*\btrace\b/.test(out), "console.trace is captured as well");
+            ok(!/NOT captured: [^~]*\btrace\b/.test(out), "trace is not reported as lost");
+        }
+    });
+
     t("prompt: .run refuses anything but a plain name, unknown commands print the list, a good name adds the script", function () {
         state = DevConsole.attach(root);
         input.value = ".run ../x"; key(input, { key: "Enter" }); nextFrame();
         eq(texts(root).pop(), "run: plain file names only, e.g. .run probe"); eq(lastRow(root).getAttribute("data-level"), "error");
         input.value = ".what"; key(input, { key: "Enter" }); nextFrame();
-        ok(texts(root).pop().indexOf("commands: .run <name>") === 0, "command list"); eq(lastRow(root).getAttribute("data-level"), "error");
+        const help = texts(root);
+        ok(help[help.length - 3].indexOf("commands: .run <name>") === 0, "command list starts with .run");
+        ok(help[help.length - 2].indexOf(".fields") >= 0, "the list mentions .fields");
+        ok(help[help.length - 1].indexOf(".logtest") >= 0, "and .logtest"); eq(lastRow(root).getAttribute("data-level"), "error");
         input.value = ".5 + 1"; key(input, { key: "Enter" }); nextFrame();
         eq(texts(root).pop(), "1.5", "a number starting with a dot is still JavaScript");
         input.value = ".run hello"; key(input, { key: "Enter" }); nextFrame();

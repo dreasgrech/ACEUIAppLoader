@@ -19,6 +19,79 @@ and filters. Everything learned about the game and its UI engine is in
 and the tests load the library and the shared test fixtures from
 `../ACEUIModLoader/`.
 
+## Commands
+
+Type a dot and a word at the prompt; they never collide with JavaScript (`.5 + 1` still
+evaluates).
+
+| command | what it does |
+|---|---|
+| `.run <name>` | loads `ACEUIModLoaderMods/snippets/<name>.js` as a script — write it in an editor, run it in game, no reinstall and no pasting |
+| `.fields [name]` | the **schema** fields of a `Model*` global or message, against what the game actually published |
+| `.logtest` | which console methods really reach this console, measured from the inside |
+
+### `.fields` — schema versus reality
+
+The game mirrors protobuf messages into the `Model*` globals, but a live object only shows
+the fields *this build happens to fill in*. The recovered schemas say what else the message
+can carry, and the difference is the interesting part:
+
+```
+> .fields ModelCurrentCar
+  gas_percent                     float                   #15     = 0.12
+  npos                            float                   #113    = 0.42
+  kers_charge_perc                float                   #42     (not published)
+  ...
+UICurrentCarState <- ModelCurrentCar  PlatformUiTypes.proto  91 defined, 88 live
+  live but not in the schema: __Type
+```
+
+`.fields` with no name lists every message mapped to a global. The data is generated from
+`ACEGameInternals/proto` by `tools/gen_protofields.py` into `devconsole/protofields.js`,
+which ships under mod.json's `files` key and is **loaded on demand**, so the HUD never pays
+for it unless someone asks. Regenerate it after a game update:
+
+```
+python tools/gen_protofields.py
+```
+
+### `.logtest` — proving the capture
+
+The library wraps `console.log/info/debug/warn/error/trace/dir/table`, wraps
+`console.assert` separately (recording only failures) and listens for uncaught errors and
+unhandled rejections. `.logtest` emits one marked line through every method the engine
+offers and then reports which ones came back — so coverage is a measurement, not an
+assumption. Methods the engine does not provide are listed as absent.
+
+## Prompt: completion and readable results
+
+**Tab completes object paths.** Type `ModelCurrentCar.` and press Tab to walk into the
+game's models; press Tab again to cycle the alternatives, or click a chip. The completer
+only ever *reads* property names, walking from `window` through the prototype chain — it
+never compiles or calls anything, so completing a path cannot have side effects on the
+game. Any other keystroke drops the suggestion list, and so does an edit the console did
+not make (a paste), which would otherwise splice a completion into the wrong place.
+
+**Results are expanded, not squashed.** A game model is a wall of fields, so an object
+result is printed over many lines — one property per line, indented, in the style of a
+browser's dev tools — rather than the single line `ACEUIModLoader.console.format` uses for
+log lines:
+
+```
+> ModelTiming
+Object {
+  __Type: "UITimingState"
+  current: "00:06.272"
+  splits: Array(0) [
+  ]
+  invalid: true
+}
+```
+
+Depth, key count and total lines are capped (so a careless `window` cannot flood the
+buffer), cycles are marked `[circular]` rather than followed, and a property whose getter
+throws prints the error instead of killing the print.
+
 ## Layout
 
 - `devconsole/` - the shipped mod, exactly what lands in

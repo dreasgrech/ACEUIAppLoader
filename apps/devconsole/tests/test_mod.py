@@ -15,7 +15,7 @@ JS = os.path.join(ROOT, "devconsole", "devconsole.js")
 
 class Tests(ModTests):
     ROOT = ROOT
-    MIN_CASES = 18
+    MIN_CASES = 21
     HOT_PATH = ("// ---- rendering", "// ---- state changes")
 
 
@@ -33,7 +33,7 @@ class ConsoleContractTests(unittest.TestCase):
 
     def test_keys_are_checked_by_legacy_keycode_too(self):
         # the game's engine reports legacy keyCode only (the stock bundle checks `keyCode == 13`)
-        self.assertIn("const KEY_CODES = { Backquote: 192, Enter: 13, ArrowUp: 38, ArrowDown: 40, Escape: 27 };", self.js)
+        self.assertIn("const KEY_CODES = { Backquote: 192, Enter: 13, ArrowUp: 38, ArrowDown: 40, Escape: 27, Tab: 9 };", self.js)
         self.assertIn("e.keyCode === KEY_CODES[name]", self.js)
         self.assertIsNone(re.search(r"e\.key === RUN_KEY", self.js), "use keyIs()")
 
@@ -52,8 +52,26 @@ class ConsoleContractTests(unittest.TestCase):
         self.assertIn('const SNIPPET_DIR = ACEUIModLoader.ROOT + "snippets/";', self.js)
         self.assertIn("if (!SNIPPET_NAME_RE.test(name)) {", self.js)
         self.assertIn("ACEUIModLoader.addScript(url, function (ok) {", self.js)
-        self.assertLess(self.js.find("if (COMMAND_RE.test(trimmed)) {"), self.js.find("lines.format(compile(trimmed)())"),
+        self.assertLess(self.js.find("if (COMMAND_RE.test(trimmed)) {"), self.js.find("showValue(compile(trimmed)())"),
                         "commands are taken before JavaScript")
+
+
+    def test_results_are_expanded_over_lines_not_squashed_onto_one(self):
+        # a game model is a wall of fields; console.format's single line is unreadable for those
+        self.assertIn("showValue(compile(trimmed)())", self.js, "prompt results go through the tree printer")
+        self.assertIn("const TREE_MAX_DEPTH", self.js)
+        self.assertIn("const TREE_MAX_LINES", self.js, "a careless `window` must not flood the buffer")
+        self.assertIn("if (seen.indexOf(value) >= 0)", self.js, "cycles are marked, not followed")
+
+    def test_completion_only_reads_properties_and_never_runs_the_expression(self):
+        # completing a path must not call a getter chain's functions or eval anything
+        self.assertIn("const resolvePath = function (parts) {", self.js)
+        self.assertIn("current = safeGet(current, parts[i]);", self.js, "walk by name, never call")
+        self.assertIn("const PATH_TAIL_RE", self.js)
+        completion = self.js[self.js.find("// ---- tab completion"):self.js.find("// ---- prompt ---")]
+        self.assertGreater(len(completion), 0, "completion section present")
+        for forbidden in ("new Function", "compile(", "eval("):
+            self.assertNotIn(forbidden, completion, f"the completer must not {forbidden} anything")
 
 
 if __name__ == "__main__":

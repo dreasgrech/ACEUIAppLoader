@@ -290,6 +290,45 @@ body.hide-hud .ace-devconsole {
 
 .ace-devconsole [data-level="result"] .dc-text { color: #5fd07a; }
 
+/* ---- tab completion: chips between the log and the prompt --------------------------- */
+
+.ace-devconsole .dc-suggest {
+    flex: 0 0 auto;
+    display: flex;
+    flex-direction: row;
+    flex-wrap: wrap;
+    align-items: center;
+    padding: 0.3em 1.05em;
+    background: rgba(28, 30, 31, 0.9);
+    border-top: 1px solid rgba(255, 255, 255, 0.08);
+    font-size: 0.7em;
+}
+
+.ace-devconsole .dc-suggest.dc-hidden {
+    display: none;
+}
+
+.ace-devconsole .dc-suggest-item {
+    margin: 0.1em 0.45em 0.1em 0;
+    padding: 0.05em 0.4em;
+    border: 1px solid transparent;
+    border-radius: 0.2em;
+    color: rgba(255, 255, 255, 0.6);
+    cursor: pointer;
+    user-select: none;
+}
+
+.ace-devconsole .dc-suggest-item.dc-hidden {
+    display: none;
+}
+
+/* the one Tab will insert next */
+.ace-devconsole .dc-suggest-item.dc-suggest-on {
+    background: rgba(255, 255, 255, 0.12);
+    border-color: rgba(255, 255, 255, 0.25);
+    color: #fff;
+}
+
 /* ---- footer: prompt ----------------------------------------------------------------- */
 
 .ace-devconsole .dc-footer {
