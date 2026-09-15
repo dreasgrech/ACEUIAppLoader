@@ -16,14 +16,24 @@ ACEUIModLoader.loop = (function () {
 
     const MS_PER_S = 1000;
 
-    const start = function (onFrame) {
-        const handle = { rafId: 0, running: true };
+    /**
+     * `owner` names whoever the frames belong to. Nothing in the library reads it, but a
+     * profiler wrapping `loop.start` cannot otherwise tell one mod's frame callback from
+     * another's -- a closure carries no name -- and "which app is costing me frames" is
+     * the whole question such a tool exists to answer. `mod().panel` passes the mod name.
+     */
+    const start = function (onFrame, owner) {
+        const handle = { rafId: 0, running: true, owner: owner || "" };
         const tick = function (now) {
             if (!handle.running) { return; }
 
             handle.rafId = requestAnimationFrame(tick);
             onFrame(now);
         };
+
+        // the callback the engine sees is this `tick`, not the mod's: carry the owner on it
+        // so anything watching requestAnimationFrame knows whose frames these are
+        tick.aceOwner = handle.owner;
 
         handle.rafId = requestAnimationFrame(tick);
 

@@ -997,6 +997,54 @@ document.addEventListener("DOMContentLoaded", function () {
         ok(window.__log.join(" | ").indexOf("a spec with no key") >= 0, "and the one with no key");
     });
 
+    /*
+     * Panel scale was written three times -- DOOM, the dev console, the profiler -- each
+     * with its own bounds and its own copy of the current value. One font-size in rem on a
+     * root whose insides are em scales the lot, which is the part worth sharing.
+     */
+    t("mod: scale sizes a panel, follows its setting and stays inside its bounds", function () {
+        const me = ACEUIModLoader.mod("scaler");
+        const root = document.createElement("div");
+        const seen = [];
+        let scale;
+
+        center.appendChild(root);
+        ACEUIModLoader.settings.define("scaler", [me.scaleSpec({ min: 0.8, max: 1.5, value: 1 })]);
+
+        scale = me.scale(root, { min: 0.8, max: 1.5, onScale: function (v) { seen.push(v); } });
+
+        eq(root.style.fontSize, "1rem", "applied on creation");
+        eq(scale.value(), 1, "and reported");
+        eq(scale.nudge(1), 1.1, "a step up");
+        eq(root.style.fontSize, "1.1rem", "reaches the panel");
+        eq(ACEUIModLoader.settings.get("scaler", "scale"), 1.1, "and the setting the window shows");
+
+        ACEUIModLoader.settings.set("scaler", "scale", 1.3);
+        eq(scale.value(), 1.3, "moving it in the settings window moves the panel");
+        eq(root.style.fontSize, "1.3rem", "which is the same value, not a second copy");
+
+        eq(scale.set(9), 1.5, "clamped at its maximum");
+        eq(scale.set(0), 0.8, "and its minimum");
+        ok(seen.length >= 4, "every change was announced to the mod: " + seen.join(", "));
+
+        scale.stop();
+        ACEUIModLoader.settings.set("scaler", "scale", 1.2);
+        eq(scale.value(), 0.8, "after stop it no longer follows the setting");
+        root.parentNode.removeChild(root);
+    });
+
+    t("mod: scale works for a mod that declared no settings at all", function () {
+        const me = ACEUIModLoader.mod("quietscaler");
+        const root = document.createElement("div");
+        const scale = me.scale(root);
+
+        center.appendChild(root);
+        eq(scale.set(1.4), 1.4, "set");
+        eq(me.recall("scale", 1), 1.4, "remembered under the mod's own key instead");
+        scale.stop();
+        root.parentNode.removeChild(root);
+    });
+
     t("mod: recall and remember keep a small value under the mod's own key", function () {
         const me = ACEUIModLoader.mod("keeper");
 

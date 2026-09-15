@@ -75,6 +75,13 @@ ACEUIModLoader.loader = (function () {
     const KEY_PREFIX = "ace";
     const HUD_ID_PREFIX = "hud_";
     const POSITION_SUFFIX = "pos";
+    /** Panel scale: one font-size in rem on a root whose insides are sized in em. */
+    const SCALE_KEY = "scale";
+    const SCALE_DEFAULT = 1;
+    const SCALE_MIN = 0.6;
+    const SCALE_MAX = 2;
+    const SCALE_STEP = 0.1;
+    const SCALE_DIGITS = 2;
 
     const log = ACEUIModLoader.log;
 
@@ -374,6 +381,104 @@ ACEUIModLoader.loader = (function () {
         };
 
         /**
+         * Panel scale, which three mods had each written for themselves.
+         *
+         * One `font-size` in rem on the root scales a whole panel, provided everything
+         * inside is sized in em -- the technique the dev console and DOOM arrived at
+         * separately. This applies it, keeps it inside the bounds, follows the mod's own
+         * `scale` setting when it declared one (so the settings window and a -/+ button
+         * move the same value), and remembers it either way.
+         *
+         *     const scale = me.scale(root);
+         *     scale.nudge(1);            // the + button
+         *     scale.set(1.4);
+         *     scale.value();
+         *     scale.stop();              // in detach
+         */
+        const scale = function (root, options) {
+            const opts = options || {};
+            const bounds = {
+                min: typeof opts.min === "number" ? opts.min : SCALE_MIN,
+                max: typeof opts.max === "number" ? opts.max : SCALE_MAX,
+                step: typeof opts.step === "number" ? opts.step : SCALE_STEP
+            };
+            const settings = ACEUIModLoader.settings;
+            const declared = function () {
+                return settings && settings.specs(name).filter(function (spec) {
+                    return spec.key === SCALE_KEY;
+                }).length > 0;
+            };
+            const stored = function () {
+                const value = declared() ? settings.get(name, SCALE_KEY) : recall(SCALE_KEY, opts.value);
+
+                return typeof value === "number" ? value : (opts.value || SCALE_DEFAULT);
+            };
+            const handle = { applied: 0, unsubscribe: null };
+
+            const apply = function (value) {
+                const next = Number(ACEUIModLoader.clamp(value, bounds.min, bounds.max).toFixed(SCALE_DIGITS));
+
+                handle.applied = next;
+                root.style.fontSize = next + "rem";
+
+                if (typeof opts.onScale === "function") { opts.onScale(next); }
+
+                return next;
+            };
+
+            const set = function (value) {
+                const next = apply(value);
+
+                if (declared()) {
+                    settings.set(name, SCALE_KEY, next);
+                } else {
+                    remember(SCALE_KEY, next);
+                }
+
+                return next;
+            };
+
+            apply(stored());
+
+            if (settings) {
+                handle.unsubscribe = settings.onChange(name, function (key, value) {
+                    if (key === SCALE_KEY && value !== handle.applied) { apply(value); }
+                });
+            }
+
+            return {
+                value: function () { return handle.applied; },
+                set: set,
+                nudge: function (steps) { return set(handle.applied + steps * bounds.step); },
+                bounds: bounds,
+                stop: function () {
+                    if (handle.unsubscribe) { handle.unsubscribe(); }
+
+                    handle.unsubscribe = null;
+                }
+            };
+        };
+
+        /**
+         * The settings spec for that scale, to drop into the mod's own `define` call, so
+         * the same value is the one the settings window shows.
+         */
+        const scaleSpec = function (options) {
+            const opts = options || {};
+
+            return {
+                key: SCALE_KEY,
+                type: "range",
+                label: opts.label || "Panel scale",
+                value: typeof opts.value === "number" ? opts.value : SCALE_DEFAULT,
+                min: typeof opts.min === "number" ? opts.min : SCALE_MIN,
+                max: typeof opts.max === "number" ? opts.max : SCALE_MAX,
+                step: typeof opts.step === "number" ? opts.step : SCALE_STEP,
+                digits: SCALE_DIGITS
+            };
+        };
+
+        /**
          * The whole widget lifecycle: a draggable panel that remembers where the player
          * put it, and the frame loop that drives it.
          *
@@ -404,7 +509,7 @@ ACEUIModLoader.loader = (function () {
                 ACEUIModLoader.panel.update(panel, now);
 
                 if (onFrame) { onFrame(now); }
-            });
+            }, name);
 
             handle.stop = function () {
                 if (handle.stopped) { return false; }
@@ -426,6 +531,46 @@ ACEUIModLoader.loader = (function () {
          * loader can stop and restart a mod, and a mod switched off is never attached in
          * the first place.
          */
+        /**
+         * Show or hide this app, exactly as the drawer's switch does: the root is hidden and
+         * the mod is stopped through its own detach, or started again on the way back.
+         *
+         *     me.show(false);            // what a panel's close button should do
+         *
+         * A panel that hides itself instead leaves the drawer saying the app is on while
+         * nothing is on screen, and the drawer is where anyone looks to get it back.
+         */
+        const show = function (on) {
+            const drawer = ACEUIModLoader.drawer;
+
+            if (!drawer) { return true; }
+
+            drawer.setVisible(name, Boolean(on));
+
+            return Boolean(on);
+        };
+
+        /** Whether this app is on. Without a drawer -- a preview page -- everything is on. */
+        const shown = function () {
+            return enabled(name);
+        };
+
+        /**
+         * Bind a key that shows and hides this app, for as long as the page lives.
+         *
+         *     me.toggle(function () { return options.toggleKey; });
+         *
+         * The loader holds it rather than the mod, because a mod that is switched off is not
+         * running to hold anything -- which is what made a closed panel unreachable except
+         * through the drawer. Call it once, beside `mount`; it returns an unbind for tests.
+         */
+        const toggleKey = function (getKey) {
+            return ACEUIModLoader.keys.bind(getKey, function (e) {
+                show(!shown());
+                e.preventDefault();
+            });
+        };
+
         const mount = function (attach, detach) {
             // every mod logged this line for itself; mount is called once, at the end of a
             // mod's script, so it says "the script ran" even for a mod switched off in the
@@ -471,6 +616,9 @@ ACEUIModLoader.loader = (function () {
         return {
             name: name,
             title: title,
+            show: show,
+            shown: shown,
+            toggle: toggleKey,
             version: info.version || DEV_VERSION,
             base: entry ? ROOT + name + "/" : "",
             loaded: Boolean(entry),
@@ -480,6 +628,8 @@ ACEUIModLoader.loader = (function () {
             hudId: HUD_ID_PREFIX + name,
             storageKey: key(POSITION_SUFFIX),
             key: key,
+            scale: scale,
+            scaleSpec: scaleSpec,
             recall: recall,
             remember: remember,
             forget: forget,

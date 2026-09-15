@@ -25,6 +25,7 @@ Optional class attributes:
     HOT_PATH      (start marker, end marker) in the main script: that slice must not
                   build markup or touch style, and must not hold magic numbers
     ALLOW_OWN     substrings the "belongs to the library" rule should tolerate
+    ALLOW_THIS    script file names allowed `this` (receiver-preserving wrappers)
 """
 import glob
 import json
@@ -70,12 +71,23 @@ def find_mod_dir(root):
     return os.path.join(root, found[0])
 
 
-def check_style(testcase, name, js):
-    """The project's JavaScript conventions: IIFE modules, no classes/this/var/arrows, 4 spaces, double quotes."""
+def check_style(testcase, name, js, allow_this=False):
+    """The project's JavaScript conventions: IIFE modules, no classes/this/var/arrows, 4 spaces, double quotes.
+
+    `allow_this` exists for one shape of code these rules were not written for: a
+    wrapper standing in front of somebody else's function has to hand that function
+    the receiver it was called with, and there is no way to say that without `this`.
+    A mod opts in per file, in its own test class, so the exception is visible next
+    to the file it applies to rather than hidden in the kit.
+    """
     code = strip_js(js)
     testcase.assertIsNone(re.search(r"\bclass\s+[A-Za-z_$]", code), f"{name}: class")
-    testcase.assertNotIn("customElements", code, f"{name}: custom elements")
-    testcase.assertIsNone(re.search(r"\bthis\b", code), f"{name}: this")
+    # defining one is the hazard: the stock framework owns the ks-* registry and a mod
+    # that registers a tag can collide with it. Reading the registry is not a hazard --
+    # ACEUIProfiler does it to wrap the stock widgets' methods and profile them by name.
+    testcase.assertNotIn("customElements.define", code, f"{name}: defines a custom element")
+    if not allow_this:
+        testcase.assertIsNone(re.search(r"\bthis\b", code), f"{name}: this")
     testcase.assertIsNone(re.search(r"\bvar\s", code), f"{name}: var")
     testcase.assertIsNone(re.search(r"^\s*function\s+[A-Za-z_$][\w$]*\s*\(", code, re.M), f"{name}: function declaration")
     testcase.assertNotIn("=>", code, f"{name}: arrow function")
@@ -97,6 +109,7 @@ class ModTests(unittest.TestCase):
     MIN_CASES = 1
     HOT_PATH = None
     ALLOW_OWN = ()
+    ALLOW_THIS = ()      # files where a receiver-preserving wrapper needs `this` (see check_style)
 
     @classmethod
     def setUpClass(cls):
@@ -142,7 +155,7 @@ class ModTests(unittest.TestCase):
 
     def test_style_rules(self):
         for name, js in self.scripts.items():
-            check_style(self, name, js)
+            check_style(self, name, js, allow_this=name in self.ALLOW_THIS)
 
     def test_cohtml_rules(self):
         for name, css in self.styles.items():

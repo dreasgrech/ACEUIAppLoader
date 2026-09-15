@@ -2,7 +2,7 @@
 
 The single package that lets several UI mods coexist in Assetto Corsa EVO, the
 shared library those mods are built on, and the tools that build it and install
-mods for it. Version 0.14.0.
+mods for it. Version 0.18.0.
 
 Why a loader is needed at all, and why it has this shape, is in
 [`docs/design.md`](docs/design.md); the game mechanics it relies on are
@@ -104,6 +104,21 @@ toggle and DOOM's show/hide key are both rebindable from the drawer.
 Values are written to both stores: the HUD layout container, which the game writes to disk
 and is the only thing that survives a restart, and `localStorage`, read synchronously so a
 value is there the moment a mod asks for it.
+
+## Naming your own work
+
+A profiler can see what the page schedules -- animation frames, timers, events -- because
+those go through globals it can replace. It cannot see inside your frame callback: those
+are closures in your IIFE, so the best it can say on its own is "this mod cost 2 ms".
+Name the parts worth separating and it can say where the 2 ms went:
+
+```js
+ACEUIModLoader.section("render", function () { renderFrame(state, v, frac); });
+```
+
+Sections nest, so a section inside a section is a child in the tree. With no profiler
+attached (`ACEUIModLoader.profiler` is null) this is a property read and a call through,
+which is all a mod pays for being profilable when nobody is profiling it.
 
 ## Do not write these twice
 
@@ -320,8 +335,12 @@ the mod being loaded, and `ACEUIModLoader.mod("<name>")` does so at any time:
 | `hudId`, `storageKey`, `key(suffix)` | `hud_<name>`, `ace<name>.pos`, `ace<name>.<suffix>`: the HUD layout id and storage keys for `ACEUIModLoader.panel` / `.persist` |
 | `base`, `loaded` | the mod folder's URL; whether this loader instance loaded it |
 | `panel(root, onFrame)` | the whole widget lifecycle: a draggable panel that remembers its position plus the frame loop that drives it. Returns a handle with `panel`, `loop` and `stop()` (safe to call twice) |
+| `scale(root, {min, max, step, onScale})` | panel scale: one `font-size` in rem on the root, everything inside in em. Applies it, clamps it, follows the mod's own `scale` setting when it declared one (so a -/+ button and the settings window move the same value) and remembers it either way. Returns `{ value, set, nudge, bounds, stop }` |
+| `scaleSpec({label, value, min, max, step})` | the settings spec for that scale, to drop into the mod's own `define` call |
 | `recall(key, fallback)`, `remember(key, value)`, `forget(key)` | a small value under the mod's own key, for state that must survive the HUD reload on Escape/resume |
 | `mount(attach, detach)` | calls `attach(#<name>)` once the DOM has the root (now or on DOMContentLoaded), once per root, and logs the mod's script-loaded line. Passing `detach` is what lets the app drawer really stop the mod |
+| `show(on)`, `shown()` | switch this app on or off exactly as the drawer's own switch does -- root hidden, mod stopped through its `detach`, started again on the way back. What a panel's close button should call: a panel that hides itself instead leaves the drawer saying the app is on while nothing is on screen, and the drawer is where anyone looks to get it back |
+| `toggle(getKey)` | bind a key that shows and hides this app, for as long as the page lives. The loader holds it rather than the mod, because a mod that is switched off is not running to hold anything -- which is exactly when the key is needed. Returns an unbind |
 
 So a mod's script declares none of that itself, and a widget's whole lifecycle is:
 
@@ -341,7 +360,15 @@ const detach = function (state) {
 };
 
 me.mount(attach, detach);
+me.toggle(function () { return options.toggleKey; });   // shows and hides the app
 ```
+
+A close button is `me.show(false)`, not a class on the root. "Closed" and "switched off in
+the drawer" were two different states until 0.18.0: closing the profiler left it running and
+invisible with the drawer still saying it was on, and the only way back was a hotkey the
+panel itself was holding. They are one state now, and the hotkey belongs to the loader so it
+works while the app is off. The side effect is the honest one -- closing an app stops it, so
+a profiler recording ends with its panel.
 
 `me.panel` owns two rules that used to be every mod's to remember, and that fail
 quietly when they are not: the panel must be ticked every frame until its stored
@@ -359,7 +386,7 @@ in this order because each builds on the previous:
 
 | File | Namespace | What it gives mods |
 |---|---|---|
-| `src/ACEUIModLoader.core.js` | `ACEUIModLoader` | `VERSION`, `page`, `log`, `logger(prefix)`, `clamp`, `el`/`close` (markup strings), `toArray`, `percentText`, `errorText(e)`, `safely(what, fn)`, `hudHidden()`, `closestWithAttribute`, `HUD_HIDDEN_CLASS` |
+| `src/ACEUIModLoader.core.js` | `ACEUIModLoader` | `VERSION`, `page`, `log`, `logger(prefix)`, `clamp`, `el`/`close` (markup strings), `toArray`, `percentText`, `errorText(e)`, `safely(what, fn)`, `section(name, fn)` (names a piece of work for a profiler; a call through when none is attached), `hudHidden()`, `closestWithAttribute`, `HUD_HIDDEN_CLASS` |
 | `src/ACEUIModLoader.console.js` | `ACEUIModLoader.console` | hooks `console.log/info/debug/warn/error` before the stock bundle runs (originals still called, nothing echoed), ring buffer of the last 500 `{seq, t, level, text}` entries, uncaught errors and unhandled rejections captured, `entries()`, `subscribe(fn)`, `capture(level, text)`, `clear()`, `format(value)` |
 | `src/ACEUIModLoader.dom.js` | `ACEUIModLoader.dom` | `make(tag, props, text)` / `div`, `css`, `setClass`, `clear`, `on(target, type, fn)` returning its own undo, `listeners()` -- a bag whose `off()` drops every listener it added -- and `THEME`, the one palette every loader-drawn surface uses |
 | `src/ACEUIModLoader.keys.js` | `ACEUIModLoader.keys` | `is(e, name)` (matches `code`, the character `key` sends, and the legacy `keyCode` the stock bundle reads), `nameOf(e)`, `isTyping(e)`, `bind(keyOrGetter, handler)` -> unbind: a hotkey that follows a key kept in settings and never fires while the player is typing; `CODES`, `ALIASES` |
