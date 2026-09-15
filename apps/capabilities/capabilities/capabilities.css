@@ -1,13 +1,13 @@
 /*
- * UI Experiments -- stylesheet. Linked by the ACEUIModLoader after the stock CSS, so
+ * ACE UI Capabilities Probe -- stylesheet. Linked by the ACEUIModLoader after the stock CSS, so
  * --font-family-main is the game's. Stock HUD widget look: black panel, solid dark
  * header, coloured status dots. No var() fallbacks (Cohtml does not support them).
  *
  * The script only ever writes textContent and class names here (status colours keyed
- * by .ex-yes / .ex-no / .ex-partial / .ex-warn); it never writes colours or sizes.
+ * by .cp-yes / .cp-no / .cp-partial / .cp-warn); it never writes colours or sizes.
  */
 
-.ace-experiments {
+.ace-capabilities {
     position: absolute;
     left: 2rem;
     top: 4rem;
@@ -24,17 +24,17 @@
     cursor: pointer;
 }
 
-.ace-experiments.dragging {
+.ace-capabilities.dragging {
     border-color: #fff;
 }
 
-body.hide-hud .ace-experiments {
+body.hide-hud .ace-capabilities {
     visibility: hidden;
 }
 
 /* ---- header ---------------------------------------------------------------------- */
 
-.ace-experiments .ex-header {
+.ace-capabilities .cp-header {
     display: flex;
     flex-direction: row;
     align-items: baseline;
@@ -44,14 +44,14 @@ body.hide-hud .ace-experiments {
     border-radius: 0.25rem 0.25rem 0 0;
 }
 
-.ace-experiments .ex-title {
+.ace-capabilities .cp-title {
     color: #fff;
     font-size: 0.85rem;
     font-weight: 700;
     letter-spacing: 0.04em;
 }
 
-.ace-experiments .ex-summary {
+.ace-capabilities .cp-summary {
     color: rgba(255, 255, 255, 0.6);
     font-size: 0.7rem;
     white-space: nowrap;
@@ -59,14 +59,14 @@ body.hide-hud .ace-experiments {
 
 /* ---- tools ----------------------------------------------------------------------- */
 
-.ace-experiments .ex-tools {
+.ace-capabilities .cp-tools {
     display: flex;
     flex-direction: row;
     padding: 0.4rem 0.75rem;
     border-bottom: 1px solid rgba(255, 255, 255, 0.1);
 }
 
-.ace-experiments .ex-btn {
+.ace-capabilities .cp-btn {
     margin-right: 0.4rem;
     padding: 0.2rem 0.6rem;
     background: rgba(255, 255, 255, 0.08);
@@ -84,13 +84,13 @@ body.hide-hud .ace-experiments {
    the body is a clipped viewport whose scrollTop the script drives, with a custom
    thumb -- the same technique the dev console uses. The wrapper carries data-nodrag
    so wheeling or grabbing the thumb never starts a panel drag. */
-.ace-experiments .ex-scroll {
+.ace-capabilities .cp-scroll {
     flex: 1 1 auto;
     position: relative;
     min-height: 0;
 }
 
-.ace-experiments .ex-body {
+.ace-capabilities .cp-body {
     position: absolute;
     top: 0;
     right: 0;
@@ -100,7 +100,7 @@ body.hide-hud .ace-experiments {
     padding: 0.25rem 1.1rem 0.5rem 0.75rem;
 }
 
-.ace-experiments .ex-scrollbar {
+.ace-capabilities .cp-scrollbar {
     position: absolute;
     top: 0.4rem;
     right: 0.3rem;
@@ -113,17 +113,17 @@ body.hide-hud .ace-experiments {
     cursor: pointer;
 }
 
-.ace-experiments .ex-scrollbar.ex-nofit {
+.ace-capabilities .cp-scrollbar.cp-nofit {
     opacity: 0;
     pointer-events: none;
 }
 
-.ace-experiments .ex-scrollbar:hover,
-.ace-experiments .ex-scrollbar.dragging {
+.ace-capabilities .cp-scrollbar:hover,
+.ace-capabilities .cp-scrollbar.dragging {
     background: #222;
 }
 
-.ace-experiments .ex-thumb {
+.ace-capabilities .cp-thumb {
     box-sizing: border-box;
     width: 100%;
     height: 3rem;
@@ -132,16 +132,16 @@ body.hide-hud .ace-experiments {
     cursor: pointer;
 }
 
-.ace-experiments .ex-scrollbar:hover .ex-thumb,
-.ace-experiments .ex-scrollbar.dragging .ex-thumb {
+.ace-capabilities .cp-scrollbar:hover .cp-thumb,
+.ace-capabilities .cp-scrollbar.dragging .cp-thumb {
     background: #bd0000;
 }
 
-.ace-experiments .ex-cat {
+.ace-capabilities .cp-cat {
     margin-top: 0.6rem;
 }
 
-.ace-experiments .ex-cat-name {
+.ace-capabilities .cp-cat-name {
     margin-bottom: 0.2rem;
     color: #bd0000;
     font-size: 0.72rem;
@@ -150,7 +150,7 @@ body.hide-hud .ace-experiments {
     text-transform: uppercase;
 }
 
-.ace-experiments .ex-row {
+.ace-capabilities .cp-row {
     display: flex;
     flex-direction: row;
     align-items: baseline;
@@ -158,7 +158,7 @@ body.hide-hud .ace-experiments {
     line-height: 1.3;
 }
 
-.ace-experiments .ex-dot {
+.ace-capabilities .cp-dot {
     flex: 0 0 auto;
     width: 0.5rem;
     height: 0.5rem;
@@ -167,12 +167,12 @@ body.hide-hud .ace-experiments {
     background: rgba(255, 255, 255, 0.25);
 }
 
-.ace-experiments .ex-name {
+.ace-capabilities .cp-name {
     flex: 0 0 9rem;
     color: rgba(255, 255, 255, 0.9);
 }
 
-.ace-experiments .ex-detail {
+.ace-capabilities .cp-detail {
     flex: 1 1 auto;
     color: rgba(255, 255, 255, 0.5);
     font-size: 0.72rem;
@@ -181,12 +181,12 @@ body.hide-hud .ace-experiments {
 
 /* ---- status colours: applied to the dot and the detail text --------------------- */
 
-.ace-experiments .ex-dot.ex-yes { background: #44ea78; }
-.ace-experiments .ex-dot.ex-no { background: #ff1418; }
-.ace-experiments .ex-dot.ex-partial { background: #ffb020; }
-.ace-experiments .ex-dot.ex-warn { background: #3aa6ff; }
+.ace-capabilities .cp-dot.cp-yes { background: #44ea78; }
+.ace-capabilities .cp-dot.cp-no { background: #ff1418; }
+.ace-capabilities .cp-dot.cp-partial { background: #ffb020; }
+.ace-capabilities .cp-dot.cp-warn { background: #3aa6ff; }
 
-.ace-experiments .ex-detail.ex-yes { color: rgba(120, 235, 160, 0.85); }
-.ace-experiments .ex-detail.ex-no { color: rgba(255, 120, 120, 0.85); }
-.ace-experiments .ex-detail.ex-partial { color: rgba(255, 190, 90, 0.9); }
-.ace-experiments .ex-detail.ex-warn { color: rgba(140, 200, 255, 0.85); }
+.ace-capabilities .cp-detail.cp-yes { color: rgba(120, 235, 160, 0.85); }
+.ace-capabilities .cp-detail.cp-no { color: rgba(255, 120, 120, 0.85); }
+.ace-capabilities .cp-detail.cp-partial { color: rgba(255, 190, 90, 0.9); }
+.ace-capabilities .cp-detail.cp-warn { color: rgba(140, 200, 255, 0.85); }

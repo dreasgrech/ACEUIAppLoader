@@ -1,6 +1,6 @@
-# ACEUIExperiments
+# ACEUICapabilitiesProbe
 
-**UI Experiments**: a capability probe for the Assetto Corsa EVO Gameface HUD, loaded
+**ACE UI Capabilities Probe**: a capability probe for the Assetto Corsa EVO Gameface HUD, loaded
 by the [ACEUIModLoader](../ACEUIModLoader) and built on its library.
 
 It exists to answer one question before we build anything ambitious on the HUD:
@@ -51,10 +51,10 @@ written to the game log with the mod's prefix, so `check_ingame_log.py` (in the
 loader repo) can read the capability list off a headless-friendly game session:
 
 ```
-[UI Experiments] probe on hud.html: 48 yes, 17 no, 4 partial, 1 warn
-[UI Experiments] missing: WebAssembly, AudioContext, WebGL, WebGL2, ...
-[UI Experiments] partial: SVG elements, HTMLAudioElement.play, video codecs, ...
-[UI Experiments] probe fetch(data:) round-trip = yes (data: URI fetched ok)
+[ACE UI Capabilities Probe] probe on hud.html: 48 yes, 17 no, 4 partial, 1 warn
+[ACE UI Capabilities Probe] missing: WebAssembly, AudioContext, WebGL, WebGL2, ...
+[ACE UI Capabilities Probe] partial: SVG elements, HTMLAudioElement.play, video codecs, ...
+[ACE UI Capabilities Probe] probe fetch(data:) round-trip = yes (data: URI fetched ok)
 ```
 
 **Re-run** re-probes; **Log to console** dumps every row (name = status — detail) to
@@ -71,9 +71,9 @@ so the probe can never wedge the HUD.
 
 ## Layout
 
-- `experiments/` — the shipped mod, exactly what lands in
-  `Saved Games\ACE\mods\uiresources\ACEUIModLoaderMods\experiments\`:
-  `mod.json` (version, styles, scripts), `experiments.js`, `experiments.css`.
+- `capabilities/` — the shipped mod, exactly what lands in
+  `Saved Games\ACE\mods\uiresources\ACEUIModLoaderMods\capabilities\`:
+  `mod.json` (version, styles, scripts), `capabilities.js`, `capabilities.css`.
 - `tests/test_mod.py` — runs the loader's shared test kit (`modkit.py`): mod.json,
   the project's JavaScript style rules, the Cohtml rules, class/stylesheet
   agreement, and `tests/harness.html` in a headless browser.
@@ -86,7 +86,7 @@ With the loader package installed (`python tools/build_loader.py --install` in t
 loader repo):
 
 ```
-python ..\ACEUIModLoader\tools\install_mod.py experiments
+python ..\ACEUIModLoader\tools\install_mod.py capabilities
 ```
 
 Escape and resume in the car reloads the HUD and picks up changes.

@@ -1,5 +1,5 @@
 /**
- * UI Experiments -- a capability probe for the Assetto Corsa EVO Gameface HUD.
+ * ACE UI Capabilities Probe -- a capability probe for the Assetto Corsa EVO Gameface HUD.
  *
  * A loose UI mod, loaded into the HUD page by the ACEUIModLoader, whose only job is
  * to answer "what can JavaScript actually do inside the game's Cohtml/V8?" It runs
@@ -25,11 +25,11 @@
  * Rows are rewritten once, when a probe settles, not on a loop.
  *
  * Identity (name, version, title, root, logger, storage keys) comes from
- * ACEUIModLoader.mod("experiments"); styling lives in experiments.css.
+ * ACEUIModLoader.mod("capabilities"); styling lives in capabilities.css.
  */
-const UIExperiments = (function () {
+const CapabilitiesProbe = (function () {
 
-    const me = ACEUIModLoader.mod("experiments");
+    const me = ACEUIModLoader.mod("capabilities");
 
     const el = ACEUIModLoader.el;
     const close = ACEUIModLoader.close;
@@ -49,30 +49,30 @@ const UIExperiments = (function () {
     const PARTIAL = "partial";
     const WARN = "warn";
 
-    /** Class names shared with experiments.css. */
+    /** Class names shared with capabilities.css. */
     const CLASS = {
-        root: "ace-experiments",
-        header: "ex-header",
-        title: "ex-title",
-        summary: "ex-summary",
-        tools: "ex-tools",
-        btn: "ex-btn",
-        body: "ex-body",
-        scroll: "ex-scroll",
-        scrollbar: "ex-scrollbar",
-        thumb: "ex-thumb",
-        nofit: "ex-nofit",
+        root: "ace-capabilities",
+        header: "cp-header",
+        title: "cp-title",
+        summary: "cp-summary",
+        tools: "cp-tools",
+        btn: "cp-btn",
+        body: "cp-body",
+        scroll: "cp-scroll",
+        scrollbar: "cp-scrollbar",
+        thumb: "cp-thumb",
+        nofit: "cp-nofit",
         dragging: "dragging",
-        cat: "ex-cat",
-        catName: "ex-cat-name",
-        row: "ex-row",
-        dot: "ex-dot",
-        name: "ex-name",
-        detail: "ex-detail",
-        statusYes: "ex-yes",
-        statusNo: "ex-no",
-        statusPartial: "ex-partial",
-        statusWarn: "ex-warn"
+        cat: "cp-cat",
+        catName: "cp-cat-name",
+        row: "cp-row",
+        dot: "cp-dot",
+        name: "cp-name",
+        detail: "cp-detail",
+        statusYes: "cp-yes",
+        statusNo: "cp-no",
+        statusPartial: "cp-partial",
+        statusWarn: "cp-warn"
     };
 
     const STATUS_CLASS = {};
@@ -999,5 +999,5 @@ const UIExperiments = (function () {
     };
 }());
 
-/* Attach to #experiments: the loader creates it in game, the preview page carries it. */
-ACEUIModLoader.mod("experiments").mount(UIExperiments.attach);
+/* Attach to #capabilities: the loader creates it in game, the preview page carries it. */
+ACEUIModLoader.mod("capabilities").mount(CapabilitiesProbe.attach);

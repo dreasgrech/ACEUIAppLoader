@@ -2,7 +2,7 @@
 <html>
 <head>
 <meta charset="utf-8">
-<title>UI Experiments tests</title>
+<title>ACE UI Capabilities Probe tests</title>
 <style>
   body { margin: 0; background: #222; color: #ddd; font: 12px monospace; }
   .absolutecenter { position: relative; width: 1600px; height: 900px; overflow: hidden; }
@@ -11,9 +11,9 @@
 <!-- shared test doubles (fake frame clock, in-memory localStorage, console capture) and the library, from the loader repo -->
 <script src="../../ACEUIModLoader/tests/lib/doubles.js"></script>
 <script src="../../ACEUIModLoader/tests/lib/lib.js"></script>
-<link rel="stylesheet" type="text/css" href="../experiments/experiments.css">
+<link rel="stylesheet" type="text/css" href="../capabilities/capabilities.css">
 <script>window.ModelCurrentCar = { has_focused_car: true, gas_percent: 0.5 };</script>
-<script src="../experiments/experiments.js"></script>
+<script src="../capabilities/capabilities.js"></script>
 </head>
 <body>
 <div class="absolutecenter" id="center"></div>
@@ -24,27 +24,27 @@
 
     const rowIndex = function (name) {
         let found = -1;
-        UIExperiments.CHECKS.forEach(function (c, i) { if (c.name === name) { found = i; } });
+        CapabilitiesProbe.CHECKS.forEach(function (c, i) { if (c.name === name) { found = i; } });
         return found;
     };
 
     const root = document.createElement("div");
-    root.id = "experiments";
+    root.id = "capabilities";
     document.getElementById("center").appendChild(root);
-    const state = UIExperiments.attach(root);
+    const state = CapabilitiesProbe.attach(root);
 
     t("attach builds the panel once, hidden until placed, and logs with the mod's prefix", function () {
-        ok(root.classList.contains("ace-experiments"), "root class");
-        ok(root.querySelector(".ex-body"), "body built");
-        eq(root.querySelector(".ex-title").textContent, "experiments", "title falls back to the name outside the game");
+        ok(root.classList.contains("ace-capabilities"), "root class");
+        ok(root.querySelector(".cp-body"), "body built");
+        eq(root.querySelector(".cp-title").textContent, "capabilities", "title falls back to the name outside the game");
         eq(root.style.visibility, "hidden", "hidden until positioned");
         ok(state.loop.running, "loop running");
-        ok(window.__log.some(function (l) { return l.indexOf("[experiments] attached") === 0; }), "prefixed log");
+        ok(window.__log.some(function (l) { return l.indexOf("[capabilities] attached") === 0; }), "prefixed log");
     });
 
     t("every check renders a colour-coded row and the summary counts them", function () {
-        eq(state.rows.length, UIExperiments.CHECKS.length, "one row per check");
-        const summary = root.querySelector(".ex-summary").textContent;
+        eq(state.rows.length, CapabilitiesProbe.CHECKS.length, "one row per check");
+        const summary = root.querySelector(".cp-summary").textContent;
         ok(summary.indexOf("yes") >= 0, "summary names a yes count");
         ok(state.rows[rowIndex("Promise")].dot.className.indexOf("ex-yes") >= 0, "Promise detected present");
         ok(state.rows[rowIndex("engine audio bridge")].dot.className.indexOf("ex-no") >= 0, "engine bridge absent outside the game");
@@ -52,11 +52,11 @@
 
     t("re-run re-probes, log dumps the report, detach stops the loop", function () {
         root.querySelector("[data-act=\"rerun\"]").click();
-        ok(root.querySelector(".ex-summary").textContent.indexOf("yes") >= 0, "summary still populated after re-run");
+        ok(root.querySelector(".cp-summary").textContent.indexOf("yes") >= 0, "summary still populated after re-run");
         root.querySelector("[data-act=\"log\"]").click();
         ok(window.__log.some(function (l) { return l.indexOf("--- full report") >= 0; }), "full report logged");
         const cancelled = window.__clock.cancelled;
-        UIExperiments.detach(state);
+        CapabilitiesProbe.detach(state);
         eq(window.__clock.cancelled, cancelled + 1, "raf cancelled");
         eq(state.loop.running, false, "loop stopped");
     });
