@@ -33,6 +33,7 @@ const ACEUIProfiler = (function () {
     /** Class names shared with profiler.css. */
     const CLASS = {
         root: "ace-profiler",
+        ground: "pr-ground",
         header: "pr-header",
         title: "pr-title",
         stat: "pr-stat",
@@ -106,10 +107,15 @@ const ACEUIProfiler = (function () {
         { key: "other", label: "engine", ink: "rgba(255, 255, 255, 0.22)" }
     ];
     const BAND_ATTR = "data-band";
+    /** How deep a row sits in the tree; the stylesheet turns it into an indent. */
+    const DEPTH_ATTR = "data-depth";
+    const MAX_DEPTH = 4;
     const GUIDE_BAND = "guide";
     const SWEEP_BAND = "sweep";
     const INK_GUIDE = "rgba(255, 255, 255, 0.38)";
     const INK_SWEEP = "rgba(255, 255, 255, 0.5)";
+    /** The graph's own ground. Opaque, because it is painted over rather than erased. */
+    const INK_GROUND = "#0c0e10";
 
     /** The table is redrawn a few times a second, not every frame. */
     const REFRESH_MS = 400;
@@ -273,7 +279,10 @@ const ACEUIProfiler = (function () {
     };
 
     const markup = function () {
-        return el("div", CLASS.header)
+        // the panel's background lives on this, not on the root: the root's own background
+        // does not paint in game, from the stylesheet or inline, while its children's do
+        return el("div", CLASS.ground) + close("div")
+            + el("div", CLASS.header)
             + el("div", CLASS.title) + TITLE_TEXT + close("div")
             + el("div", CLASS.stat) + close("div")
             + el("div", CLASS.tools)
@@ -363,10 +372,13 @@ const ACEUIProfiler = (function () {
                     layout: node.querySelector("." + CLASS.layout),
                     share: node.querySelector("." + CLASS.share),
                     lastName: "",
+                    lastDepth: -1,
                     lastShare: -1
                 };
             }),
             scale: SCALE_DEFAULT,
+            graphW: GRAPH_W,            // the canvas buffer, until layout says how big it really is
+            graphH: GRAPH_H,
             frames: 0,                  // frames this panel has ticked, for the one-off report
             sweep: 0,                   // the column the oscilloscope writes next
             drawn: 0,
@@ -384,8 +396,45 @@ const ACEUIProfiler = (function () {
 
     // ---- the graph -----------------------------------------------------------------
 
-    const columnHeight = function (ms) {
-        return Math.round(clamp(ms / FULL_MS, 0, 1) * GRAPH_H);
+    const columnHeight = function (state, ms) {
+        return Math.round(clamp(ms / FULL_MS, 0, 1) * state.graphH);
+    };
+
+    /** The whole canvas, ground and guide. Used at attach, on CLEAR and after a resize. */
+    const groundFill = function (state) {
+        const ctx = state.ctx;
+
+        if (!ctx) { return; }
+
+        ctx.fillStyle = INK_GROUND;
+        ctx.fillRect(0, 0, state.graphW, state.graphH);
+        ctx.fillStyle = state.ink[GUIDE_BAND];
+        ctx.fillRect(0, state.graphH - columnHeight(state, GUIDE_MS), state.graphW, 1);
+    };
+
+    /**
+     * The engine lays the canvas out at whatever size the panel's width gives it, which is
+     * not the buffer's size: 300x64 stretched to 623x107 in game, smearing every column.
+     * Sizing the buffer to the box makes a column one pixel again. It can only be done once
+     * layout has happened, which is why it waits for a frame.
+     */
+    const fitCanvas = function (state) {
+        const canvas = state.canvas;
+        const width = canvas ? canvas.clientWidth : 0;
+        const height = canvas ? canvas.clientHeight : 0;
+
+        if (!canvas || width <= 0 || height <= 0) { return false; }
+
+        if (canvas.width === width && canvas.height === height) { return false; }
+
+        canvas.width = width;
+        canvas.height = height;
+        state.graphW = width;
+        state.graphH = height;
+        state.sweep = 0;
+        groundFill(state);
+
+        return true;
     };
 
     /**
@@ -393,29 +442,23 @@ const ACEUIProfiler = (function () {
      * are wiped so the old trace cannot be mistaken for the new one, as a heart monitor
      * does it.
      */
-    /** The 60 fps line, across the full width: a scale to read the columns against. */
-    const drawGuide = function (state) {
-        const ctx = state.ctx;
-
-        if (!ctx) { return; }
-
-        ctx.fillStyle = state.ink[GUIDE_BAND];
-        ctx.fillRect(0, GRAPH_H - columnHeight(GUIDE_MS), GRAPH_W, 1);
-    };
-
     const drawColumn = function (state, frame) {
         const ctx = state.ctx;
         const x = state.sweep;
+        const ahead = (x + 1) % state.graphW;
         const totals = S.totals(frame);
-        let y = GRAPH_H;
+        let y = state.graphH;
         let i;
 
         if (!ctx) { return; }
 
-        ctx.clearRect(x, 0, 1, GRAPH_H);
+        // an opaque ground rather than clearRect: a wipe that quietly does nothing turns
+        // this into an accumulation of 22%-alpha white, which is what the graph became
+        ctx.fillStyle = INK_GROUND;
+        ctx.fillRect(x, 0, 1, state.graphH);
 
         for (i = 0; i < BANDS.length; i += 1) {
-            const height = columnHeight(totals[BANDS[i].key]);
+            const height = columnHeight(state, totals[BANDS[i].key]);
 
             if (height > 0) {
                 ctx.fillStyle = state.ink[BANDS[i].key];
@@ -424,14 +467,13 @@ const ACEUIProfiler = (function () {
             }
         }
 
-        // the guide belongs on top of the column, not under it
         ctx.fillStyle = state.ink[GUIDE_BAND];
-        ctx.fillRect(x, GRAPH_H - columnHeight(GUIDE_MS), 1, 1);
-        ctx.clearRect((x + 1) % GRAPH_W, 0, WIPE_W, GRAPH_H);
-        ctx.fillRect((x + 1) % GRAPH_W, GRAPH_H - columnHeight(GUIDE_MS), WIPE_W, 1);
+        ctx.fillRect(x, state.graphH - columnHeight(state, GUIDE_MS), 1, 1);
+        ctx.fillStyle = INK_GROUND;
+        ctx.fillRect(ahead, 0, WIPE_W, state.graphH);
         ctx.fillStyle = state.ink[SWEEP_BAND];
-        ctx.fillRect((x + 1) % GRAPH_W, 0, 1, GRAPH_H);
-        state.sweep = (x + 1) % GRAPH_W;
+        ctx.fillRect(ahead, 0, 1, state.graphH);
+        state.sweep = ahead;
         state.drawn += 1;
     };
 
@@ -465,12 +507,16 @@ const ACEUIProfiler = (function () {
             return;
         }
 
-        const label = entry.depth ? repeat(INDENT, entry.depth) + entry.name : entry.name;
+        const depth = Math.min(entry.depth || 0, MAX_DEPTH);
 
-        if (row.lastName !== label) {
-            row.lastName = label;
-            row.name.textContent = label;
+        if (row.lastName !== entry.name || row.lastDepth !== depth) {
+            row.lastName = entry.name;
+            row.lastDepth = depth;
+            row.name.textContent = entry.name;
             row.bar.setAttribute(BAND_ATTR, entry.category);
+            // an attribute, not padding written from here: the stylesheet owns the indent,
+            // and leading spaces in text are collapsed away by the layout
+            row.el.setAttribute(DEPTH_ATTR, depth);
         }
 
         row.calls.textContent = entry.callsPerFrame.toFixed(1);
@@ -591,7 +637,10 @@ const ACEUIProfiler = (function () {
         const frame = all[all.length - 1];
 
         // once, after the engine has had frames to lay the panel out
-        if (state.frames === SURFACE_FRAME) { reportSurface(state); }
+        if (state.frames === SURFACE_FRAME) {
+            fitCanvas(state);
+            reportSurface(state);
+        }
 
         state.frames += 1;
 
@@ -711,11 +760,7 @@ const ACEUIProfiler = (function () {
     const clearAll = function (state) {
         S.clear();
 
-        if (state.ctx) {
-            state.ctx.clearRect(0, 0, GRAPH_W, GRAPH_H);
-            drawGuide(state);
-        }
-
+        groundFill(state);
         state.sweep = 0;
         state.drawn = 0;
         state.lastDrawn = null;
@@ -787,7 +832,7 @@ const ACEUIProfiler = (function () {
             if (key === "scale" && value !== state.scale) { setScale(state, value); }
         });
         setScale(state, options.scale);
-        drawGuide(state);
+        groundFill(state);
 
         // the stylesheet's own background did not paint in game (the scene showed through the
         // table), while the app drawer -- which sets its background inline -- is solid. Until
@@ -823,6 +868,7 @@ const ACEUIProfiler = (function () {
         const expected = Math.round(PANEL_EM * parseFloat(state.root.style.fontSize || "1") * REM_PX);
 
         log("surface: canvas buffer " + (canvas ? canvas.width + "x" + canvas.height : "MISSING")
+            + " (fitted to its box, so one column is one pixel)"
             + ", 2d context " + (state.ctx ? "ok" : "NOT AVAILABLE -- the graph cannot draw")
             + ", canvas on screen " + (canvas ? canvas.clientWidth + "x" + canvas.clientHeight : "?")
             + ", graph box " + (graph ? graph.clientWidth + "x" + graph.clientHeight : "?"));

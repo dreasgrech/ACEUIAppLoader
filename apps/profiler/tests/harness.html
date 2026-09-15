@@ -258,14 +258,21 @@
 
         const names = rowTexts();
         const parent = names.filter(function (n) { return n === "deepmod"; })[0];
-        const child = names.filter(function (n) { return n.indexOf("inner work") > 0; })[0];
+        const rows = Array.prototype.slice.call(root.querySelectorAll(".pr-row")).filter(function (r) {
+            return !r.classList.contains("pr-hidden");
+        });
+        const childRow = rows.filter(function (r) {
+            return r.querySelector(".pr-name").textContent === "inner work";
+        })[0];
 
         ok(root.querySelector('[data-act="tree"]').classList.contains("on"), "the button shows the mode");
         ok(root.querySelector(".pr-stat").textContent.indexOf("call tree") === 0,
             "the header says what is on screen: " + root.querySelector(".pr-stat").textContent);
         ok(parent, "the mod is listed: " + names.join(" | "));
-        ok(child, "with the section it named inside it, indented: " + names.join(" | "));
-        ok(names.indexOf(parent) < names.indexOf(child), "and the parent comes first");
+        ok(childRow, "with the section it named inside it: " + names.join(" | "));
+        eq(childRow.getAttribute("data-depth"), "1", "marked a level deep, which is what indents it");
+        eq(rows[0].getAttribute("data-depth"), "0", "a root row is not indented");
+        ok(names.indexOf("deepmod") < names.indexOf("inner work"), "and the parent comes first");
 
         root.querySelector('[data-act="tree"]').dispatchEvent(new MouseEvent("click", { bubbles: true }));
         ACEUIModLoader.loop.stop(deep);

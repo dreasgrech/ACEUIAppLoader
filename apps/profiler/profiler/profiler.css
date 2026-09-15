@@ -37,6 +37,30 @@ body.hide-hud .ace-profiler {
     visibility: hidden;
 }
 
+/*
+ * The panel's background. It is a child rather than the root's own because the root's
+ * background does not paint in game -- from the stylesheet or set inline -- while every
+ * child's does, the header and the canvas included.
+ */
+.ace-profiler .pr-ground {
+    position: absolute;
+    left: 0;
+    top: 0;
+    right: 0;
+    bottom: 0;
+    background: rgba(0, 0, 0, 0.88);
+    border-radius: 0.2em;
+}
+
+.ace-profiler .pr-header,
+.ace-profiler .pr-graph,
+.ace-profiler .pr-legend,
+.ace-profiler .pr-frame,
+.ace-profiler .pr-head,
+.ace-profiler .pr-scroll {
+    position: relative;
+}
+
 /* ---- header ------------------------------------------------------------------- */
 
 .ace-profiler .pr-header {
@@ -180,6 +204,25 @@ body.hide-hud .ace-profiler {
 
 .ace-profiler .pr-row.pr-hidden {
     display: none;
+}
+
+/*
+ * The tree's indent. It has to be layout, not text: a label of leading spaces is collapsed
+ * by the engine before it is drawn, which made the tree view look identical to the flat one.
+ */
+.ace-profiler .pr-row[data-depth="1"] .pr-name { padding-left: 1.2em; }
+
+.ace-profiler .pr-row[data-depth="2"] .pr-name { padding-left: 2.4em; }
+
+.ace-profiler .pr-row[data-depth="3"] .pr-name { padding-left: 3.6em; }
+
+.ace-profiler .pr-row[data-depth="4"] .pr-name { padding-left: 4.8em; }
+
+.ace-profiler .pr-row[data-depth="1"] .pr-name,
+.ace-profiler .pr-row[data-depth="2"] .pr-name,
+.ace-profiler .pr-row[data-depth="3"] .pr-name,
+.ace-profiler .pr-row[data-depth="4"] .pr-name {
+    color: rgba(255, 255, 255, 0.62);
 }
 
 /*
