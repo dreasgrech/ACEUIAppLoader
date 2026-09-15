@@ -1,0 +1,249 @@
+/*
+ * ACE UI Capabilities Probe -- stylesheet. Linked by the ACEUIModLoader after the stock CSS, so
+ * --font-family-main is the game's. Stock HUD widget look: black panel, solid dark
+ * header, coloured status dots. No var() fallbacks (Cohtml does not support them).
+ *
+ * The script only ever writes textContent and class names here (status colours keyed
+ * by .cp-yes / .cp-no / .cp-partial / .cp-warn); it never writes colours or sizes.
+ */
+
+.ace-capabilities {
+    position: absolute;
+    left: 2rem;
+    top: 4rem;
+    width: 26rem;
+    display: flex;
+    flex-direction: column;
+    height: 34rem;
+    background: rgba(0, 0, 0, 0.94);
+    border: 2px solid transparent;
+    border-radius: 0.25rem;
+    color: rgba(255, 255, 255, 0.85);
+    font-family: var(--font-family-main);
+    font-size: 0.8rem;
+    cursor: pointer;
+}
+
+.ace-capabilities.dragging {
+    border-color: #fff;
+}
+
+body.hide-hud .ace-capabilities {
+    visibility: hidden;
+}
+
+/* ---- header ---------------------------------------------------------------------- */
+
+.ace-capabilities .cp-header {
+    display: flex;
+    flex-direction: row;
+    align-items: baseline;
+    justify-content: space-between;
+    padding: 0.5rem 0.75rem;
+    background: #1c1e1f;
+    border-radius: 0.25rem 0.25rem 0 0;
+}
+
+.ace-capabilities .cp-title {
+    color: #fff;
+    font-size: 0.85rem;
+    font-weight: 700;
+    letter-spacing: 0.04em;
+}
+
+.ace-capabilities .cp-summary {
+    color: rgba(255, 255, 255, 0.6);
+    font-size: 0.7rem;
+    white-space: nowrap;
+}
+
+/* ---- tools ----------------------------------------------------------------------- */
+
+.ace-capabilities .cp-tools {
+    display: flex;
+    flex-direction: row;
+    padding: 0.4rem 0.75rem;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+.ace-capabilities .cp-btn {
+    margin-right: 0.4rem;
+    padding: 0.2rem 0.6rem;
+    background: rgba(255, 255, 255, 0.08);
+    border: 1px solid rgba(255, 255, 255, 0.18);
+    border-radius: 0.2rem;
+    color: #fff;
+    font-size: 0.7rem;
+    cursor: pointer;
+    user-select: none;
+}
+
+/* ---- filters: status chips + search box ----------------------------------------- */
+
+.ace-capabilities .cp-filters {
+    display: flex;
+    flex-direction: row;
+    flex-wrap: wrap;
+    align-items: center;
+    padding: 0.35rem 0.75rem;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+.ace-capabilities .cp-filter {
+    display: flex;
+    flex-direction: row;
+    align-items: center;
+    margin: 0.15rem 0.4rem 0.15rem 0;
+    padding: 0.12rem 0.5rem;
+    border: 1px solid rgba(255, 255, 255, 0.18);
+    border-radius: 0.9rem;
+    font-size: 0.7rem;
+    cursor: pointer;
+    opacity: 0.45;
+    user-select: none;
+}
+
+.ace-capabilities .cp-filter.cp-on {
+    opacity: 1;
+    background: rgba(255, 255, 255, 0.1);
+}
+
+.ace-capabilities .cp-filter .cp-dot {
+    margin-right: 0.3rem;
+}
+
+.ace-capabilities .cp-count {
+    margin-left: 0.35rem;
+    color: rgba(255, 255, 255, 0.55);
+}
+
+.ace-capabilities .cp-search {
+    flex: 1 1 6rem;
+    min-width: 5rem;
+    margin: 0.15rem 0 0.15rem auto;
+    padding: 0.18rem 0.5rem;
+    background: rgba(255, 255, 255, 0.06);
+    border: 1px solid rgba(255, 255, 255, 0.2);
+    border-radius: 0.2rem;
+    color: #fff;
+    font-family: var(--font-family-main);
+    font-size: 0.72rem;
+}
+
+.ace-capabilities .cp-row.cp-hidden,
+.ace-capabilities .cp-cat.cp-hidden {
+    display: none;
+}
+
+/* ---- body: scrolling list of categories and rows -------------------------------- */
+
+/* Cohtml does not scroll an overflowing box by itself (proven by ACEDevConsole), so
+   the body is a clipped viewport whose scrollTop the script drives, with a custom
+   thumb -- the same technique the dev console uses. The wrapper carries data-nodrag
+   so wheeling or grabbing the thumb never starts a panel drag. */
+.ace-capabilities .cp-scroll {
+    flex: 1 1 auto;
+    position: relative;
+    min-height: 0;
+}
+
+.ace-capabilities .cp-body {
+    position: absolute;
+    top: 0;
+    right: 0;
+    bottom: 0;
+    left: 0;
+    overflow: hidden;
+    padding: 0.25rem 1.1rem 0.5rem 0.75rem;
+}
+
+.ace-capabilities .cp-scrollbar {
+    position: absolute;
+    top: 0.4rem;
+    right: 0.3rem;
+    bottom: 0.4rem;
+    width: 0.4rem;
+    min-width: 6px;
+    background: #111;
+    border: 1px solid #000;
+    border-width: 0 1px;
+    cursor: pointer;
+}
+
+.ace-capabilities .cp-scrollbar.cp-nofit {
+    opacity: 0;
+    pointer-events: none;
+}
+
+.ace-capabilities .cp-scrollbar:hover,
+.ace-capabilities .cp-scrollbar.dragging {
+    background: #222;
+}
+
+.ace-capabilities .cp-thumb {
+    box-sizing: border-box;
+    width: 100%;
+    height: 3rem;
+    background: rgba(255, 255, 255, 0.4);
+    border-radius: 0.2rem;
+    cursor: pointer;
+}
+
+.ace-capabilities .cp-scrollbar:hover .cp-thumb,
+.ace-capabilities .cp-scrollbar.dragging .cp-thumb {
+    background: #bd0000;
+}
+
+.ace-capabilities .cp-cat {
+    margin-top: 0.6rem;
+}
+
+.ace-capabilities .cp-cat-name {
+    margin-bottom: 0.2rem;
+    color: #bd0000;
+    font-size: 0.72rem;
+    font-weight: 700;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+}
+
+.ace-capabilities .cp-row {
+    display: flex;
+    flex-direction: row;
+    align-items: baseline;
+    padding: 0.08rem 0;
+    line-height: 1.3;
+}
+
+.ace-capabilities .cp-dot {
+    flex: 0 0 auto;
+    width: 0.5rem;
+    height: 0.5rem;
+    margin-right: 0.45rem;
+    border-radius: 50%;
+    background: rgba(255, 255, 255, 0.25);
+}
+
+.ace-capabilities .cp-name {
+    flex: 0 0 9rem;
+    color: rgba(255, 255, 255, 0.9);
+}
+
+.ace-capabilities .cp-detail {
+    flex: 1 1 auto;
+    color: rgba(255, 255, 255, 0.5);
+    font-size: 0.72rem;
+    word-break: break-word;
+}
+
+/* ---- status colours: applied to the dot and the detail text --------------------- */
+
+.ace-capabilities .cp-dot.cp-yes { background: #44ea78; }
+.ace-capabilities .cp-dot.cp-no { background: #ff1418; }
+.ace-capabilities .cp-dot.cp-partial { background: #ffb020; }
+.ace-capabilities .cp-dot.cp-warn { background: #3aa6ff; }
+
+.ace-capabilities .cp-detail.cp-yes { color: rgba(120, 235, 160, 0.85); }
+.ace-capabilities .cp-detail.cp-no { color: rgba(255, 120, 120, 0.85); }
+.ace-capabilities .cp-detail.cp-partial { color: rgba(255, 190, 90, 0.9); }
+.ace-capabilities .cp-detail.cp-warn { color: rgba(140, 200, 255, 0.85); }

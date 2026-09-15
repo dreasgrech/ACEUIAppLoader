@@ -1,0 +1,10 @@
+{
+  "version": "0.2.2",
+  "title": "ACE UI Capabilities Probe",
+  "styles": [
+    "capabilities.css"
+  ],
+  "scripts": [
+    "capabilities.js"
+  ]
+}
