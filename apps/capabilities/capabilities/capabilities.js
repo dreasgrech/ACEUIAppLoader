@@ -1291,4 +1291,4 @@ const CapabilitiesProbe = (function () {
 }());
 
 /* Attach to #capabilities: the loader creates it in game, the preview page carries it. */
-ACEUIModLoader.mod("capabilities").mount(CapabilitiesProbe.attach);
+ACEUIModLoader.mod("capabilities").mount(CapabilitiesProbe.attach, CapabilitiesProbe.detach);
