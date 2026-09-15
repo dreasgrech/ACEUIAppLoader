@@ -1321,4 +1321,4 @@ const DevConsole = (function () {
 }());
 
 /* Attach to #devconsole: the loader creates it in game, the preview page carries it. */
-ACEUIModLoader.mod("devconsole").mount(DevConsole.attach);
+ACEUIModLoader.mod("devconsole").mount(DevConsole.attach, DevConsole.detach);
