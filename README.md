@@ -2,7 +2,7 @@
 
 The single package that lets several UI mods coexist in Assetto Corsa EVO, the
 shared library those mods are built on, and the tools that build it and install
-mods for it. Version 0.10.0.
+mods for it. Version 0.11.0.
 
 Why a loader is needed at all, and why it has this shape, is in
 [`docs/design.md`](docs/design.md); the game mechanics it relies on are
@@ -104,6 +104,33 @@ toggle and DOOM's show/hide key are both rebindable from the drawer.
 Values are written to both stores: the HUD layout container, which the game writes to disk
 and is the only thing that survives a restart, and `localStorage`, read synchronously so a
 value is there the moment a mod asks for it.
+
+## Three places to keep state
+
+| | survives Escape/resume | survives a game restart | good for |
+|---|---|---|---|
+| `localStorage` | yes | **no** | anything, read synchronously |
+| HUD layout container (`readHud` / `writeHud`) | yes | yes | a position, a switch, a handful of values |
+| engine key/value container (`readStore` / `writeStore`) | yes | yes | state too big for the HUD layout |
+
+The first two are what most mods need. The third exists because the HUD layout is one key
+*inside* the engine's own container (`window.STORAGE`), and that container also takes
+top-level keys of our own:
+
+```js
+if (ACEUIModLoader.persist.storeLoaded()) {                 // it fills in asynchronously
+    const mine = ACEUIModLoader.persist.readStore("acedoom.saves");
+}
+ACEUIModLoader.persist.writeStore("acedoom.saves", { v: 1, slots: {} });
+ACEUIModLoader.persist.removeStore("acedoom.saves");
+```
+
+Everything in it is written to `ui_storage.uistorage` in `Saved Games/ACE`, which is how a
+DOOM saved game survives closing the game. Two things to know: it **fills in
+asynchronously**, so a read before `storeLoaded()` sees nothing (poll it from a frame loop
+rather than reading once), and `save` re-serialises and sends **every** key, not only
+yours. Write rarely and keep values small - the whole file is around 17 kB before a mod
+adds anything to it.
 
 ## Keeping keystrokes out of the car
 
@@ -285,7 +312,7 @@ in this order because each builds on the previous:
 |---|---|---|
 | `src/ACEUIModLoader.core.js` | `ACEUIModLoader` | `VERSION`, `page`, `log`, `logger(prefix)`, `clamp`, `el`/`close` (markup strings), `toArray`, `percentText`, `hudHidden()`, `closestWithAttribute`, `HUD_HIDDEN_CLASS` |
 | `src/ACEUIModLoader.console.js` | `ACEUIModLoader.console` | hooks `console.log/info/debug/warn/error` before the stock bundle runs (originals still called, nothing echoed), ring buffer of the last 500 `{seq, t, level, text}` entries, uncaught errors and unhandled rejections captured, `entries()`, `subscribe(fn)`, `capture(level, text)`, `clear()`, `format(value)` |
-| `src/ACEUIModLoader.persist.js` | `ACEUIModLoader.persist` | the stock HUD layout store (`HUD.elementModified` / `HUD.StoredData`, saved by the game on HUD close) and `localStorage`: `readHud`, `writeHud`, `hudAvailable`, `readLocal`, `writeLocal`, `removeLocal`, `save(hudId, key, data)` |
+| `src/ACEUIModLoader.persist.js` | `ACEUIModLoader.persist` | three stores: the stock HUD layout store (`HUD.elementModified` / `HUD.StoredData`, saved by the game on HUD close), `localStorage`, and the engine's own key/value container under a top-level key of the mod's choosing: `readHud`, `writeHud`, `hudAvailable`, `readLocal`, `writeLocal`, `removeLocal`, `save(hudId, key, data)`, `storeLoaded`, `readStore`, `writeStore`, `removeStore` |
 | `src/ACEUIModLoader.panel.js` | `ACEUIModLoader.panel` | `attach(root, {hudId, storageKey, log, onSaved})`: drag inside the HUD container, clamped; position persisted as screen fractions; hidden until the stored position is applied (immediate `localStorage`, then the HUD store has the last word in `update(panel, now)`); `data-nodrag` on descendants that must not start a drag; `detach` |
 | `src/ACEUIModLoader.loop.js` | `ACEUIModLoader.loop` | `start(onFrame)` / `stop(handle)`; `sampler(hz, maxGapMs)` + `advance(sampler, now, onSample)` for fixed-rate sampling independent of frame rate, returning the 0..1 fraction towards the next sample |
 | `src/ACEUIModLoader.loader.js` | `ACEUIModLoader.loader` | mod discovery through the game's video preset list, the `engine.on` wrapper that hides markers from the stock presets menu, root creation, mod injection, `mod(name)`; aliases `ACEUIModLoader.mod`, `.ready(cb)`, `.mods`, `.addScript`, `.addStylesheet`, `.ROOT` |

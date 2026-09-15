@@ -1,5 +1,5 @@
 /**
- * ACEUIModLoader.persist -- the two places a HUD mod can keep small state.
+ * ACEUIModLoader.persist -- the three places a HUD mod can keep state.
  *
  * Primary: the stock HUD's layout container (`HUD.elementModified(id, data)` /
  * `HUD.StoredData.layouts[<current>].elements[id]`), which the game writes to disk
@@ -10,8 +10,13 @@
  * Fallback: localStorage, which lives as long as the UI view; it survives the HUD
  * page reload that Escape/resume causes but not a game restart.
  *
+ * Third: the engine's key/value container itself (`storeLoaded` / `readStore` /
+ * `writeStore` / `removeStore`), which the HUD store is one key inside. It also reaches
+ * disk but under a top-level key of the mod's own choosing, so it suits state too big
+ * to belong in the HUD layout. It arrives asynchronously -- see `storeApi` below.
+ *
  * Ids in the HUD store follow the stock convention `hud_<name>`; localStorage keys
- * are free-form (mods use `ace<mod>.<what>`). Both stores take plain JSON data.
+ * are free-form (mods use `ace<mod>.<what>`). All three take plain JSON data.
  */
 ACEUIModLoader.persist = (function () {
 
@@ -74,6 +79,74 @@ ACEUIModLoader.persist = (function () {
         } catch (ignore) { /* nothing to remove */ }
     };
 
+    /**
+     * The engine's own key/value container (`window.STORAGE`), which is what the HUD
+     * layout lives inside: the game writes every key of it to
+     * `Saved Games\ACE\ui_storage.uistorage` and reads them back at startup. Unlike the
+     * HUD store this takes a **top-level key of our own**, so a mod with more to keep
+     * than a position -- DOOM's saved games, say -- can do it without swelling the
+     * layout blob the stock widgets depend on.
+     *
+     * Values go through JSON, so plain data only. Two things to know:
+     *
+     *   - it fills in asynchronously. `STORAGE` itself exists from the engine's Init,
+     *     but its contents arrive a moment later, so a read before `storeLoaded()` sees
+     *     nothing. Poll it (a frame loop is the natural place) rather than reading once.
+     *   - `save` re-serialises and sends *every* key, not only yours. Write rarely and
+     *     keep values small: the whole file is around 17 kB before we add anything.
+     */
+    const storeApi = function () {
+        const store = window.STORAGE;
+
+        return store && typeof store.get === "function" && typeof store.set === "function"
+            && typeof store.save === "function" ? store : null;
+    };
+
+    /** True once the engine has handed the container its contents and a read is meaningful. */
+    const storeLoaded = function () {
+        const store = storeApi();
+
+        return Boolean(store) && store.size > 0;
+    };
+
+    const readStore = function (key) {
+        const store = storeApi();
+
+        if (!store) { return null; }
+
+        const value = store.get(key);
+
+        return value === undefined ? null : value;
+    };
+
+    /** Writes and asks the engine to persist; false when the container is not there. */
+    const writeStore = function (key, data) {
+        const store = storeApi();
+
+        if (!store) { return false; }
+
+        store.set(key, data);
+
+        try {
+            const pending = store.save(key);
+
+            // the engine hands back a promise; an unhandled rejection would reach the console
+            if (pending && typeof pending.catch === "function") { pending.catch(function () { return null; }); }
+        } catch (ignore) { /* the container refused the write; the caller still has its copy */ }
+
+        return true;
+    };
+
+    const removeStore = function (key) {
+        const store = storeApi();
+
+        if (!store || typeof store.delete !== "function") { return false; }
+
+        store.delete(key);
+
+        return true;
+    };
+
     /** Write to both stores; returns the names of the ones that took it, for logging. */
     const save = function (hudId, localKey, data) {
         const where = [];
@@ -93,6 +166,10 @@ ACEUIModLoader.persist = (function () {
         readLocal: readLocal,
         writeLocal: writeLocal,
         removeLocal: removeLocal,
+        storeLoaded: storeLoaded,
+        readStore: readStore,
+        writeStore: writeStore,
+        removeStore: removeStore,
         save: save
     };
 }());

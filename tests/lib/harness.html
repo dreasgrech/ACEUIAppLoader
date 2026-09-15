@@ -158,6 +158,41 @@ document.addEventListener("DOMContentLoaded", function () {
         window.HUD = null; localStorage.clear();
     });
 
+    t("persist: the engine container is a third store, absent until the engine fills it", function () {
+        const P = ACEUIModLoader.persist;
+        window.STORAGE = undefined;
+        eq(P.storeLoaded(), false, "no container, nothing loaded");
+        eq(P.readStore("acex.thing"), null, "and nothing to read");
+        eq(P.writeStore("acex.thing", { a: 1 }), false, "a write says so rather than throwing");
+        eq(P.removeStore("acex.thing"), false);
+
+        // the engine's StorageManager: a map plus set/get/save/delete, save returning a promise
+        const saved = [];
+        const map = {};
+        window.STORAGE = {
+            get size() { return Object.keys(map).length; },
+            get: function (key) { return map[key]; },
+            set: function (key, value) { map[key] = value; },
+            save: function (key) { saved.push(key); return { catch: function () { return null; } }; },
+            delete: function (key) { delete map[key]; }
+        };
+
+        eq(P.storeLoaded(), false, "an empty container has not been filled yet");
+        eq(P.writeStore("acex.thing", { a: 1 }), true, "but it still takes a write");
+        eq(saved.join(","), "acex.thing", "and asks the engine to persist it");
+        eq(P.storeLoaded(), true, "now it has something in it");
+        eq(P.readStore("acex.thing").a, 1, "read back");
+        eq(P.readStore("acex.missing"), null, "a key that was never set reads as nothing");
+
+        eq(P.removeStore("acex.thing"), true);
+        eq(P.readStore("acex.thing"), null, "gone");
+
+        // a container that throws on save must not take the caller down with it
+        window.STORAGE.save = function () { throw new Error("engine said no"); };
+        eq(P.writeStore("acex.thing", { b: 2 }), true, "the value is still set");
+        window.STORAGE = undefined;
+    });
+
     // ---- panel ------------------------------------------------------------------------------
 
     t("input: capture sets both levers, release clears them", function () {
