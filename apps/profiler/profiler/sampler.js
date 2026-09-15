@@ -368,6 +368,7 @@ const ACEProfilerSampler = (function () {
 
             row.callsPerFrame = list.length ? row.calls / list.length : 0;
             row.msPerFrame = list.length ? row.totalMs / list.length : 0;
+            row.selfPerFrame = list.length ? row.selfMs / list.length : 0;
             row.layoutPerFrame = list.length ? row.layout / list.length : 0;
             row.msPerCall = row.calls ? row.totalMs / row.calls : 0;
             row.share = wallMs > 0 ? row.totalMs / wallMs : 0;
@@ -447,6 +448,7 @@ const ACEProfilerSampler = (function () {
         const finish = function (entry) {
             entry.callsPerFrame = list.length ? entry.calls / list.length : 0;
             entry.msPerFrame = list.length ? entry.totalMs / list.length : 0;
+            entry.selfPerFrame = list.length ? entry.selfMs / list.length : 0;
             entry.layoutPerFrame = list.length ? entry.layout / list.length : 0;
             entry.share = wallMs > 0 ? entry.totalMs / wallMs : 0;
             out.push(entry);
@@ -457,7 +459,9 @@ const ACEProfilerSampler = (function () {
         roots.sort(function (a, b) { return b.totalMs - a.totalMs; });
         roots.forEach(finish);
 
-        return { wallMs: wallMs, frames: list.length, rows: out };
+        // `roots` as well as the flattened rows: the panel re-sorts within each parent when
+        // a column header is clicked, which needs the shape, not the flattening
+        return { wallMs: wallMs, frames: list.length, rows: out, roots: roots };
     };
 
     /** Per-category totals for one frame, for the stacked graph. */

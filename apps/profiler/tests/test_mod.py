@@ -47,7 +47,9 @@ class PaletteTests(unittest.TestCase):
         self.assertEqual(len(bands), 6, "six bands in the script")
 
         for key, ink in bands:
-            rule = re.search(r'\[data-band="%s"\][^{]*\{[^}]*background:\s*([^;]+);' % key, css)
+            # the swatch specifically: the share bar behind a table row is drawn through an
+            # opacity, so the engine's bar is deliberately a lighter grey than its swatch
+            rule = re.search(r'\.pr-swatch\[data-band="%s"\][^{]*\{[^}]*background:\s*([^;]+);' % key, css)
             self.assertIsNotNone(rule, f"{key} has no swatch colour in the stylesheet")
             self.assertEqual(rule.group(1).strip(), ink,
                              f"{key}: the graph paints {ink} but the legend shows {rule.group(1).strip()}")

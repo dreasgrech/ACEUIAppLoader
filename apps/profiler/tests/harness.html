@@ -39,7 +39,7 @@
 (function () {
     const H = window.__harness;
     const t = H.t, eq = H.eq, ok = H.ok;
-    const P = ACEUIProfiler;
+    const P = ACEUIProfiler.internals;
     const S = ACEProfilerSampler;
     const clock = window.__clock;
     let frame = 1000;
@@ -136,12 +136,25 @@
         eq(rowTexts().length, 0, "and no rows");
     });
 
-    t("pausing stops recording; the close button hides the panel and remembers it", function () {
+    /* Closing a panel used to hide its root and leave the app switched on in the drawer,
+       which is the one place in the UI you can get an app back from: the profiler was then
+       unreachable except by its hotkey. Closing is switching off, and the key that brings it
+       back is held by the loader, because a mod that is off is not running to hold it. */
+    t("pausing stops recording; closing switches the app off, where the drawer can see it", function () {
+        const drawer = ACEUIModLoader.drawer;
+
         root.querySelector('[data-act="record"]').dispatchEvent(new MouseEvent("click", { bubbles: true }));
         eq(S.recording(), false, "paused");
+
         root.querySelector('[data-act="close"]').dispatchEvent(new MouseEvent("click", { bubbles: true }));
-        ok(root.classList.contains("pr-hidden"), "hidden");
-        eq(ACEUIModLoader.mod("profiler").recall("open", true), false, "and remembered");
+        eq(drawer.isVisible("profiler"), false, "off in the drawer, which is where you get it back");
+        eq(root.style.display, "none", "and off the screen");
+
+        const key = new KeyboardEvent("keydown", { code: ACEUIProfiler.toggleKey(), bubbles: true });
+
+        window.dispatchEvent(key);
+        eq(drawer.isVisible("profiler"), true, "the loader's own hotkey brings a closed app back");
+        eq(root.style.display, "", "and it is on screen again");
     });
 
     /*
@@ -151,7 +164,7 @@
      * however coarsely you measure it. Hence a worst-frame view rather than a scrubber.
      */
     t("WORST shows what was in the slowest frame, which is what a 1 ms clock can support", function () {
-        const button = root.querySelector('[data-act="worst"]');
+        const button = root.querySelector('[data-act="mode"][data-value="worst"]');
         let i = 0;
 
         root.querySelector('[data-act="record"]').dispatchEvent(new MouseEvent("click", { bubbles: true }));
@@ -177,8 +190,8 @@
         ok(names.some(function (n) { return n.indexOf("engine") === 0; }),
             "and so is the engine's share of that frame");
 
-        button.dispatchEvent(new MouseEvent("click", { bubbles: true }));
-        ok(!button.classList.contains("on"), "clicking again goes back to the window view");
+        root.querySelector('[data-act="mode"][data-value="window"]').dispatchEvent(new MouseEvent("click", { bubbles: true }));
+        ok(!button.classList.contains("on"), "picking another view releases this one");
         ACEUIModLoader.loop.stop(spiky);
     });
 
@@ -239,7 +252,7 @@
     t("the table has a layout column, which is this engine's GC Alloc", function () {
         const head = root.querySelector(".pr-head");
 
-        ok(head.textContent.indexOf("layout") >= 0, "the column is labelled: " + head.textContent);
+        ok(head.textContent.indexOf("Layout") >= 0, "the column is labelled: " + head.textContent);
         ok(root.querySelector(".pr-row .pr-layout"), "and every row has the cell");
     });
 
@@ -254,7 +267,7 @@
 
         for (i = 0; i < 12; i += 1) { nextFrame(); }
 
-        root.querySelector('[data-act="tree"]').dispatchEvent(new MouseEvent("click", { bubbles: true }));
+        root.querySelector('[data-act="mode"][data-value="tree"]').dispatchEvent(new MouseEvent("click", { bubbles: true }));
 
         const names = rowTexts();
         const parent = names.filter(function (n) { return n === "deepmod"; })[0];
@@ -265,7 +278,8 @@
             return r.querySelector(".pr-name").textContent === "inner work";
         })[0];
 
-        ok(root.querySelector('[data-act="tree"]').classList.contains("on"), "the button shows the mode");
+        ok(root.querySelector('[data-act="mode"][data-value="tree"]').classList.contains("on"),
+            "the picker shows which view is on");
         ok(root.querySelector(".pr-stat").textContent.indexOf("call tree") === 0,
             "the header says what is on screen: " + root.querySelector(".pr-stat").textContent);
         ok(parent, "the mod is listed: " + names.join(" | "));
@@ -274,9 +288,189 @@
         eq(rows[0].getAttribute("data-depth"), "0", "a root row is not indented");
         ok(names.indexOf("deepmod") < names.indexOf("inner work"), "and the parent comes first");
 
-        root.querySelector('[data-act="tree"]').dispatchEvent(new MouseEvent("click", { bubbles: true }));
+        root.querySelector('[data-act="mode"][data-value="window"]').dispatchEvent(new MouseEvent("click", { bubbles: true }));
         ACEUIModLoader.loop.stop(deep);
         root.querySelector('[data-act="record"]').dispatchEvent(new MouseEvent("click", { bubbles: true }));
+    });
+
+    /*
+     * On a real HUD the engine's slice is most of every frame, so the graph is a grey wall
+     * with the scripts squashed into the bottom eighth. Switching a band off is what turns
+     * it back into a picture of what the mods did.
+     */
+    t("a legend entry switches its band off, in the graph and the table together", function () {
+        const engine = root.querySelector('.pr-key[data-value="other"]');
+        let i;
+
+        root.querySelector('[data-act="record"]').dispatchEvent(new MouseEvent("click", { bubbles: true }));
+
+        const busy = ACEUIModLoader.loop.start(function () { burn(1); }, "bandmod");
+
+        for (i = 0; i < 20; i += 1) { nextFrame(); }
+
+        P.setMode(state, P.MODE_WORST);
+        ok(rowTexts().some(function (n) { return n.indexOf("engine") === 0; }), "the engine row is there");
+
+        const fullWas = state.fullMs;
+
+        engine.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+        eq(state.bands.other, false, "the band is off");
+        // the point of switching the engine off is to see what is left, so the graph has to
+        // range on what it is drawing rather than on the frame time that is no longer in it
+        ok(state.fullMs < fullWas, "and the graph rescaled to what is left: "
+            + fullWas + " -> " + state.fullMs);
+        ok(engine.classList.contains("off"), "and the legend says so");
+        ok(!rowTexts().some(function (n) { return n.indexOf("engine") === 0; }),
+            "the table dropped it too: " + rowTexts().join(" | "));
+        eq(ACEUIModLoader.mod("profiler").recall("bands", {}).other, false, "and the choice is remembered");
+
+        engine.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+        eq(state.bands.other, true, "clicking again brings it back");
+        ACEUIModLoader.loop.stop(busy);
+        P.setMode(state, P.MODE_WINDOW);
+        root.querySelector('[data-act="record"]').dispatchEvent(new MouseEvent("click", { bubbles: true }));
+    });
+
+    /* Total is the branch and self is the row's own hands; a row that is slow because of
+       what it calls should say 2 ms total and almost no self, with the cost underneath it. */
+    t("the table shows total and self, which is how a hierarchy tells you where to look", function () {
+        let i;
+
+        root.querySelector('[data-act="record"]').dispatchEvent(new MouseEvent("click", { bubbles: true }));
+
+        const outer = ACEUIModLoader.loop.start(function () {
+            ACEUIModLoader.section("inner", function () { burn(2); });
+        }, "selfmod");
+
+        for (i = 0; i < 24; i += 1) { nextFrame(); }
+
+        P.setMode(state, P.MODE_TREE);
+
+        const rows = P.reportFor(P.MODE_TREE).rows.filter(function (row) {
+            return row.name === "selfmod" || row.name === "inner";
+        });
+        const parent = rows.filter(function (row) { return row.name === "selfmod"; })[0];
+        const child = rows.filter(function (row) { return row.name === "inner"; })[0];
+
+        ok(parent && child, "the mod and the section it ran");
+        ok(parent.msPerFrame >= child.msPerFrame, "the parent's total includes the child's");
+        ok(parent.selfPerFrame < parent.msPerFrame,
+            "but its self time does not: " + parent.selfPerFrame + " of " + parent.msPerFrame);
+
+        const cell = root.querySelector(".pr-row:not(.pr-hidden) .pr-self");
+
+        ok(cell && cell.textContent.length, "and the column is drawn: " + (cell && cell.textContent));
+        ACEUIModLoader.loop.stop(outer);
+        P.setMode(state, P.MODE_WINDOW);
+        root.querySelector('[data-act="record"]').dispatchEvent(new MouseEvent("click", { bubbles: true }));
+    });
+
+    /* "Which is worst" depends on the question: the heaviest branch, the heaviest function,
+       the thing called four hundred times. A header click is how you ask a different one. */
+    t("a column header sorts the table, and the same header again turns it round", function () {
+        const header = root.querySelector('.pr-head [data-sort="ms"]');
+        let i;
+
+        root.querySelector('[data-act="record"]').dispatchEvent(new MouseEvent("click", { bubbles: true }));
+
+        const busy = ACEUIModLoader.loop.start(function () { burn(2); }, "sortbusy");
+        const quiet = ACEUIModLoader.loop.start(function () { return 0; }, "sortquiet");
+
+        for (i = 0; i < 24; i += 1) { nextFrame(); }
+
+        P.refreshTable(state);
+
+        const down = rowTexts();
+
+        ok(down.indexOf("sortbusy") < down.indexOf("sortquiet"),
+            "costliest first by default: " + down.join(" | "));
+        ok(header.classList.contains("sorted"), "the header says which column that is");
+        ok(!header.classList.contains("asc"), "pointing down");
+
+        header.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+
+        const up = rowTexts();
+
+        eq(state.sort.dir, 1, "clicking the sorted column turns it round");
+        ok(header.classList.contains("asc"), "and the arrow with it");
+        ok(up.indexOf("sortbusy") > up.indexOf("sortquiet"), "cheapest first: " + up.join(" | "));
+
+        root.querySelector('.pr-head [data-sort="calls"]')
+            .dispatchEvent(new MouseEvent("click", { bubbles: true }));
+        eq(state.sort.key, "calls", "another column takes over");
+        eq(state.sort.dir, -1, "biggest first, as a new column should start");
+        ok(!header.classList.contains("sorted"), "and the old one stops claiming it");
+
+        header.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+        ACEUIModLoader.loop.stop(busy);
+        ACEUIModLoader.loop.stop(quiet);
+        root.querySelector('[data-act="record"]').dispatchEvent(new MouseEvent("click", { bubbles: true }));
+    });
+
+    /* A fixed 33 ms full scale drew this HUD's 17 ms frames at half height for ever and
+       clipped anything worse. The scale steps instead, and says which step it is on. */
+    t("the graph ranges itself to what the window has been doing", function () {
+        let i;
+
+        P.clearAll(state);
+        eq(state.fullKey, "17", "cleared, it goes back to one frame of the page as full height");
+
+        root.querySelector('[data-act="record"]').dispatchEvent(new MouseEvent("click", { bubbles: true }));
+
+        const heavy = ACEUIModLoader.loop.start(function () { burn(22); }, "scalemod");
+
+        for (i = 0; i < 10; i += 1) { nextFrame(); }
+
+        ok(state.fullMs > 17.1, "a heavy window opens the scale up: " + state.fullMs);
+        eq(state.graphEl.getAttribute("data-full"), state.fullKey,
+            "the graph carries it, so the stylesheet can place the tick labels");
+        ok(state.scaleTop.textContent.indexOf(String(state.fullMs)) === 0,
+            "and the top of the graph says what it now means: " + state.scaleTop.textContent);
+
+        ACEUIModLoader.loop.stop(heavy);
+        root.querySelector('[data-act="record"]').dispatchEvent(new MouseEvent("click", { bubbles: true }));
+    });
+
+    /* The public surface: a snippet in the dev console should be able to do what the buttons
+       do, through the same code, without reaching into the panel's insides. */
+    t("the panel handle drives the panel: the same verbs the buttons use", function () {
+        const panel = ACEUIProfiler.panel();
+
+        ok(panel, "there is a handle once the panel is mounted");
+        eq(panel.state, state, "for the panel that is on screen");
+
+        eq(panel.record(true), true, "record");
+        eq(S.recording(), true, "really recording");
+        eq(panel.record(false), false, "and off again");
+
+        eq(panel.mode("tree"), "tree", "mode");
+        eq(state.mode, "tree", "really switched");
+        panel.mode("window");
+
+        eq(panel.band("other", false), false, "band off");
+        eq(state.bands.other, false, "really off");
+        panel.band("other", true);
+
+        eq(panel.sort("self").key, "self", "sort");
+        eq(state.sort.key, "self", "really sorted");
+        panel.sort("ms");
+
+        ok(panel.report().rows, "report reads the numbers back");
+        eq(typeof panel.scale(), "number", "scale answers with the size it is");
+        eq(panel.open(true), true, "and open shows it");
+        eq(root.classList.contains("pr-hidden"), false, "really on screen");
+    });
+
+    t("the panel scales through the loader's own scale, not its own copy of it", function () {
+        const was = state.scaler.value();
+
+        root.querySelector('[data-act="larger"]').dispatchEvent(new MouseEvent("click", { bubbles: true }));
+        ok(state.scaler.value() > was, "the + button grew it: " + state.scaler.value());
+        eq(root.style.fontSize, state.scaler.value() + "rem", "which is a font-size on the root");
+        eq(ACEUIModLoader.settings.get("profiler", "scale"), state.scaler.value(),
+            "and the same value the settings window shows");
+        root.querySelector('[data-act="smaller"]').dispatchEvent(new MouseEvent("click", { bubbles: true }));
+        eq(state.scaler.value(), was, "and back down again");
     });
 
     t("detach stops the loop and leaves the page uninstrumented", function () {

@@ -50,6 +50,18 @@ that started with the HUD would be measuring every session whether asked or not.
   so the mods name their own parts with `ACEUIModLoader.section(...)` -- PedalGraph's
   `read model` / `render`, Telemetry's `draw map` / `draw trace`, DOOM's `doom tic` /
   `present frame` -- and those appear here as children of the mod that ran them.
+- **WINDOW / TREE / WORST** are one picker, because they are one choice of what the table
+  is showing.
+- **Any column header** sorts the table; the same header again turns it round. Total finds
+  the expensive branch, **self** the expensive function inside it, **calls** the thing
+  running four hundred times a frame, **layout** whoever is making the engine re-measure.
+  In TREE the sort applies within each parent, so the hierarchy survives it.
+- **total vs self**: total is the branch, self is the row's own hands. A mod at 2 ms total
+  and 0.05 ms self is not slow -- it is calling something slow, and the row under it in
+  TREE names it.
+- **Any legend entry** switches its category off, in the graph and the table together, and
+  the choice is remembered. On a real HUD `engine` is most of every frame, so dropping it
+  is the difference between a grey wall and a picture of what the scripts did.
 - **WORST** switches the table to the slowest frame in the window and lists what was in
   it, engine time included. This is deliberately not Unity's frame-by-frame scrubber:
   with a 1 ms clock an ordinary frame's rows are mostly zeroes, but a 40 ms spike is 40 ms
@@ -62,6 +74,11 @@ that started with the HUD would be measuring every session whether asked or not.
   element on the page, so `ks-huddamage.process` and friends appear in the table beside our
   own mods. It is about 150 wrappers, which is worth asking for rather than assuming; it
   can be turned on and off between recordings.
+- The graph ranges itself between 17.1, 33, 66 and 133 ms full height, following the
+  window's worst frame and forgetting it slowly (about two and a half seconds). 17.1 ms is
+  one of the HUD page's frames -- the engine advances the page at half the game's 117 fps --
+  and 8.5 ms, one of the game's, is the lower of the two ruled lines. A fixed 33 ms scale
+  drew every ordinary frame at half height and clipped anything worse.
 - The graph sweeps like a heart monitor rather than scrolling: one pixel column per frame,
   stacked by category, wiping the columns ahead of the sweep. Scrolling would mean either
   blitting the canvas onto itself every frame (unproven in Renoir) or redrawing 300 stacked
@@ -86,17 +103,46 @@ said in the game log as well, prefixed `[profiler]`:
 - `.run profile` (a dev-console snippet) records ten seconds and prints the table without
   the panel being open at all.
 
+## Its API
+
+`window.ACEUIProfiler` is a small surface, not the module's inside. The panel on screen is
+a handle, and every verb on it is the one behind the matching button, so a snippet in the
+dev console and a click do the same thing:
+
+```js
+const p = ACEUIProfiler.panel();   // null until the loader has mounted it
+
+p.record(true);                    // start; record() alone answers whether it is on
+p.band("other", false);            // drop the engine's slice from graph and table
+p.sort("self");                    // heaviest on its own hands first
+p.mode("tree");                    // window | tree | worst
+p.report().rows[0];                // read the numbers rather than look at them
+p.worst();                         // the slowest recorded frame
+p.dump();                          // print the current view to the game log
+p.scale(1.4);                      // panel size; p.open(false) hides it
+```
+
+`ACEUIProfiler.sampler` is the measuring half on its own, for a caller with no use for a
+panel, and `BANDS`, `COLUMNS` and `MODES` describe what the panel shows. `internals` is
+everything else, named so that nothing depends on it by accident: the test harness uses it
+and it can change without notice.
+
 ## Layout
 
 - `profiler/sampler.js` - the instrumentation: wraps the page's entry points, builds a
   per-frame sample tree, keeps a ring of 300 frames and aggregates them. No DOM, and
   usable on its own from the dev console (`ACEProfilerSampler.start()`, `.aggregate()`).
 - `profiler/profiler.js` - the panel: graph, table, controls.
-- `profiler/profiler.css` - styling, including the band colours, which the canvas reads
-  back with `getComputedStyle` so the palette exists in one place.
+- `profiler/profiler.css` - styling. The band colours are declared here for the legend and
+  again in the script for the canvas: `getComputedStyle` in this engine reports inline
+  styles and initial values rather than the cascade, so a canvas cannot read a colour out
+  of CSS. A test keeps the two lists in step.
 - `tests/harness.html` - the panel's cases; `tests/sampler/harness.html` - the sampler's:
   frame boundaries, nesting, call merging, the ring buffer, the counters and the clock.
-- `dev/preview.html` - the mod outside the game.
+- `dev/preview.html` - the mod outside the game, measuring a faked HUD.
+- `dev/gallery.html` - the panel with fixed numbers in it, for judging the design: same
+  picture every time, so a change to the look is visible as a change to the picture.
+  `?tree`, `?worst` and `?narrow` show the other views.
 
 ## Install
 

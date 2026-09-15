@@ -1,0 +1,202 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<title>ACE UI Profiler gallery</title>
+<!--
+    The panel with the numbers held still, for looking at.
+
+    preview.html is the live thing: it fakes a HUD and the panel measures it. That makes it
+    the wrong tool for judging how the panel *looks*, because no two runs draw the same
+    picture and a headless browser barely runs animation frames at all. This page builds the
+    panel's real DOM with the real stylesheet, paints the real graph code with a fixed set of
+    frames, and writes one fixed table into it. Same picture every time, in a browser or in a
+    screenshot, so a change to the design is visible as a change to the picture.
+
+    It does not measure anything and is not a test of measurement. `?tree`, `?worst` and
+    `?narrow` are in the query string to see the other views and the panel at half size.
+-->
+<script src="../../ACEUIModLoader/tests/lib/lib.js"></script>
+<link rel="stylesheet" type="text/css" href="../profiler/profiler.css">
+<style>
+    :root { --font-family-main: "Bahnschrift", "Segoe UI", Arial, sans-serif; font-size: 16px; }
+    html, body { margin: 0; height: 100%; background: #101214; color: #ddd; font-family: var(--font-family-main); }
+    .absolutecenter { position: relative; width: 1600px; height: 900px; margin: auto; overflow: hidden;
+                      background: radial-gradient(ellipse at 50% 60%, #4a5560 0%, #1b1e22 70%); }
+    #gallery { left: 3rem; top: 3rem; }
+    .note { position: absolute; right: 1rem; bottom: 1rem; width: 22rem; padding: 0.8rem 1rem;
+            background: rgba(0, 0, 0, 0.75); border-left: 3px solid #bd0000; font-size: 0.8rem; line-height: 1.45; }
+    .note b { color: #fff; }
+</style>
+<script src="../profiler/sampler.js"></script>
+<script src="../profiler/profiler.js"></script>
+</head>
+<body>
+<div class="absolutecenter">
+    <div id="gallery"></div>
+</div>
+<div class="note">
+    <b>Gallery.</b> The panel with fixed numbers in it, for judging the design. Nothing here
+    is measured &mdash; see <b>preview.html</b> for the live one.<br><br>
+    <b>?tree</b>, <b>?worst</b>, <b>?narrow</b>.
+</div>
+<script>
+(function () {
+
+    const P = ACEUIProfiler.internals;
+    const view = window.location.search.replace("?", "") || "window";
+
+    /** A deterministic wobble, so the graph has a shape and it is the same one every run. */
+    const noise = function (i, spread) {
+        return (Math.sin(i * 0.11) + Math.sin(i * 0.037) * 0.7 + Math.sin(i * 0.63) * 0.25) * spread;
+    };
+
+    /**
+     * One frame in the shape `sampler.totals` reads: root samples by category, the engine's
+     * share as whatever of the frame no script accounted for. 17.1 ms is this HUD's frame.
+     */
+    const frameAt = function (i) {
+        const spike = i % 71 === 0;
+        const mod = 1.15 + noise(i, 0.35) + (spike ? 6 : 0);
+        const stock = 2.4 + noise(i + 11, 0.5);
+        const event = i % 3 === 0 ? 0.35 + noise(i, 0.1) : 0;
+        const timer = i % 29 === 0 ? 1.8 : 0;
+        const profilerMs = 0.16;
+        const script = mod + stock + event + timer + profilerMs;
+
+        return {
+            count: 4,
+            parent: [-1, -1, -1, -1],
+            category: ["mod", "stock", "event", "timer"],
+            totalMs: [mod, stock, event, timer],
+            profilerMs: profilerMs,
+            scriptMs: script,
+            wallMs: script + 9.4 + noise(i + 5, 1.6) + (spike ? 7 : 0)
+        };
+    };
+
+    /** The window view: every app that ran, costliest first, as the table shows it. */
+    const WINDOW_ROWS = [
+        ["engine (style, layout, paint)", "other", 1, 9.62, 9.62, 0, 0.562],
+        ["perFrameAllModelUpdate", "stock", 1, 2.41, 0.32, 4, 0.141],
+        ["pedalgraph", "mod", 1, 0.74, 0.11, 2, 0.043],
+        ["telemetry", "mod", 1, 0.31, 0.31, 0, 0.018],
+        ["houseKeeping", "timer", 0.03, 0.06, 0.06, 0, 0.004],
+        ["devconsole", "mod", 1, 0.12, 0.12, 1, 0.007],
+        ["onMouseMove", "event", 0.4, 0.05, 0.05, 0, 0.003],
+        ["profiler", "profiler", 1, 0.16, 0.16, 0, 0.009]
+    ];
+
+    /** The tree view: the same frame, but who called whom. */
+    const TREE_ROWS = [
+        ["perFrameAllModelUpdate", "stock", 1, 2.41, 0.32, 4, 0.141, 0],
+        ["fetchAllModels", "stock", 1, 1.62, 1.62, 3, 0.095, 1],
+        ["ks-hudtyres.onBindingUpdate", "stock", 1, 0.47, 0.47, 1, 0.027, 1],
+        ["pedalgraph", "mod", 1, 0.74, 0.11, 2, 0.043, 0],
+        ["read telemetry", "mod", 1, 0.38, 0.38, 2, 0.022, 1],
+        ["draw pedals", "mod", 1, 0.25, 0.25, 0, 0.015, 1],
+        ["telemetry", "mod", 1, 0.31, 0.31, 0, 0.018, 0],
+        ["devconsole", "mod", 1, 0.12, 0.12, 1, 0.007, 0],
+        ["draw graph", "profiler", 1, 0.11, 0.11, 0, 0.006, 0],
+        ["refresh table", "profiler", 0.08, 0.05, 0.05, 0, 0.003, 1]
+    ];
+
+    /** The worst view: one frame, in the order it happened. */
+    const WORST_ROWS = [
+        ["engine (style, layout, paint)", "other", 1, 16.42, 16.42, 0, 0.549],
+        ["pedalgraph", "mod", 1, 7.19, 7.19, 2, 0.240],
+        ["perFrameAllModelUpdate", "stock", 1, 4.88, 1.02, 9, 0.163],
+        ["houseKeeping", "timer", 1, 1.21, 1.21, 0, 0.040],
+        ["profiler", "profiler", 1, 0.21, 0.21, 0, 0.007]
+    ];
+
+    const rowsFor = function () {
+        if (view === "tree") { return TREE_ROWS; }
+
+        if (view === "worst") { return WORST_ROWS; }
+
+        return WINDOW_ROWS;
+    };
+
+    const statFor = function () {
+        if (view === "tree") { return "call tree over 300 frames, 10 nodes"; }
+
+        if (view === "worst") { return "worst frame 29.91 ms of 300 frames"; }
+
+        return "58.4 fps  17.12 ms  300 f";
+    };
+
+    // ---- build ------------------------------------------------------------------------
+
+    const root = document.getElementById("gallery");
+    const state = P.create(root);
+    let i;
+
+    P.fitCanvas(state);
+    // the scale a quiet HUD settles on: 17.1 ms is one of this page's frames. Going through
+    // rescale rather than setting it by hand keeps the top label and the ticks in step, and
+    // its replay of the sampler's ring draws nothing here because nothing was recorded.
+    P.rescale(state, P.SCALES[P.SCALE_START]);
+
+    // a full graph: the canvas is as wide as the panel gives it, so fill every column.
+    // The totals are handed in because the panel computes them once per frame and gives
+    // them to the scale tracker as well.
+    for (i = 0; i < state.graphW; i += 1) {
+        const frame = frameAt(i);
+
+        P.drawColumn(state, frame, ACEProfilerSampler.totals(frame));
+    }
+
+    // the table, written straight into the row pool: this page is about how the panel looks,
+    // so it fills the same elements refreshTable does rather than pretending to measure
+    const rows = root.querySelectorAll("." + P.CLASS.row);
+    const data = rowsFor();
+
+    for (i = 0; i < rows.length; i += 1) {
+        const row = rows[i];
+        const entry = data[i];
+
+        if (!entry) {
+            row.classList.add(P.CLASS.hidden);
+        } else {
+            row.classList.remove(P.CLASS.hidden);
+            row.querySelector("." + P.CLASS.name).textContent = entry[0];
+            row.querySelector("." + P.CLASS.calls).textContent = entry[2].toFixed(1);
+            row.querySelector("." + P.CLASS.ms).textContent = entry[3].toFixed(2);
+            row.querySelector("." + P.CLASS.self).textContent = entry[4].toFixed(2);
+            row.querySelector("." + P.CLASS.layout).textContent = entry[5].toFixed(1);
+            row.querySelector("." + P.CLASS.share).textContent = (entry[6] * 100).toFixed(1) + "%";
+
+            const bar = row.querySelector("." + P.CLASS.bar);
+
+            bar.setAttribute("data-band", entry[1]);
+            bar.style.transform = "scaleX(" + entry[6].toFixed(3) + ")";
+
+            if (entry.length > 7) { row.setAttribute("data-depth", entry[7]); }
+        }
+    }
+
+    root.querySelector("." + P.CLASS.stat).textContent = statFor();
+    root.querySelector("." + P.CLASS.frameLine).textContent =
+        "last frame 17.4 ms   script 4.6 ms   engine 12.8 ms   34 layout reads";
+
+    // the view picker and the sort arrow, so the controls show the state the table is in
+    const modes = root.querySelectorAll("." + P.CLASS.mode);
+
+    for (i = 0; i < modes.length; i += 1) {
+        if (modes[i].getAttribute("data-value") === view) { modes[i].classList.add(P.CLASS.on); }
+    }
+
+    root.querySelector("." + P.CLASS.rec).classList.add(P.CLASS.on);
+
+    // the sorted column, marked as the panel marks it when a header is clicked
+    const sorted = root.querySelector("." + P.CLASS.head + " ." + P.CLASS.ms);
+
+    sorted.classList.add(P.CLASS.sorted);
+    sorted.querySelector("." + P.CLASS.arrow).textContent = "▼";
+
+    if (view === "narrow") { root.style.fontSize = "0.7rem"; }
+}());
+</script>
+</body>
+</html>

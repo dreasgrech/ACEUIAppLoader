@@ -30,6 +30,9 @@ const ACEUIProfiler = (function () {
     const me = ACEUIModLoader.mod("profiler");
     const S = ACEProfilerSampler;
 
+    /** The mounted panel's handle; see `panel()` at the bottom of this file. */
+    let live = null;
+
     /** Class names shared with profiler.css. */
     const CLASS = {
         root: "ace-profiler",
@@ -40,10 +43,17 @@ const ACEUIProfiler = (function () {
         tools: "pr-tools",
         btn: "pr-btn",
         on: "on",
+        modes: "pr-modes",
+        mode: "pr-mode",
+        rec: "pr-rec",
+        glyph: "pr-glyph",
+        closeBtn: "pr-close",
+        off: "off",
         graph: "pr-graph",
         canvas: "pr-canvas",
         scaleTop: "pr-scale-top",
-        scaleMid: "pr-scale-mid",
+        scale: "pr-scale",
+        tick: "pr-tick",
         legend: "pr-legend",
         key: "pr-key",
         swatch: "pr-swatch",
@@ -54,11 +64,17 @@ const ACEUIProfiler = (function () {
         name: "pr-name",
         calls: "pr-calls",
         ms: "pr-ms",
+        self: "pr-self",
         layout: "pr-layout",
+        sorted: "sorted",
+        asc: "asc",
+        dot: "pr-dot",
+        sep: "pr-sep",
+        arrow: "pr-arrow",
+        alt: "alt",
         share: "pr-share",
         bar: "pr-bar",
         hidden: "pr-hidden",
-        palette: "pr-palette",
         scroll: "pr-scroll",
         scrollbar: "pr-scrollbar",
         thumb: "pr-thumb",
@@ -67,11 +83,27 @@ const ACEUIProfiler = (function () {
 
     const ACT_ATTR = "data-act";
     const ACT_RECORD = "record";
-    const ACT_TREE = "tree";
-    const ACT_WORST = "worst";
+    const ACT_MODE = "mode";
     const ACT_LOG = "log";
     const ACT_CLEAR = "clear";
     const ACT_CLOSE = "close";
+    const ACT_BAND = "band";
+    const ACT_SORT = "sort";
+    const SORT_ATTR = "data-sort";
+
+    /**
+     * The table's columns. `key` is what a row carries, `sort` what the header sorts by:
+     * they differ for the name column, which sorts alphabetically rather than by a number.
+     */
+    const COLUMNS = [
+        { key: "calls", label: "Calls", field: "callsPerFrame" },
+        { key: "ms", label: "Total", field: "msPerFrame" },
+        { key: "self", label: "Self", field: "selfPerFrame" },
+        { key: "layout", label: "Layout", field: "layoutPerFrame" },
+        { key: "share", label: "Share", field: "share" }
+    ];
+    const ACT_SMALLER = "smaller";
+    const ACT_LARGER = "larger";
 
     /** What the table is showing: the window's averages, its call tree, or one bad frame. */
     const MODE_WINDOW = "window";
@@ -84,9 +116,48 @@ const ACEUIProfiler = (function () {
     /** Graph geometry. One pixel column per frame; 33 ms is full height, as Unity's is. */
     const GRAPH_W = 300;
     const GRAPH_H = 64;
-    const FULL_MS = 33;
-    const GUIDE_MS = 16.7;
     const WIPE_W = 3;
+    /**
+     * Full scale, in steps. The smallest one the window fits in is used, so a quiet HUD fills
+     * the graph with its 17 ms frames instead of drawing them all at half height, and a HUD
+     * in trouble still shows the spike rather than clipping it at the top.
+     *
+     * Fixed steps rather than a scale that follows the peak exactly: two pictures of the same
+     * HUD have to be comparable, and a graph whose height means something different every
+     * frame cannot tell you that this frame was worse than the last.
+     */
+    const SCALES = [
+        { key: "0.5", ms: 0.5 },
+        { key: "1", ms: 1 },
+        { key: "2", ms: 2 },
+        { key: "4", ms: 4 },
+        { key: "8.5", ms: 8.5 },
+        { key: "17", ms: 17.1 },
+        { key: "33", ms: 33 },
+        { key: "66", ms: 66 },
+        { key: "133", ms: 133 }
+    ];
+    /** Where a fresh panel starts: one frame of the HUD page, full height. */
+    const SCALE_START = 5;
+    const FULL_MS = SCALES[SCALE_START].ms;
+    const FULL_ATTR = "data-full";
+    const TICK_ATTR = "data-ms";
+    /** Headroom over the window's peak, so the tallest column is not flush with the ceiling. */
+    const SCALE_HEADROOM = 1.12;
+    /**
+     * How fast the remembered peak forgets, per frame. A spike should hold the scale open long
+     * enough to look at -- this halves in about 140 frames, some two and a half seconds.
+     */
+    const PEAK_DECAY = 0.995;
+    /**
+     * Where to rule the graph. 8.5 ms is one of the game's frames at 117 fps; 17.1 ms is one
+     * of the HUD page's, which the engine advances at exactly half the game's rate. A column
+     * taller than the upper line took longer than the page's whole frame.
+     */
+    const GUIDES = [
+        { ms: 8.5, label: "8.5", band: "guideDim" },
+        { ms: 17.1, label: "17.1", band: "guide" }
+    ];
 
     /**
      * The graph's bands, bottom-up, with the ink the canvas paints them in.
@@ -107,12 +178,15 @@ const ACEUIProfiler = (function () {
         { key: "other", label: "engine", ink: "rgba(255, 255, 255, 0.22)" }
     ];
     const BAND_ATTR = "data-band";
+    const VALUE_ATTR = "data-value";
     /** How deep a row sits in the tree; the stylesheet turns it into an indent. */
     const DEPTH_ATTR = "data-depth";
     const MAX_DEPTH = 4;
     const GUIDE_BAND = "guide";
+    const GUIDE_DIM_BAND = "guideDim";
     const SWEEP_BAND = "sweep";
     const INK_GUIDE = "rgba(255, 255, 255, 0.38)";
+    const INK_GUIDE_DIM = "rgba(255, 255, 255, 0.16)";
     const INK_SWEEP = "rgba(255, 255, 255, 0.5)";
     /** The graph's own ground. Opaque, because it is painted over rather than erased. */
     const INK_GROUND = "#0c0e10";
@@ -142,18 +216,23 @@ const ACEUIProfiler = (function () {
 
     const TITLE_TEXT = "PROFILER";
     const REC_TEXT = "REC";
-    const TREE_TEXT = "TREE";
-    const WORST_TEXT = "WORST";
     const LOG_TEXT = "LOG";
     const CLEAR_TEXT = "CLEAR";
-    const CLOSE_TEXT = "x";
+    const CLOSE_TEXT = "\u00d7";
+    const SMALLER_TEXT = "\u2212";
+    const LARGER_TEXT = "+";
     const LOG_ROWS = 15;
+    /** The three views are one choice, so they are one control. */
+    const MODES = [
+        { key: "window", label: "WINDOW" },
+        { key: "tree", label: "TREE" },
+        { key: "worst", label: "WORST" }
+    ];
 
     const el = ACEUIModLoader.el;
     const close = ACEUIModLoader.close;
     const toArray = ACEUIModLoader.toArray;
     const clamp = ACEUIModLoader.clamp;
-    const keys = ACEUIModLoader.keys;
     const dom = ACEUIModLoader.dom;
     const setClass = dom.setClass;
     const log = me.log;
@@ -177,16 +256,7 @@ const ACEUIProfiler = (function () {
             value: false,
             hint: "instrumenting costs about 0.26 us per call"
         },
-        {
-            key: "scale",
-            type: "range",
-            label: "Panel scale",
-            value: SCALE_DEFAULT,
-            min: SCALE_MIN,
-            max: SCALE_MAX,
-            step: SCALE_STEP,
-            digits: SCALE_DIGITS
-        },
+        me.scaleSpec({ min: SCALE_MIN, max: SCALE_MAX, step: SCALE_STEP }),
         {
             key: "spikeMs",
             type: "range",
@@ -235,12 +305,36 @@ const ACEUIProfiler = (function () {
         return out;
     };
 
-    const buttonMarkup = function (act, text) {
+    const buttonMarkup = function (act, text, extraClass, value) {
         const attrs = noDrag({});
 
         attrs[ACT_ATTR] = act;
 
-        return el("div", CLASS.btn, attrs) + text + close("div");
+        if (value !== undefined) { attrs[VALUE_ATTR] = value; }
+
+        return el("div", CLASS.btn + (extraClass ? " " + extraClass : ""), attrs) + text + close("div");
+    };
+
+    /**
+     * Record, with the dot that says what it is. The dot is an element rather than a
+     * character for the same reason the sort arrow is: a glyph is at the mercy of the font.
+     */
+    const recMarkup = function () {
+        const attrs = noDrag({});
+
+        attrs[ACT_ATTR] = ACT_RECORD;
+
+        return el("div", CLASS.btn + " " + CLASS.rec, attrs)
+            + el("span", CLASS.dot) + close("span")
+            + REC_TEXT
+            + close("div");
+    };
+
+    /** The view picker: one of three, so the pressed one stays pressed. */
+    const modesMarkup = function () {
+        return el("div", CLASS.modes) + MODES.map(function (mode) {
+            return buttonMarkup(ACT_MODE, mode.label, CLASS.mode, mode.key);
+        }).join("") + close("div");
     };
 
     const bandAttrs = function (key) {
@@ -251,12 +345,62 @@ const ACEUIProfiler = (function () {
         return attrs;
     };
 
+    /**
+     * The legend is also the switch: on a real HUD the engine's slice is most of the frame,
+     * so being able to drop it out of the graph is the difference between a grey wall and a
+     * picture of what the scripts did.
+     */
     const legendMarkup = function () {
         return BANDS.map(function (band) {
-            return el("div", CLASS.key)
+            const attrs = noDrag(bandAttrs(band.key));
+
+            attrs[ACT_ATTR] = ACT_BAND;
+            attrs[VALUE_ATTR] = band.key;
+
+            return el("div", CLASS.key, attrs)
                 + el("div", CLASS.swatch, bandAttrs(band.key)) + close("div")
                 + band.label
                 + close("div");
+        }).join("");
+    };
+
+    /** The graph's box says which scale it is drawn at; the stylesheet reads it. */
+    const graphAttrs = function () {
+        const attrs = {};
+
+        attrs[FULL_ATTR] = SCALES[SCALE_START].key;
+
+        return attrs;
+    };
+
+    /**
+     * A column header that sorts the table when clicked. The arrow is its own element so
+     * that `setSort` can move it by writing one string, rather than rebuilding the header.
+     */
+    const headCell = function (className, label, key) {
+        const attrs = noDrag({});
+
+        attrs[ACT_ATTR] = ACT_SORT;
+        attrs[SORT_ATTR] = key;
+
+        return el("div", className, attrs)
+            + label
+            + el("span", CLASS.arrow) + close("span")
+            + close("div");
+    };
+
+    /**
+     * A label per guide. Where it sits depends on the scale in force, which changes, and a
+     * mod may not write styles in its per-frame path -- so the label says which line it is
+     * and the graph says which scale is in force, and the stylesheet does the positioning.
+     */
+    const guidesMarkup = function () {
+        return GUIDES.map(function (guide) {
+            const attrs = {};
+
+            attrs[TICK_ATTR] = guide.label;
+
+            return el("div", CLASS.tick, attrs) + guide.label + close("div");
         }).join("");
     };
 
@@ -265,11 +409,12 @@ const ACEUIProfiler = (function () {
         let i;
 
         for (i = 0; i < ROWS; i += 1) {
-            rows.push(el("div", CLASS.row + " " + CLASS.hidden)
+            rows.push(el("div", CLASS.row + " " + CLASS.hidden + (i % 2 ? " " + CLASS.alt : ""))
                 + el("div", CLASS.bar) + close("div")
                 + el("div", CLASS.name) + close("div")
                 + el("div", CLASS.calls) + close("div")
                 + el("div", CLASS.ms) + close("div")
+                + el("div", CLASS.self) + close("div")
                 + el("div", CLASS.layout) + close("div")
                 + el("div", CLASS.share) + close("div")
                 + close("div"));
@@ -284,29 +429,30 @@ const ACEUIProfiler = (function () {
         return el("div", CLASS.ground) + close("div")
             + el("div", CLASS.header)
             + el("div", CLASS.title) + TITLE_TEXT + close("div")
-            + el("div", CLASS.stat) + close("div")
             + el("div", CLASS.tools)
-            + buttonMarkup(ACT_RECORD, REC_TEXT)
-            + buttonMarkup(ACT_TREE, TREE_TEXT)
-            + buttonMarkup(ACT_WORST, WORST_TEXT)
+            + recMarkup()
+            + modesMarkup()
             + buttonMarkup(ACT_LOG, LOG_TEXT)
             + buttonMarkup(ACT_CLEAR, CLEAR_TEXT)
-            + buttonMarkup(ACT_CLOSE, CLOSE_TEXT)
+            + el("div", CLASS.sep) + close("div")
+            + buttonMarkup(ACT_SMALLER, SMALLER_TEXT, CLASS.glyph)
+            + buttonMarkup(ACT_LARGER, LARGER_TEXT, CLASS.glyph)
+            + buttonMarkup(ACT_CLOSE, CLOSE_TEXT, CLASS.glyph + " " + CLASS.closeBtn)
             + close("div")
             + close("div")
-            + el("div", CLASS.graph)
+            + el("div", CLASS.graph, graphAttrs())
             + el("div", CLASS.scaleTop) + FULL_MS + " ms" + close("div")
-            + el("div", CLASS.scaleMid) + GUIDE_MS + close("div")
+            + el("div", CLASS.scale) + guidesMarkup() + close("div")
             + close("div")
             + el("div", CLASS.legend) + legendMarkup() + close("div")
+            + el("div", CLASS.stat) + close("div")
             + el("div", CLASS.frameLine) + close("div")
             + el("div", CLASS.head)
             + el("div", CLASS.bar) + close("div")
-            + el("div", CLASS.name) + "app" + close("div")
-            + el("div", CLASS.calls) + "calls/f" + close("div")
-            + el("div", CLASS.ms) + "ms/f" + close("div")
-            + el("div", CLASS.layout) + "layout" + close("div")
-            + el("div", CLASS.share) + "share" + close("div")
+            + headCell(CLASS.name, "App", "name")
+            + COLUMNS.map(function (column) {
+                return headCell(CLASS[column.key], column.label, column.key);
+            }).join("")
             + close("div")
             + el("div", CLASS.scroll)
             + el("div", CLASS.rows) + rowsMarkup() + close("div")
@@ -336,6 +482,18 @@ const ACEUIProfiler = (function () {
         return canvas;
     };
 
+    /** Remembered band switches, defaulting to all on. */
+    const bandsOn = function () {
+        const stored = me.recall("bands", null);
+        const on = {};
+
+        BANDS.forEach(function (band) {
+            on[band.key] = !stored || stored[band.key] !== false;
+        });
+
+        return on;
+    };
+
     const create = function (root) {
         root.classList.add(CLASS.root);
 
@@ -346,6 +504,7 @@ const ACEUIProfiler = (function () {
 
         BANDS.forEach(function (band) { ink[band.key] = band.ink; });
         ink[GUIDE_BAND] = INK_GUIDE;
+        ink[GUIDE_DIM_BAND] = INK_GUIDE_DIM;
         ink[SWEEP_BAND] = INK_SWEEP;
 
         return {
@@ -356,9 +515,16 @@ const ACEUIProfiler = (function () {
             canvas: canvas,
             ctx: canvas && canvas.getContext ? canvas.getContext("2d") : null,
             recordButton: root.querySelector("[" + ACT_ATTR + "=\"" + ACT_RECORD + "\"]"),
-            worstButton: root.querySelector("[" + ACT_ATTR + "=\"" + ACT_WORST + "\"]"),
-            treeButton: root.querySelector("[" + ACT_ATTR + "=\"" + ACT_TREE + "\"]"),
+            modeButtons: toArray(root.querySelectorAll("." + CLASS.mode)),
             mode: MODE_WINDOW,
+            fullMs: FULL_MS,            // the graph's full height in ms; see rescale
+            fullKey: SCALES[SCALE_START].key,
+            peakMs: 0,                  // the window's worst frame, forgotten slowly
+            graphEl: root.querySelector("." + CLASS.graph),
+            scaleTop: root.querySelector("." + CLASS.scaleTop),
+            sort: { key: "ms", dir: -1 },
+            headCells: toArray(root.querySelectorAll("." + CLASS.head + " [" + SORT_ATTR + "]")),
+            scaler: null,               // me.scale handle: the loader owns panel scaling
             body: root.querySelector("." + CLASS.rows),
             track: root.querySelector("." + CLASS.scrollbar),
             thumb: root.querySelector("." + CLASS.thumb),
@@ -369,6 +535,7 @@ const ACEUIProfiler = (function () {
                     name: node.querySelector("." + CLASS.name),
                     calls: node.querySelector("." + CLASS.calls),
                     ms: node.querySelector("." + CLASS.ms),
+                    self: node.querySelector("." + CLASS.self),
                     layout: node.querySelector("." + CLASS.layout),
                     share: node.querySelector("." + CLASS.share),
                     lastName: "",
@@ -377,6 +544,7 @@ const ACEUIProfiler = (function () {
                 };
             }),
             scale: SCALE_DEFAULT,
+            bands: bandsOn(),           // which categories the graph and table show
             graphW: GRAPH_W,            // the canvas buffer, until layout says how big it really is
             graphH: GRAPH_H,
             frames: 0,                  // frames this panel has ticked, for the one-off report
@@ -387,7 +555,6 @@ const ACEUIProfiler = (function () {
             lastStat: "",
             lastFrameText: "",
             scroller: null,
-            unbindToggle: null,
             unsubscribeSettings: null,
             bag: null,
             ui: null
@@ -397,7 +564,19 @@ const ACEUIProfiler = (function () {
     // ---- the graph -----------------------------------------------------------------
 
     const columnHeight = function (state, ms) {
-        return Math.round(clamp(ms / FULL_MS, 0, 1) * state.graphH);
+        return Math.round(clamp(ms / state.fullMs, 0, 1) * state.graphH);
+    };
+
+    /** The smallest step that holds this peak, with a little air above it. */
+    const scaleFor = function (peakMs) {
+        const wanted = peakMs * SCALE_HEADROOM;
+        let i;
+
+        for (i = 0; i < SCALES.length; i += 1) {
+            if (SCALES[i].ms >= wanted) { return SCALES[i]; }
+        }
+
+        return SCALES[SCALES.length - 1];
     };
 
     /** The whole canvas, ground and guide. Used at attach, on CLEAR and after a resize. */
@@ -408,8 +587,13 @@ const ACEUIProfiler = (function () {
 
         ctx.fillStyle = INK_GROUND;
         ctx.fillRect(0, 0, state.graphW, state.graphH);
-        ctx.fillStyle = state.ink[GUIDE_BAND];
-        ctx.fillRect(0, state.graphH - columnHeight(state, GUIDE_MS), state.graphW, 1);
+        GUIDES.forEach(function (guide) {
+            // a guide at or above full scale is the ceiling, which the top label already says
+            if (guide.ms >= state.fullMs) { return; }
+
+            ctx.fillStyle = state.ink[guide.band];
+            ctx.fillRect(0, state.graphH - columnHeight(state, guide.ms), state.graphW, 1);
+        });
     };
 
     /**
@@ -442,11 +626,91 @@ const ACEUIProfiler = (function () {
      * are wiped so the old trace cannot be mistaken for the new one, as a heart monitor
      * does it.
      */
-    const drawColumn = function (state, frame) {
+    /**
+     * Change full scale and redraw what is on screen at the new one. Half a graph drawn at
+     * one scale and half at another would be a lie about which frame was worse, so the ring
+     * is replayed -- a few hundred fills, on a change that happens seconds apart at most.
+     */
+    const rescale = function (state, scale) {
+        const all = S.frames();
+        const start = Math.max(0, all.length - state.graphW);
+        let i;
+
+        state.fullMs = scale.ms;
+        state.fullKey = scale.key;
+        state.graphEl.setAttribute(FULL_ATTR, scale.key);
+        state.scaleTop.textContent = scale.ms + " ms";
+        state.sweep = 0;
+        groundFill(state);
+
+        for (i = start; i < all.length; i += 1) { drawColumn(state, all[i], S.totals(all[i])); }
+
+        log("graph scale now " + scale.ms + " ms full height ("
+            + (all.length - start) + " frames redrawn)");
+    };
+
+    /** What this frame puts on the graph: the bands that are switched on, and no others. */
+    const shownMs = function (state, totals) {
+        let sum = 0;
+        let i;
+
+        for (i = 0; i < BANDS.length; i += 1) {
+            if (state.bands[BANDS[i].key]) { sum += totals[BANDS[i].key]; }
+        }
+
+        return sum;
+    };
+
+    /**
+     * Follow the worst of what is being drawn, forgetting it slowly. The peak is of the
+     * *shown* bands rather than the whole frame: switching the engine off is a request to
+     * see what is left, and scaling to a frame time that is no longer on the graph would
+     * answer it with a flat line along the bottom.
+     *
+     * Without the decay one spike would hold the scale open for as long as the panel stayed
+     * up; without the peak the scale would flap every time a frame crossed a step.
+     */
+    const trackScale = function (state, frame, totals) {
+        const shown = shownMs(state, totals);
+        const peak = state.peakMs * PEAK_DECAY;
+        const scale = scaleFor(shown > peak ? shown : peak);
+
+        state.peakMs = shown > peak ? shown : peak;
+
+        if (scale.key === state.fullKey) { return false; }
+
+        rescale(state, scale);
+
+        // the replay ends with the frame the caller was about to draw, so it is already on
+        // screen; drawing it again would leave the sweep a column ahead of the truth
+        return true;
+    };
+
+    /**
+     * Re-pick the scale from the history on screen and redraw it. This is what a band switch
+     * needs: the columns already drawn were drawn with that band in them, so leaving them
+     * alone would make half the graph mean one thing and half another.
+     */
+    const refit = function (state) {
+        const all = S.frames();
+        const start = Math.max(0, all.length - state.graphW);
+        let peak = 0;
+        let i;
+
+        for (i = start; i < all.length; i += 1) {
+            const ms = shownMs(state, S.totals(all[i]));
+
+            if (ms > peak) { peak = ms; }
+        }
+
+        state.peakMs = peak;
+        rescale(state, scaleFor(peak));
+    };
+
+    const drawColumn = function (state, frame, totals) {
         const ctx = state.ctx;
         const x = state.sweep;
         const ahead = (x + 1) % state.graphW;
-        const totals = S.totals(frame);
         let y = state.graphH;
         let i;
 
@@ -458,7 +722,7 @@ const ACEUIProfiler = (function () {
         ctx.fillRect(x, 0, 1, state.graphH);
 
         for (i = 0; i < BANDS.length; i += 1) {
-            const height = columnHeight(state, totals[BANDS[i].key]);
+            const height = state.bands[BANDS[i].key] ? columnHeight(state, totals[BANDS[i].key]) : 0;
 
             if (height > 0) {
                 ctx.fillStyle = state.ink[BANDS[i].key];
@@ -467,8 +731,13 @@ const ACEUIProfiler = (function () {
             }
         }
 
-        ctx.fillStyle = state.ink[GUIDE_BAND];
-        ctx.fillRect(x, state.graphH - columnHeight(state, GUIDE_MS), 1, 1);
+        for (i = 0; i < GUIDES.length; i += 1) {
+            if (GUIDES[i].ms < state.fullMs) {
+                ctx.fillStyle = state.ink[GUIDES[i].band];
+                ctx.fillRect(x, state.graphH - columnHeight(state, GUIDES[i].ms), 1, 1);
+            }
+        }
+
         ctx.fillStyle = INK_GROUND;
         ctx.fillRect(ahead, 0, WIPE_W, state.graphH);
         ctx.fillStyle = state.ink[SWEEP_BAND];
@@ -521,6 +790,7 @@ const ACEUIProfiler = (function () {
 
         row.calls.textContent = entry.callsPerFrame.toFixed(1);
         row.ms.textContent = entry.msPerFrame.toFixed(DECIMALS);
+        row.self.textContent = (entry.selfPerFrame || 0).toFixed(DECIMALS);
         row.layout.textContent = (entry.layoutPerFrame || 0).toFixed(1);
 
         if (row.lastShare !== share) {
@@ -561,6 +831,7 @@ const ACEUIProfiler = (function () {
                     category: frame.category[i],
                     callsPerFrame: 1,
                     msPerFrame: frame.totalMs[i],
+                    selfPerFrame: frame.selfMs[i],
                     layoutPerFrame: frame.layout[i] || 0,
                     totalMs: frame.totalMs[i],
                     share: frame.wallMs > 0 ? frame.totalMs[i] / frame.wallMs : 0
@@ -573,6 +844,7 @@ const ACEUIProfiler = (function () {
             category: "other",
             callsPerFrame: 1,
             msPerFrame: S.otherMs(frame),
+            selfPerFrame: S.otherMs(frame),
             layoutPerFrame: 0,
             totalMs: S.otherMs(frame),
             share: frame.wallMs > 0 ? S.otherMs(frame) / frame.wallMs : 0
@@ -591,12 +863,51 @@ const ACEUIProfiler = (function () {
         return S.aggregate(windowFrames());
     };
 
+    /** Order rows by the column the header last asked for. */
+    const comparator = function (sort) {
+        const column = COLUMNS.filter(function (entry) { return entry.key === sort.key; })[0];
+
+        if (!column) {
+            return function (a, b) {
+                return sort.dir * (a.name < b.name ? -1 : (a.name > b.name ? 1 : 0));
+            };
+        }
+
+        return function (a, b) {
+            return sort.dir * ((a[column.field] || 0) - (b[column.field] || 0));
+        };
+    };
+
+    /**
+     * The tree, flattened depth-first, sorting each parent's children by the chosen column.
+     * Sorting the flat list instead would scatter children away from their parents, which
+     * is the one thing the tree view is for.
+     */
+    const flattenTree = function (roots, cmp, bands, out, depth) {
+        const list = roots.filter(function (node) { return bands[node.category] !== false; }).slice();
+
+        list.sort(cmp);
+        list.forEach(function (node) {
+            node.depth = depth;
+            out.push(node);
+            flattenTree(node.children, cmp, bands, out, depth + 1);
+        });
+
+        return out;
+    };
+
     /** The window's costs, which is the reading a 1 ms clock can honestly support. */
     const refreshTable = function (state) {
         const report = reportFor(state.mode);
+        const cmp = comparator(state.sort);
+        const shown = state.mode === MODE_TREE && report.roots
+            ? flattenTree(report.roots, cmp, state.bands, [], 0)
+            : report.rows.filter(function (row) {
+                return state.bands[row.category] !== false;
+            }).sort(cmp);
         let i;
 
-        for (i = 0; i < state.rows.length; i += 1) { fillRow(state.rows[i], report.rows[i]); }
+        for (i = 0; i < state.rows.length; i += 1) { fillRow(state.rows[i], shown[i]); }
 
         if (state.scroller) { state.scroller.sync(); }
 
@@ -648,7 +959,11 @@ const ACEUIProfiler = (function () {
 
         if (frame && frame !== state.lastDrawn) {
             state.lastDrawn = frame;
-            ACEUIModLoader.section("draw graph", function () { drawColumn(state, frame); });
+            ACEUIModLoader.section("draw graph", function () {
+                const totals = S.totals(frame);
+
+                if (!trackScale(state, frame, totals)) { drawColumn(state, frame, totals); }
+            });
 
             if (caughtSpike(state, frame)) { return; }
         }
@@ -694,8 +1009,9 @@ const ACEUIProfiler = (function () {
 
     const setMode = function (state, mode) {
         state.mode = mode;
-        setClass(state.worstButton, CLASS.on, mode === MODE_WORST);
-        setClass(state.treeButton, CLASS.on, mode === MODE_TREE);
+        state.modeButtons.forEach(function (node) {
+            setClass(node, CLASS.on, node.getAttribute(VALUE_ATTR) === mode);
+        });
 
         const report = refreshTable(state);
 
@@ -721,10 +1037,11 @@ const ACEUIProfiler = (function () {
         log("---- " + state.mode + ": " + report.frames + " frame(s), " + avgWall.toFixed(DECIMALS)
             + " ms/frame, clock " + S.CLOCK.name + " (" + S.CLOCK.resolutionMs + " ms steps)"
             + (S.widgets().length ? ", " + S.widgets().length + " stock widget methods wrapped" : ""));
-        log("     share    ms/f  calls/f  layout/f   app");
+        log("     share   total    self  calls/f  layout/f   app");
         report.rows.slice(0, LOG_ROWS).forEach(function (row) {
             log("     " + (row.share * PERCENT).toFixed(SHARE_DECIMALS) + "%   "
-                + row.msPerFrame.toFixed(DECIMALS) + "     "
+                + row.msPerFrame.toFixed(DECIMALS) + "    "
+                + (row.selfPerFrame || 0).toFixed(DECIMALS) + "     "
                 + row.callsPerFrame.toFixed(1) + "      "
                 + (row.layoutPerFrame || 0).toFixed(1) + "      ["
                 + row.category + "] " + (row.depth ? repeat(INDENT, row.depth) : "") + row.name);
@@ -760,54 +1077,149 @@ const ACEUIProfiler = (function () {
     const clearAll = function (state) {
         S.clear();
 
-        groundFill(state);
         state.sweep = 0;
         state.drawn = 0;
         state.lastDrawn = null;
         state.lastStat = "";
         state.lastFrameText = "";
-        state.mode = MODE_WINDOW;
-        setClass(state.worstButton, CLASS.on, false);
-        refreshTable(state);
+        state.peakMs = 0;
+        // an empty graph kept at the scale of a spike that is no longer in it would draw
+        // the next quiet minute along the bottom; rescale paints the ground as it goes
+        rescale(state, SCALES[SCALE_START]);
+        setMode(state, MODE_WINDOW);
     };
 
-    /** The root's font-size in rem; everything inside is em, so one value sizes it all. */
-    const setScale = function (state, scale) {
-        const value = Number(clamp(scale, SCALE_MIN, SCALE_MAX).toFixed(SCALE_DIGITS));
-
-        state.scale = value;
-        state.root.style.fontSize = value + "rem";
-
-        if (state.scroller) { state.scroller.invalidate(); }
-
-        return value;
-    };
-
+    /**
+     * Closing is switching the app off, not hiding its root: a hidden panel that is still
+     * running leaves the drawer saying the profiler is on, and the drawer is where you would
+     * go to get it back. `me.show` is the same call the drawer's own switch makes.
+     */
     const setOpen = function (state, open) {
-        setClass(state.root, CLASS.hidden, !open);
-        me.remember("open", open);
+        return me.show(open);
+    };
 
-        return open;
+    /** Show the sort that is in force and re-order the table under it. */
+    const markSort = function (state) {
+        state.headCells.forEach(function (cell) {
+            const active = cell.getAttribute(SORT_ATTR) === state.sort.key;
+
+            // a class rather than a glyph: the arrow is drawn out of borders, because the
+            // font put a typed one on its own line and knocked the column out of alignment
+            setClass(cell, CLASS.sorted, active);
+            setClass(cell, CLASS.asc, active && state.sort.dir > 0);
+        });
+        refreshTable(state);
+
+        return state.sort;
+    };
+
+    /** Sort by a column; clicking the one already sorted turns it round. */
+    const setSort = function (state, key) {
+        state.sort = {
+            key: key,
+            dir: state.sort.key === key ? -state.sort.dir : -1
+        };
+
+        return markSort(state);
+    };
+
+    /** Turn a category off, in the graph and the table at once, and remember it. */
+    const setBand = function (state, key, on) {
+        const node = state.root.querySelector("." + CLASS.key + "[" + VALUE_ATTR + "=\"" + key + "\"]");
+
+        state.bands[key] = Boolean(on);
+        setClass(node, CLASS.off, !on);
+        me.remember("bands", state.bands);
+        refreshTable(state);
+        refit(state);
+        log((on ? "showing " : "hiding ") + key + ", graph now "
+            + state.fullMs + " ms full height");
+
+        return state.bands[key];
     };
 
     const onClick = function (state, e) {
         const node = ACEUIModLoader.closestWithAttribute(e.target, ACT_ATTR, state.root);
         const act = node ? node.getAttribute(ACT_ATTR) : "";
+        const value = node ? node.getAttribute(VALUE_ATTR) : "";
 
         if (act === ACT_RECORD) { setRecording(state, !S.recording()); }
 
-        if (act === ACT_TREE) { setMode(state, state.mode === MODE_TREE ? MODE_WINDOW : MODE_TREE); }
+        if (act === ACT_MODE) { setMode(state, value); }
 
-        if (act === ACT_WORST) { setMode(state, state.mode === MODE_WORST ? MODE_WINDOW : MODE_WORST); }
+        if (act === ACT_BAND) { setBand(state, value, !state.bands[value]); }
+
+        if (act === ACT_SORT) { setSort(state, node.getAttribute(SORT_ATTR)); }
 
         if (act === ACT_LOG) { dump(state); }
 
         if (act === ACT_CLEAR) { clearAll(state); }
 
+        if (act === ACT_SMALLER) { state.scaler.nudge(-1); }
+
+        if (act === ACT_LARGER) { state.scaler.nudge(1); }
+
         if (act === ACT_CLOSE) { setOpen(state, false); }
     };
 
     // ---- lifecycle -----------------------------------------------------------------
+
+    /**
+     * The live panel, as something to hold. Every verb here is the one behind the matching
+     * button, so a snippet and a click cannot drift apart, and the getters return the state
+     * they just set: `panel().record(true)` answers with whether it is recording.
+     */
+    const handleFor = function (state) {
+        return {
+            /** Start or stop measuring; with no argument, say whether it is on. */
+            record: function (on) {
+                if (on !== undefined) { setRecording(state, Boolean(on)); }
+
+                return S.recording();
+            },
+            /** WINDOW, TREE or WORST -- see `ACEUIProfiler.MODES`. */
+            mode: function (name) {
+                if (name !== undefined) { setMode(state, name); }
+
+                return state.mode;
+            },
+            /** Show or hide one category, in the graph and the table together. */
+            band: function (key, on) {
+                if (on !== undefined) { setBand(state, key, Boolean(on)); }
+
+                return state.bands[key] !== false;
+            },
+            /** Order the table by a column; the same key again turns it round. */
+            sort: function (key) {
+                if (key !== undefined) { setSort(state, key); }
+
+                return state.sort;
+            },
+            /** Panel size, as a multiplier; the loader owns the mechanics. */
+            scale: function (value) {
+                if (value !== undefined) { state.scaler.set(value); }
+
+                return state.scale;
+            },
+            /** Show or hide the app, which is the drawer's switch under another name. */
+            open: function (on) {
+                if (on !== undefined) { setOpen(state, Boolean(on)); }
+
+                return me.shown();
+            },
+            /** The numbers behind a view, for a caller that wants to read rather than look. */
+            report: function (mode) { return reportFor(mode || state.mode); },
+            /** The slowest recorded frame, which is usually the one worth explaining. */
+            worst: function () { return worstFrame(); },
+            /** Throw away everything recorded so far. */
+            clear: function () { clearAll(state); return state; },
+            /** Print the current view to the game log. */
+            dump: function () { dump(state); return state; },
+            /** The measuring half, for anyone who wants it without the panel. */
+            sampler: S,
+            state: state
+        };
+    };
 
     const attach = function (root) {
         const state = create(root);
@@ -822,27 +1234,34 @@ const ACEUIProfiler = (function () {
             draggingClass: ACEUIModLoader.panel.DRAGGING_CLASS,
             log: log
         });
-        state.unbindToggle = keys.bind(function () { return options.toggleKey; }, function (e) {
-            setOpen(state, state.root.classList.contains(CLASS.hidden));
-            e.preventDefault();
-        });
-        state.unsubscribeSettings = ACEUIModLoader.settings.onChange(me.name, function (key, value) {
+        state.unsubscribeSettings = ACEUIModLoader.settings.onChange(me.name, function (key) {
             if (key === "window") { refreshTable(state); }
-
-            if (key === "scale" && value !== state.scale) { setScale(state, value); }
         });
-        setScale(state, options.scale);
+        // panel scale belongs to the loader now: this was the third copy of the same lines
+        state.scaler = me.scale(root, {
+            min: SCALE_MIN,
+            max: SCALE_MAX,
+            step: SCALE_STEP,
+            onScale: function (value) {
+                state.scale = value;
+
+                if (state.scroller) { state.scroller.invalidate(); }
+
+                if (state.canvas) { fitCanvas(state); }
+            }
+        });
         groundFill(state);
 
         // the stylesheet's own background did not paint in game (the scene showed through the
         // table), while the app drawer -- which sets its background inline -- is solid. Until
         // that is understood, say it both ways; the stylesheet keeps it for the preview.
         root.style.background = PANEL_BG;
-        setOpen(state, Boolean(me.recall("open", true)));
+        markSort(state);
 
         if (options.autoRecord) { setRecording(state, true); }
 
         state.ui = me.panel(root, function (now) { tick(state, now); });
+        live = handleFor(state);
         log("panel attached, clock " + S.CLOCK.name + " (" + S.CLOCK.resolutionMs + " ms steps)");
 
         return state;
@@ -882,14 +1301,16 @@ const ACEUIProfiler = (function () {
     const detach = function (state) {
         state.ui.stop();
 
-        if (state.unbindToggle) {
-            state.unbindToggle();
-            state.unbindToggle = null;
-        }
-
         if (state.unsubscribeSettings) {
             state.unsubscribeSettings();
             state.unsubscribeSettings = null;
+        }
+
+        live = null;
+
+        if (state.scaler) {
+            state.scaler.stop();
+            state.scaler = null;
         }
 
         if (state.scroller) { state.scroller.detach(); }
@@ -904,32 +1325,75 @@ const ACEUIProfiler = (function () {
     };
 
     return {
-        CLASS: CLASS,
+        /**
+         * The panel on screen, or null before the loader has mounted it.
+         *
+         *     const p = ACEUIProfiler.panel();
+         *     p.record(true);              // start measuring
+         *     p.band("other", false);      // drop the engine's slice from the graph
+         *     p.sort("self");              // heaviest on its own hands first
+         *     p.report().rows[0];          // and read the answer back
+         */
+        panel: function () { return live; },
+        /** The measuring half on its own, for a caller with no use for a panel. */
+        sampler: S,
+        /** The categories the graph stacks and the legend switches, bottom-up. */
         BANDS: BANDS,
-        GRAPH_W: GRAPH_W,
-        GRAPH_H: GRAPH_H,
-        ROWS: ROWS,
-        create: create,
-        tick: tick,
-        refreshTable: refreshTable,
-        setRecording: setRecording,
-        setMode: setMode,
-        reportFor: reportFor,
-        MODE_TREE: MODE_TREE,
-        caughtSpike: caughtSpike,
-        setScale: setScale,
-        SCALE_MIN: SCALE_MIN,
-        SCALE_MAX: SCALE_MAX,
-        worstFrame: worstFrame,
-        dump: dump,
-        MODE_WINDOW: MODE_WINDOW,
-        MODE_WORST: MODE_WORST,
-        clearAll: clearAll,
-        setOpen: setOpen,
-        drawColumn: drawColumn,
-        statText: statText,
+        /** The table's columns, in the order they are drawn; `key` is what `sort` takes. */
+        COLUMNS: COLUMNS,
+        /** The views, in the order the picker shows them; `key` is what `mode` takes. */
+        MODES: MODES,
+        VERSION: me.version,
+        /** What the loader calls. Mounting twice is the loader's business, not a caller's. */
         attach: attach,
-        detach: detach
+        detach: detach,
+        /** The key that shows and hides the app; the loader binds it. */
+        toggleKey: function () { return options.toggleKey; },
+        /**
+         * The inside, for the test harness and for a snippet that needs to reach past the
+         * surface above. Named so that nobody depends on it by accident: anything here can
+         * change without notice, and the panel handle is what is supported.
+         */
+        internals: {
+            CLASS: CLASS,
+            BANDS: BANDS,
+            COLUMNS: COLUMNS,
+            MODES: MODES,
+            GRAPH_W: GRAPH_W,
+            GRAPH_H: GRAPH_H,
+            GUIDES: GUIDES,
+            ROWS: ROWS,
+            MODE_WINDOW: MODE_WINDOW,
+            MODE_TREE: MODE_TREE,
+            MODE_WORST: MODE_WORST,
+            SCALE_MIN: SCALE_MIN,
+            SCALE_MAX: SCALE_MAX,
+            SCALES: SCALES,
+            SCALE_START: SCALE_START,
+            rescale: rescale,
+            trackScale: trackScale,
+            shownMs: shownMs,
+            refit: refit,
+            create: create,
+            tick: tick,
+            fitCanvas: fitCanvas,
+            groundFill: groundFill,
+            refreshTable: refreshTable,
+            reportFor: reportFor,
+            worstFrame: worstFrame,
+            caughtSpike: caughtSpike,
+            statText: statText,
+            drawColumn: drawColumn,
+            setRecording: setRecording,
+            setMode: setMode,
+            setBand: setBand,
+            setSort: setSort,
+            setOpen: setOpen,
+            clearAll: clearAll,
+            dump: dump,
+            attach: attach,
+            detach: detach
+        }
     };
 }());
 
@@ -942,3 +1406,9 @@ window.ACEUIProfiler = ACEUIProfiler;
 
 /* Attach to #profiler: the loader creates it in game, the preview page carries it. */
 ACEUIModLoader.mod("profiler").mount(ACEUIProfiler.attach, ACEUIProfiler.detach);
+
+/*
+ * The show/hide key. The loader holds it rather than the panel, because a panel that has been
+ * closed is not running to hold anything -- which is exactly when you want the key to work.
+ */
+ACEUIModLoader.mod("profiler").toggle(ACEUIProfiler.toggleKey);
