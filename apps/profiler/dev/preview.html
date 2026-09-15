@@ -3,7 +3,16 @@
 <head>
 <meta charset="utf-8">
 <title>ACE UI Profiler preview</title>
-<!-- The mod outside the game: the library from the sibling loader checkout, then the real files. Open directly in Edge or Chrome. -->
+<!--
+    The profiler outside the game: the library from the sibling loader checkout, then the
+    real files. Open directly in Edge or Chrome and press REC.
+
+    The page fakes what the HUD would be doing around it -- three mods with different
+    appetites, the stock bundle's per-frame model sync, a stock widget reacting to it, a
+    timer and an event -- so the panel has something real to measure. It demonstrates the
+    panel, not the engine: a browser's performance.now() advances within a frame, which the
+    game's does not, so timings here look finer than they ever will in game.
+-->
 <script src="../../ACEUIModLoader/tests/lib/lib.js"></script>
 <link rel="stylesheet" type="text/css" href="../profiler/profiler.css">
 <style>
@@ -11,11 +20,113 @@
     html, body { margin: 0; height: 100%; background: #101214; color: #ddd; font-family: var(--font-family-main); }
     .absolutecenter { position: relative; width: 1600px; height: 900px; margin: auto; overflow: hidden;
                       background: radial-gradient(ellipse at 50% 60%, #4a5560 0%, #1b1e22 70%); }
+    .note { position: absolute; right: 1rem; bottom: 1rem; width: 24rem; padding: 0.8rem 1rem;
+            background: rgba(0, 0, 0, 0.75); border-left: 3px solid #bd0000; font-size: 0.8rem; line-height: 1.45; }
+    .note b { color: #fff; }
+    .note code { color: #44ea78; }
 </style>
-<script>window.ModelCurrentCar = { has_focused_car: true, gas_percent: 0.42 };</script>
+<script>
+// ---- a stand-in game around the panel -------------------------------------------------
+
+window.ModelCurrentCar = { has_focused_car: true, gas_percent: 0.42, npos: 0 };
+
+// the stock bundle's shape: a named per-frame callback that re-resolves requestAnimationFrame
+// from the global scope every time, which is what lets the profiler intercept it
+window.ksUI = {
+    fetchAllModels: function fetchAllModels() {
+        let i;
+        let acc = 0;
+
+        for (i = 0; i < 4000; i += 1) { acc += i % 7; }
+
+        return acc;
+    },
+    perFrameAllModelUpdate: function perFrameAllModelUpdate() {
+        window.ksUI.fetchAllModels();
+
+        return window.requestAnimationFrame(window.ksUI.perFrameAllModelUpdate);
+    }
+};
+
+// a stock-shaped widget: named methods on a prototype, plus an accessor that throws if
+// anything reads it off the prototype (the real ks-* widgets do exactly this)
+(function () {
+    const Widget = function () { return undefined; };
+
+    Widget.prototype = Object.create(HTMLElement.prototype);
+    Object.defineProperty(Widget.prototype, "mode", {
+        configurable: true,
+        get: function () { return this.dataset.mode; }
+    });
+    Widget.prototype.onBindingUpdate = function onBindingUpdate() {
+        let i;
+        let acc = 0;
+
+        for (i = 0; i < 1500; i += 1) { acc += Math.sqrt(i); }
+
+        return acc;
+    };
+    window.__registry = { "ks-hudtyres": Widget };
+
+    try {
+        Object.defineProperty(window, "customElements", {
+            configurable: true,
+            value: { get: function (tag) { return window.__registry[tag]; } }
+        });
+    } catch (ignore) { /* a browser that will not have it stubbed; the rest still works */ }
+}());
+</script>
+<script src="../profiler/sampler.js"></script>
 <script src="../profiler/profiler.js"></script>
 </head>
 <body>
-<div class="absolutecenter"><div id="profiler"></div></div>
+<div class="absolutecenter">
+    <ks-hudtyres id="tyres"></ks-hudtyres>
+    <div id="profiler"></div>
+</div>
+<div class="note">
+    <b>Press REC.</b> This page fakes a HUD around the panel: three mods, the stock model
+    sync, a stock widget, a timer and a mouse handler.<br><br>
+    <b>WORST</b> shows the slowest frame &mdash; a spike is injected every few seconds.<br>
+    <b>LOG</b> prints the table to the browser console.<br>
+    Turn on <code>Profile stock widgets</code> in the mod's settings to see
+    <code>ks-hudtyres.onBindingUpdate</code> appear.
+</div>
+<script>
+(function () {
+    const tyres = document.getElementById("tyres");
+    let frames = 0;
+
+    Object.setPrototypeOf(tyres, window.__registry["ks-hudtyres"].prototype);
+
+    const spin = function (rounds) {
+        let i;
+        let acc = 0;
+
+        for (i = 0; i < rounds; i += 1) { acc += Math.sin(i) * Math.cos(i); }
+
+        return acc;
+    };
+
+    // three mods with different appetites, started through the library's own loop so they
+    // are named in the table rather than showing up as anonymous callbacks
+    ACEUIModLoader.loop.start(function () { spin(9000); }, "pedalgraph");
+    ACEUIModLoader.loop.start(function () { spin(2500); }, "telemetry");
+    ACEUIModLoader.loop.start(function () {
+        frames += 1;
+        spin(500);
+        tyres.onBindingUpdate();
+
+        // a spike every few seconds, for the WORST view to find
+        if (frames % 240 === 0) { spin(900000); }
+    }, "devconsole");
+
+    // the stock per-frame chain, started before anything is instrumented, as in game
+    window.requestAnimationFrame(window.ksUI.perFrameAllModelUpdate);
+
+    window.setInterval(function houseKeeping() { spin(4000); }, 500);
+    window.addEventListener("mousemove", function onMouseMove() { spin(300); });
+}());
+</script>
 </body>
 </html>

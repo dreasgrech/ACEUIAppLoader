@@ -1,19 +1,25 @@
 /*
  * ACE UI Profiler -- stylesheet. Linked by the ACEUIModLoader after the stock CSS, so
- * --font-family-main is the game's. Stock HUD widget look: black 75 % panel,
- * solid #1c1e1f header, #bd0000 accents. No var() fallbacks (Cohtml).
+ * --font-family-main is the game's. Stock HUD widget look: black panel, solid #1c1e1f
+ * header, #bd0000 accents. No var() fallbacks (Cohtml drops the whole declaration).
+ *
+ * The panel is sized in em off the root's font-size, so one value scales all of it, and
+ * the graph is a fixed-size canvas because the script addresses its pixels directly.
  */
 
 .ace-profiler {
     position: absolute;
     left: 2rem;
     top: 5rem;
-    width: 12em;
+    width: 30em;
     display: flex;
     flex-direction: column;
-    background: rgba(0, 0, 0, 0.75);
+    background: rgba(0, 0, 0, 0.88);
+    /* the longhand as well: if the shorthand is ever dropped, the panel is still readable */
+    background-color: rgba(0, 0, 0, 0.88);
     border: 2px solid transparent;
-    color: rgba(255, 255, 255, 0.8);
+    border-radius: 0.2em;
+    color: rgba(255, 255, 255, 0.85);
     font-family: var(--font-family-main);
     font-size: 1rem;
     cursor: pointer;
@@ -23,29 +29,274 @@
     border-color: #fff;
 }
 
+.ace-profiler.pr-hidden {
+    display: none;
+}
+
 body.hide-hud .ace-profiler {
     visibility: hidden;
 }
 
+/* ---- header ------------------------------------------------------------------- */
+
 .ace-profiler .pr-header {
-    height: 2.2em;
-    padding: 0 1em;
+    height: 2em;
+    padding: 0 0.6em;
     display: flex;
+    flex-direction: row;
     align-items: center;
     background: #1c1e1f;
     color: #fff;
-    font-size: 0.75em;
-    font-weight: 600;
-    letter-spacing: 0.05em;
+    font-size: 0.8em;
+    font-weight: 700;
+    letter-spacing: 0.06em;
 }
 
-.ace-profiler .pr-body {
-    padding: 0.5em 1em;
-    font-size: 1.4em;
-    font-weight: 600;
-    text-align: center;
+.ace-profiler .pr-title {
+    flex: 0 0 auto;
 }
 
-.ace-profiler .pr-value {
+.ace-profiler .pr-stat {
+    flex: 1 1 auto;
+    padding-left: 0.8em;
+    color: rgba(255, 255, 255, 0.55);
+    font-weight: 400;
+    font-size: 0.85em;
+    letter-spacing: 0;
+    white-space: nowrap;
+    overflow: hidden;
+}
+
+.ace-profiler .pr-tools {
+    flex: 0 0 auto;
+    display: flex;
+    flex-direction: row;
+}
+
+.ace-profiler .pr-btn {
+    margin-left: 0.3em;
+    padding: 0.1em 0.45em;
+    border: 1px solid rgba(255, 255, 255, 0.2);
+    border-radius: 0.2em;
+    color: rgba(255, 255, 255, 0.75);
+    font-size: 0.8em;
+    font-weight: 600;
+}
+
+.ace-profiler .pr-btn.on {
+    background: #bd0000;
+    border-color: #bd0000;
     color: #fff;
 }
+
+/* ---- graph -------------------------------------------------------------------- */
+
+.ace-profiler .pr-graph {
+    position: relative;
+    padding: 0.3em 0.3em 0 0.3em;
+}
+
+/* what the columns mean: full height is one 30 fps frame, the line is one at 60 */
+.ace-profiler .pr-scale-top,
+.ace-profiler .pr-scale-mid {
+    position: absolute;
+    right: 0.5em;
+    color: rgba(255, 255, 255, 0.35);
+    font-size: 0.6em;
+    pointer-events: none;
+}
+
+.ace-profiler .pr-scale-top {
+    top: 0.4em;
+}
+
+.ace-profiler .pr-scale-mid {
+    top: 3.2em;
+}
+
+.ace-profiler .pr-canvas {
+    width: 100%;
+    height: 5em;
+    display: block;
+    /* opaque, so the graph reads over a bright scene and an empty one is obviously empty */
+    background-color: #0c0e10;
+    border-radius: 0.15em;
+    /* the canvas is 300 logical columns stretched to the panel's width: keep them crisp */
+    image-rendering: pixelated;
+}
+
+.ace-profiler .pr-legend {
+    display: flex;
+    flex-direction: row;
+    flex-wrap: wrap;
+    padding: 0.3em 0.5em 0 0.5em;
+    color: rgba(255, 255, 255, 0.5);
+    font-size: 0.62em;
+    white-space: nowrap;
+    overflow: hidden;
+}
+
+.ace-profiler .pr-key {
+    display: flex;
+    flex-direction: row;
+    align-items: center;
+    margin-right: 0.7em;
+}
+
+.ace-profiler .pr-swatch {
+    width: 0.55em;
+    height: 0.55em;
+    margin-right: 0.3em;
+    border-radius: 0.1em;
+}
+
+.ace-profiler .pr-frame {
+    padding: 0.25em 0.6em 0.4em 0.6em;
+    color: rgba(255, 255, 255, 0.5);
+    font-size: 0.68em;
+    white-space: nowrap;
+    overflow: hidden;
+}
+
+/* ---- table -------------------------------------------------------------------- */
+
+.ace-profiler .pr-head,
+.ace-profiler .pr-row {
+    display: flex;
+    flex-direction: row;
+    align-items: center;
+    position: relative;
+    padding: 0.12em 0.6em;
+    font-size: 0.72em;
+    white-space: nowrap;
+}
+
+.ace-profiler .pr-head {
+    color: rgba(255, 255, 255, 0.4);
+    border-bottom: 1px solid rgba(255, 255, 255, 0.12);
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+}
+
+.ace-profiler .pr-row.pr-hidden {
+    display: none;
+}
+
+/*
+ * The share bar sits *behind* its row and is scaled by transform only, never by width:
+ * a chip a third of an em wide could not be compared at a glance, and a bar that spans the
+ * row can. The header's spacer keeps its columns lined up with the rows'.
+ */
+.ace-profiler .pr-bar {
+    position: absolute;
+    left: 0;
+    top: 0;
+    bottom: 0;
+    width: 100%;
+    opacity: 0.22;
+    background: rgba(255, 255, 255, 0.2);
+    transform-origin: left center;
+}
+
+.ace-profiler .pr-head .pr-bar {
+    display: none;
+}
+
+.ace-profiler .pr-name {
+    position: relative;
+    flex: 1 1 auto;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.ace-profiler .pr-calls,
+.ace-profiler .pr-ms,
+.ace-profiler .pr-layout,
+.ace-profiler .pr-share {
+    position: relative;
+    flex: 0 0 auto;
+    width: 3.6em;
+    padding-left: 0.7em;
+    text-align: right;
+    color: rgba(255, 255, 255, 0.72);
+}
+
+/* forced layout reads: what this renderer charges for, where Unity would show GC Alloc */
+.ace-profiler .pr-layout {
+    color: rgba(255, 210, 58, 0.85);
+}
+
+.ace-profiler .pr-share {
+    width: 3.4em;
+    color: #fff;
+    font-weight: 600;
+}
+
+/* ---- the list, scrolled by hand (Cohtml ignores overflow: auto) ---------------- */
+
+.ace-profiler .pr-scroll {
+    position: relative;
+    display: flex;
+    flex-direction: row;
+    height: 11.5em;
+    padding-bottom: 0.3em;
+}
+
+.ace-profiler .pr-rows {
+    flex: 1 1 auto;
+    height: 100%;
+    overflow: hidden;
+}
+
+.ace-profiler .pr-scrollbar {
+    flex: 0 0 auto;
+    width: 0.4em;
+    margin: 0 0.25em;
+    background: rgba(255, 255, 255, 0.08);
+    border-radius: 0.2em;
+}
+
+.ace-profiler .pr-scrollbar.pr-nofit {
+    background: transparent;
+}
+
+.ace-profiler .pr-scrollbar.pr-nofit .pr-thumb {
+    display: none;
+}
+
+.ace-profiler .pr-thumb {
+    width: 100%;
+    background: rgba(255, 255, 255, 0.35);
+    border-radius: 0.2em;
+}
+
+.ace-profiler .pr-scrollbar.dragging .pr-thumb {
+    background: #bd0000;
+}
+
+/* ---- the palette, which the canvas reads back through getComputedStyle ---------- */
+
+.ace-profiler .pr-swatch[data-band="mod"],
+.ace-profiler .pr-bar[data-band="mod"] { background: #44ea78; }
+
+.ace-profiler .pr-swatch[data-band="stock"],
+.ace-profiler .pr-bar[data-band="stock"] { background: #3aa6ff; }
+
+.ace-profiler .pr-swatch[data-band="event"],
+.ace-profiler .pr-bar[data-band="event"] { background: #ffd23a; }
+
+.ace-profiler .pr-swatch[data-band="timer"],
+.ace-profiler .pr-bar[data-band="timer"] { background: #c07cff; }
+
+.ace-profiler .pr-swatch[data-band="profiler"],
+.ace-profiler .pr-bar[data-band="profiler"] { background: #ff8a3a; }
+
+.ace-profiler .pr-swatch[data-band="other"],
+.ace-profiler .pr-bar[data-band="other"] { background: rgba(255, 255, 255, 0.22); }
+
+.ace-profiler .pr-palette { display: none; }
+
+/* not bands, but the graph paints with them too: the 60 fps guide and the sweep head */
+.ace-profiler .pr-swatch[data-band="guide"] { background: rgba(255, 255, 255, 0.38); }
+
+.ace-profiler .pr-swatch[data-band="sweep"] { background: rgba(255, 255, 255, 0.5); }

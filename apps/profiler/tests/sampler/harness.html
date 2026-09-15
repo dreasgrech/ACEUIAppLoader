@@ -24,6 +24,29 @@ window.ksUI = {
     }
 };
 </script>
+<script>
+(function () {
+    var made = [];
+    var Widget = function () { return undefined; };
+
+    Widget.prototype = Object.create(HTMLElement.prototype);
+    Object.defineProperty(Widget.prototype, "mode", {
+        configurable: true,
+        get: function () { return this.dataset.mode; }
+    });
+    Widget.prototype.onBindingUpdate = function onBindingUpdate(v) { made.push(v); return v; };
+    Widget.prototype.process = function process() { return made.length; };
+
+    window.__Widget = Widget;
+    window.__registry = { "ks-huddamage": Widget };
+    try {
+        Object.defineProperty(window, "customElements", {
+            configurable: true,
+            value: { get: function (tag) { return window.__registry[tag]; } }
+        });
+    } catch (e) { window.__registryFailed = e.message; }
+}());
+</script>
 <script src="../../profiler/sampler.js"></script>
 </head>
 <body>
@@ -38,10 +61,10 @@ window.ksUI = {
     /* The doubles' frame clock drives requestAnimationFrame; performance.now is real, so
        "work" is a busy wait of a known length rather than a mocked clock. */
     const burn = function (ms) {
-        const until = performance.now() + ms;
+        const until = Date.now() + ms;
         let spins = 0;
 
-        while (performance.now() < until) { spins += 1; }
+        while (Date.now() < until) { spins += 1; }
 
         return spins;
     };
@@ -101,7 +124,7 @@ window.ksUI = {
 
         ok(frame, "a frame was recorded");
         near(frame.wallMs, 16, 0.001, "wall time is the timestamp gap, not a guess");
-        ok(frame.scriptMs >= 3, "script time is what the callbacks actually took: " + frame.scriptMs.toFixed(2));
+        ok(frame.scriptMs >= 2, "script time is what the callbacks actually took (1 ms clock): " + frame.scriptMs.toFixed(2));
         ok(frame.scriptMs < 16, "and less than the whole frame");
         near(S.otherMs(frame), frame.wallMs - frame.scriptMs, 0.0001, "the rest is the engine's: style, layout, paint");
         stopAll();
@@ -148,8 +171,8 @@ window.ksUI = {
         ok(parent, "the parent is there");
         eq(parent.children.length, 1, "with its child");
         eq(parent.children[0].name, "inner work", "named");
-        ok(parent.totalMs >= 6, "total covers both: " + parent.totalMs.toFixed(2));
-        ok(parent.selfMs >= 1.5 && parent.selfMs < parent.totalMs - 3,
+        ok(parent.totalMs >= 5, "total covers both: " + parent.totalMs.toFixed(2));
+        ok(parent.selfMs >= 1 && parent.selfMs < parent.totalMs - 2,
             "self excludes the child: self " + parent.selfMs.toFixed(2) + " of " + parent.totalMs.toFixed(2));
         stopAll();
         S.stop();
@@ -171,7 +194,7 @@ window.ksUI = {
 
         eq(parent.children.length, 1, "ten calls are one row");
         eq(parent.children[0].calls, 10, "with the count on it");
-        ok(parent.children[0].totalMs >= 1.5, "and their time added up: " + parent.children[0].totalMs.toFixed(2));
+        ok(parent.children[0].totalMs >= 1, "and their time added up: " + parent.children[0].totalMs.toFixed(2));
         stopAll();
         S.stop();
     });
@@ -220,6 +243,44 @@ window.ksUI = {
         S.stop();
     });
 
+    /*
+     * This engine charges for forced layout, not for allocation, so "who reads layout" is
+     * the local equivalent of Unity's GC Alloc column -- and a count per frame only says
+     * that someone did. It is kept against the sample that caused it, children included.
+     */
+    t("layout reads are charged to the app that caused them, children included", function () {
+        const node = document.createElement("div");
+
+        document.getElementById("center").appendChild(node);
+        S.start();
+        S.clear();
+
+        handles.push(ACEUIModLoader.loop.start(function () {
+            node.getBoundingClientRect();
+            ACEProfilerSampler.measure("inner", function () {
+                node.getBoundingClientRect();
+                node.getBoundingClientRect();
+            });
+        }, "reader"));
+        handles.push(ACEUIModLoader.loop.start(function () { return 0; }, "innocent"));
+        clock.step(40000);
+        clock.step(40016);
+
+        const report = S.aggregate();
+        const reader = report.rows.filter(function (r) { return r.name === "reader"; })[0];
+        const inner = report.rows.filter(function (r) { return r.name === "inner"; })[0];
+        const innocent = report.rows.filter(function (r) { return r.name === "innocent"; })[0];
+
+        ok(reader.layoutPerFrame >= 3, "the reader is charged for all three: " + reader.layoutPerFrame);
+        ok(inner.layoutPerFrame >= 2, "including the two its callee made: " + inner.layoutPerFrame);
+        eq(innocent.layoutPerFrame, 0, "and the mod that read none is charged none");
+        eq(lastFrame().layoutReads >= 3, true, "the per-frame total is still kept too");
+
+        stopAll();
+        S.stop();
+        node.parentNode.removeChild(node);
+    });
+
     t("the ring buffer keeps the last frames, oldest first, and a flood is truncated not grown", function () {
         let i;
 
@@ -261,6 +322,158 @@ window.ksUI = {
             frame.wallMs, 0.5, "the slices add up to the frame");
         stopAll();
         S.stop();
+    });
+
+    /*
+     * The clock this engine gives a page is the reason the headline numbers are averages.
+     * performance.now() is frozen for the duration of a frame here (measured in game:
+     * 200,000 reads over 29 ms of real time, one value), so the sampler times with
+     * Date.now and its 1 ms steps. One frame's reading of a sub-millisecond callback is
+     * therefore 0 or 1; a few hundred frames of it is the truth.
+     */
+    t("the clock is Date.now, because the other one does not move inside a frame here", function () {
+        eq(S.CLOCK.name, "Date.now", "the clock the sampler times with");
+        eq(S.CLOCK.resolutionMs, 1, "and what it can resolve");
+        ok(S.CLOCK.framePrecise, "frame wall time still comes from the animation-frame timestamp, which is precise");
+    });
+
+    t("aggregate: cost across the window, which is what a 1 ms clock can honestly report", function () {
+        const FRAMES = 40;
+        let i;
+
+        S.start();
+        S.clear();
+        handles.push(ACEUIModLoader.loop.start(function () { burn(1); }, "steady"));
+        handles.push(ACEUIModLoader.loop.start(function () { return 0; }, "idle"));
+
+        for (i = 0; i < FRAMES; i += 1) { clock.step(20000 + i * 16); }
+
+        const report = S.aggregate();
+        const steady = report.rows.filter(function (r) { return r.name === "steady"; })[0];
+        const idle = report.rows.filter(function (r) { return r.name === "idle"; })[0];
+
+        ok(report.frames >= FRAMES - 2, "the window covers the frames recorded: " + report.frames);
+        ok(report.wallMs > 0, "and their wall time");
+        ok(steady, "the busy mod is in the report");
+        ok(idle, "so is the quiet one");
+        eq(steady.calls, report.frames, "one call per frame, counted exactly");
+        ok(steady.msPerCall >= 0.5, "its cost per call survives the quantisation: " + steady.msPerCall.toFixed(3) + " ms");
+        ok(steady.totalMs > idle.totalMs, "and it costs more than the one doing nothing");
+        ok(steady.share > idle.share, "which is what the share column says");
+        ok(steady.share <= 1, "a share is a fraction of the frame: " + steady.share.toFixed(3));
+        eq(report.rows[0].name, "steady", "rows come back sorted by cost");
+        ok(idle.msPerCall < 1, "a mod doing nothing costs under a tick: " + idle.msPerCall.toFixed(3) + " ms");
+        stopAll();
+        S.stop();
+    });
+
+    /*
+     * "Not only our mods but the stock HUD apps too" is the whole point, and this is the
+     * shape the real ones have: a registered custom element whose prototype carries named
+     * methods -- and an accessor that throws "Illegal invocation" if anything reads it off
+     * the prototype, which is how the first probe took itself down.
+     */
+    t("stock widgets: their methods are profiled by name, without touching their accessors", function () {
+        const node = document.createElement("ks-huddamage");
+        const originalProcess = window.__Widget.prototype.process;
+        let threw = "";
+
+        document.getElementById("center").appendChild(node);
+        Object.setPrototypeOf(node, window.__Widget.prototype);
+
+        S.start({ widgets: true });
+        S.clear();
+
+        ok(S.widgets().length >= 2, "methods wrapped: " + S.widgets().join(", "));
+        ok(S.widgets().indexOf("ks-huddamage.process") >= 0, "by tag and method name");
+
+        handles.push(ACEUIModLoader.loop.start(function () {
+            try {
+                node.onBindingUpdate(1);
+                node.process();
+            } catch (e) {
+                threw = e.message;
+            }
+        }, "driver"));
+        clock.step(30000);
+        clock.step(30016);
+
+        const names = namesIn(lastFrame());
+        const tree = S.tree(lastFrame());
+        const driver = tree.filter(function (n) { return n.name === "driver"; })[0];
+        const called = driver ? driver.children.map(function (n) { return n.name; }) : [];
+
+        eq(threw, "", "the widget still works while wrapped");
+        ok(called.indexOf("ks-huddamage.onBindingUpdate") >= 0, "the widget's work is attributed: " + called.join(", "));
+        ok(called.indexOf("ks-huddamage.process") >= 0, "both methods");
+        eq(driver.children.filter(function (n) { return n.name.indexOf("ks-") === 0; })[0].category, "stock",
+            "and filed as stock, not as ours");
+        ok(names.length > 0, "the frame has samples");
+
+        stopAll();
+        S.stop();
+        eq(window.__Widget.prototype.process, originalProcess, "unwrapped, the prototype carries the original method again");
+        ok(node.process() >= 1, "which still works: " + node.process());
+        eq(S.widgets().length, 0, "and the sampler knows it holds none");
+        node.parentNode.removeChild(node);
+    });
+
+    t("stock widgets are opt-in: recording without asking leaves them alone", function () {
+        S.start();
+        eq(S.widgets().length, 0, "no widget was wrapped");
+        S.stop();
+    });
+
+    /*
+     * Wrapping can only see as deep as the frame callback: what a mod does inside its own
+     * IIFE is closures, invisible from outside. `ACEUIModLoader.section` is how a mod names
+     * those parts itself, and this is the tree they produce -- the answer to "what inside
+     * this mod is taking the time", which is the whole reason for the hook.
+     */
+    t("a mod's own named sections nest under it, and merge into a tree across frames", function () {
+        let i;
+
+        S.start();
+        S.clear();
+
+        handles.push(ACEUIModLoader.loop.start(function () {
+            ACEUIModLoader.section("sample", function () { burn(1); });
+            ACEUIModLoader.section("render", function () {
+                burn(1);
+                ACEUIModLoader.section("write rows", function () { return 0; });
+            });
+        }, "widget"));
+
+        for (i = 0; i < 12; i += 1) { clock.step(50000 + i * 17); }
+
+        const tree = S.aggregateTree();
+        const at = function (name) {
+            return tree.rows.filter(function (r) { return r.name === name; })[0];
+        };
+
+        ok(at("widget"), "the mod is a root: " + tree.rows.map(function (r) { return r.name; }).join(", "));
+        eq(at("widget").depth, 0, "at the top");
+        eq(at("sample").depth, 1, "its sections are one level in");
+        eq(at("render").depth, 1, "both of them");
+        eq(at("write rows").depth, 2, "and a section inside a section is two levels in");
+        ok(at("widget").totalMs >= at("render").totalMs, "the parent covers its children");
+        ok(at("render").calls >= 10, "merged across frames rather than one row per frame: "
+            + at("render").calls + " calls");
+        eq(at("render").callsPerFrame.toFixed(0), "1", "which is one call per frame");
+        ok(tree.rows.indexOf(at("widget")) < tree.rows.indexOf(at("render")),
+            "rows come back depth-first, so a parent is always above its children");
+
+        stopAll();
+        S.stop();
+    });
+
+    t("with nothing recording, a named section is a call through and nothing else", function () {
+        let ran = 0;
+
+        eq(S.recording(), false, "not recording");
+        eq(ACEUIModLoader.profiler, null, "and the loader's slot is empty");
+        eq(ACEUIModLoader.section("free", function () { ran += 1; return 7; }), 7, "the value comes back");
+        eq(ran, 1, "the work still happened");
     });
 
     t("pause keeps what was recorded and stops adding to it; clear empties it", function () {

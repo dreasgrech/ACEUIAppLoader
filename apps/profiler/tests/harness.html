@@ -2,17 +2,35 @@
 <html>
 <head>
 <meta charset="utf-8">
-<title>ACE UI Profiler tests</title>
+<title>ACE UI Profiler -- panel tests</title>
 <style>
   body { margin: 0; background: #222; color: #ddd; font: 12px monospace; }
   .absolutecenter { position: relative; width: 1600px; height: 900px; overflow: hidden; }
   #results { white-space: pre; }
 </style>
-<!-- shared test doubles (fake frame clock, in-memory localStorage, console capture) and the library, from the loader repo -->
 <script src="../../ACEUIModLoader/tests/lib/doubles.js"></script>
 <script src="../../ACEUIModLoader/tests/lib/lib.js"></script>
 <link rel="stylesheet" type="text/css" href="../profiler/profiler.css">
-<script>window.ModelCurrentCar = { has_focused_car: true, gas_percent: 0.5 };</script>
+<script>
+(function () {
+    var Widget = function () { return undefined; };
+
+    Widget.prototype = Object.create(HTMLElement.prototype);
+    Object.defineProperty(Widget.prototype, "mode", {
+        configurable: true,
+        get: function () { return this.dataset.mode; }
+    });
+    Widget.prototype.onBindingUpdate = function onBindingUpdate() { return 1; };
+    window.__registry = { "ks-hudtyres": Widget };
+    try {
+        Object.defineProperty(window, "customElements", {
+            configurable: true,
+            value: { get: function (tag) { return window.__registry[tag]; } }
+        });
+    } catch (e) { window.__registryFailed = e.message; }
+}());
+</script>
+<script src="../profiler/sampler.js"></script>
 <script src="../profiler/profiler.js"></script>
 </head>
 <body>
@@ -21,32 +39,246 @@
 (function () {
     const H = window.__harness;
     const t = H.t, eq = H.eq, ok = H.ok;
+    const P = ACEUIProfiler;
+    const S = ACEProfilerSampler;
+    const clock = window.__clock;
     let frame = 1000;
-    const nextFrame = function () { frame += 16; window.__clock.step(frame); };
+    const nextFrame = function () { frame += 16; clock.step(frame); };
+    const burn = function (ms) {
+        const until = Date.now() + ms;
+
+        while (Date.now() < until) { void 0; }
+    };
+    const rowTexts = function () {
+        return Array.prototype.slice.call(root.querySelectorAll(".pr-row")).filter(function (r) {
+            return !r.classList.contains("pr-hidden");
+        }).map(function (r) { return r.querySelector(".pr-name").textContent; });
+    };
+
+    const widget = document.createElement("ks-hudtyres");
+
+    document.getElementById("center").appendChild(widget);
 
     const root = document.createElement("div");
     root.id = "profiler";
     document.getElementById("center").appendChild(root);
-    const state = ACEUIProfiler.attach(root);
+    const state = P.attach(root);
 
-    t("attach builds the markup once, hidden until placed, and logs with the mod's prefix", function () {
-        ok(root.classList.contains("ace-profiler"), "root class");
-        ok(root.querySelector(".pr-header"), "header"); eq(root.querySelector(".pr-header").textContent, "profiler", "title falls back to the name outside the game");
-        eq(root.style.visibility, "hidden", "hidden until positioned"); ok(state.loop.running, "loop running");
-        ok(window.__log.some(function (l) { return l.indexOf("[profiler] attached") === 0; }), "prefixed log");
+    t("attach builds the panel once: graph, legend, table and controls", function () {
+        eq(root.classList.contains("pr-hidden"), false, "open by default");
+        ok(root.querySelector(".pr-canvas"), "a canvas for the graph");
+        eq(root.querySelectorAll(".pr-row").length, P.ROWS, "a fixed pool of rows");
+        eq(root.querySelectorAll(".pr-key").length, P.BANDS.length, "one legend key per category");
+        ok(root.querySelector('[data-act="record"]'), "a record button");
+        ok(state.ui && state.ui.loop.running, "the panel's own frame loop is running");
+        ok(window.__log.some(function (l) { return l.indexOf("[profiler] panel attached") === 0; }), "logged");
     });
 
-    t("a frame draws the value once and skips unchanged frames", function () {
-        nextFrame(); eq(root.querySelector(".pr-value").textContent, "50%");
-        root.querySelector(".pr-value").textContent = "sentinel"; nextFrame();
-        eq(root.querySelector(".pr-value").textContent, "sentinel", "unchanged value not rewritten");
-        window.ModelCurrentCar.gas_percent = 0.75; nextFrame(); eq(root.querySelector(".pr-value").textContent, "75%");
+    /* A profiler that instruments the page the moment the HUD loads would be measuring
+       every session whether asked or not, so recording is a deliberate act. */
+    t("it does not instrument the page until asked", function () {
+        eq(S.recording(), false, "not recording on attach");
+        eq(S.wrapped(), false, "and the page is untouched");
     });
 
-    t("detach stops the loop and releases the panel", function () {
-        const cancelled = window.__clock.cancelled;
-        ACEUIProfiler.detach(state);
-        eq(window.__clock.cancelled, cancelled + 1); eq(state.loop.running, false);
+    t("record instruments the page, and the table names the apps it finds", function () {
+        const button = root.querySelector('[data-act="record"]');
+        let i;
+
+        button.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+        ok(S.recording(), "recording");
+        ok(button.classList.contains("on"), "the button says so");
+
+        const busy = ACEUIModLoader.loop.start(function () { burn(2); }, "busymod");
+        const quiet = ACEUIModLoader.loop.start(function () { return 0; }, "quietmod");
+
+        for (i = 0; i < 30; i += 1) { nextFrame(); }
+
+        P.refreshTable(state);
+
+        const names = rowTexts();
+
+        ok(names.indexOf("busymod") >= 0, "the busy mod is listed: " + names.join(", "));
+        ok(names.indexOf("quietmod") >= 0, "so is the quiet one");
+        ok(names.indexOf("busymod") < names.indexOf("quietmod"), "costliest first");
+        ok(names.indexOf("profiler") >= 0, "and the profiler itself, which is only fair");
+        ACEUIModLoader.loop.stop(busy);
+        ACEUIModLoader.loop.stop(quiet);
+    });
+
+    t("the table reports cost per frame and a share of the frame, not one frame's reading", function () {
+        const row = Array.prototype.slice.call(root.querySelectorAll(".pr-row")).filter(function (r) {
+            return r.querySelector(".pr-name").textContent === "busymod";
+        })[0];
+
+        ok(row, "the busy mod has a row");
+        eq(row.querySelector(".pr-calls").textContent, "1.0", "one call per frame");
+        ok(parseFloat(row.querySelector(".pr-ms").textContent) >= 1, "and its ms per frame: "
+            + row.querySelector(".pr-ms").textContent);
+        ok(row.querySelector(".pr-share").textContent.indexOf("%") > 0, "share is a percentage");
+        ok(row.querySelector(".pr-bar").style.transform.indexOf("scaleX(") === 0, "the bar is scaled, not resized");
+    });
+
+    t("the graph writes one column per frame and sweeps round rather than redrawing", function () {
+        const before = state.sweep;
+
+        nextFrame();
+        nextFrame();
+        ok(state.sweep !== before, "the sweep moved");
+        ok(state.drawn >= 2, "columns drawn: " + state.drawn);
+        ok(state.sweep < P.GRAPH_W, "and it stays inside the canvas");
+    });
+
+    t("clear empties the recording and the graph", function () {
+        root.querySelector('[data-act="clear"]').dispatchEvent(new MouseEvent("click", { bubbles: true }));
+        eq(S.frames().length, 0, "frames cleared");
+        eq(state.sweep, 0, "sweep back to the start");
+        eq(rowTexts().length, 0, "and no rows");
+    });
+
+    t("pausing stops recording; the close button hides the panel and remembers it", function () {
+        root.querySelector('[data-act="record"]').dispatchEvent(new MouseEvent("click", { bubbles: true }));
+        eq(S.recording(), false, "paused");
+        root.querySelector('[data-act="close"]').dispatchEvent(new MouseEvent("click", { bubbles: true }));
+        ok(root.classList.contains("pr-hidden"), "hidden");
+        eq(ACEUIModLoader.mod("profiler").recall("open", true), false, "and remembered");
+    });
+
+    /*
+     * Unity lets you step frame by frame because its clock resolves microseconds. Here a
+     * single ordinary frame reads 0 or 1 ms for anything small, so stepping would mostly
+     * show zeroes. What this clock *can* see is a spike: 40 ms of work in a frame is 40 ms
+     * however coarsely you measure it. Hence a worst-frame view rather than a scrubber.
+     */
+    t("WORST shows what was in the slowest frame, which is what a 1 ms clock can support", function () {
+        const button = root.querySelector('[data-act="worst"]');
+        let i = 0;
+
+        root.querySelector('[data-act="record"]').dispatchEvent(new MouseEvent("click", { bubbles: true }));
+
+        const spiky = ACEUIModLoader.loop.start(function () {
+            i += 1;
+
+            if (i === 5) { burn(20); }
+        }, "spikymod");
+
+        for (i = 0; i < 20; i += 1) { nextFrame(); }
+
+        button.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+
+        const worst = P.worstFrame();
+        const names = rowTexts();
+
+        ok(button.classList.contains("on"), "the button shows the mode");
+        ok(worst && worst.wallMs > 0, "a worst frame was found");
+        ok(root.querySelector(".pr-stat").textContent.indexOf("worst frame") === 0,
+            "the header says so: " + root.querySelector(".pr-stat").textContent);
+        ok(names.indexOf("spikymod") >= 0, "the spike's owner is in the list: " + names.join(", "));
+        ok(names.some(function (n) { return n.indexOf("engine") === 0; }),
+            "and so is the engine's share of that frame");
+
+        button.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+        ok(!button.classList.contains("on"), "clicking again goes back to the window view");
+        ACEUIModLoader.loop.stop(spiky);
+    });
+
+    t("LOG puts the table in the game log, where this project does its debugging", function () {
+        const before = window.__log.length;
+
+        root.querySelector('[data-act="log"]').dispatchEvent(new MouseEvent("click", { bubbles: true }));
+
+        const added = window.__log.slice(before);
+
+        ok(added.length >= 3, "it logged something: " + added.length + " lines");
+        ok(added[0].indexOf("[profiler] ---- window") === 0, "a header naming the view: " + added[0]);
+        ok(added[added.length - 1].indexOf("[profiler] ---- end") === 0, "and an end marker");
+        ok(added.some(function (l) { return l.indexOf("calls/f") > 0; }), "with the columns on each row");
+    });
+
+    t("stock widgets are wrapped only when the setting asks for it", function () {
+        root.querySelector('[data-act="record"]').dispatchEvent(new MouseEvent("click", { bubbles: true }));
+        eq(S.recording(), false, "stopped recording first");
+
+        ACEUIModLoader.settings.set("profiler", "widgets", true);
+        root.querySelector('[data-act="record"]').dispatchEvent(new MouseEvent("click", { bubbles: true }));
+        ok(S.widgets().length >= 1, "the stock widget's methods were wrapped: " + S.widgets().join(", "));
+        ok(S.widgets()[0].indexOf("ks-hudtyres.") === 0, "by tag and method");
+
+        root.querySelector('[data-act="record"]').dispatchEvent(new MouseEvent("click", { bubbles: true }));
+        ACEUIModLoader.settings.set("profiler", "widgets", false);
+    });
+
+    /* A frame's wall time is the gap between animation-frame timestamps, so a spike is a
+       large gap -- not a busy loop, which the harness's fixed clock would not notice. */
+    t("a frame over the threshold stops the recording and shows that frame", function () {
+        let i;
+
+        ACEUIModLoader.settings.set("profiler", "spikeMs", 30);
+        root.querySelector('[data-act="record"]').dispatchEvent(new MouseEvent("click", { bubbles: true }));
+        ok(S.recording(), "recording");
+
+        const spiky = ACEUIModLoader.loop.start(function () { return 0; }, "spiker");
+
+        for (i = 0; i < 4; i += 1) { nextFrame(); }
+
+        frame += 50;                       // one frame that took 50 ms
+        clock.step(frame);
+        nextFrame();
+        nextFrame();
+
+        eq(S.recording(), false, "the spike stopped the recording");
+        eq(state.mode, P.MODE_WORST, "and switched to the frame it happened in");
+        ok(window.__log.some(function (l) { return l.indexOf("[profiler] frame of") === 0; }), "and said so");
+        ok(rowTexts().length > 0, "with that frame's rows on show");
+
+        ACEUIModLoader.loop.stop(spiky);
+        ACEUIModLoader.settings.set("profiler", "spikeMs", 0);
+        P.setMode(state, P.MODE_WINDOW);
+    });
+
+    t("the table has a layout column, which is this engine's GC Alloc", function () {
+        const head = root.querySelector(".pr-head");
+
+        ok(head.textContent.indexOf("layout") >= 0, "the column is labelled: " + head.textContent);
+        ok(root.querySelector(".pr-row .pr-layout"), "and every row has the cell");
+    });
+
+    t("TREE shows each app with what it called inside it, indented", function () {
+        let i;
+
+        root.querySelector('[data-act="record"]').dispatchEvent(new MouseEvent("click", { bubbles: true }));
+
+        const deep = ACEUIModLoader.loop.start(function () {
+            ACEUIModLoader.section("inner work", function () { burn(1); });
+        }, "deepmod");
+
+        for (i = 0; i < 12; i += 1) { nextFrame(); }
+
+        root.querySelector('[data-act="tree"]').dispatchEvent(new MouseEvent("click", { bubbles: true }));
+
+        const names = rowTexts();
+        const parent = names.filter(function (n) { return n === "deepmod"; })[0];
+        const child = names.filter(function (n) { return n.indexOf("inner work") > 0; })[0];
+
+        ok(root.querySelector('[data-act="tree"]').classList.contains("on"), "the button shows the mode");
+        ok(root.querySelector(".pr-stat").textContent.indexOf("call tree") === 0,
+            "the header says what is on screen: " + root.querySelector(".pr-stat").textContent);
+        ok(parent, "the mod is listed: " + names.join(" | "));
+        ok(child, "with the section it named inside it, indented: " + names.join(" | "));
+        ok(names.indexOf(parent) < names.indexOf(child), "and the parent comes first");
+
+        root.querySelector('[data-act="tree"]').dispatchEvent(new MouseEvent("click", { bubbles: true }));
+        ACEUIModLoader.loop.stop(deep);
+        root.querySelector('[data-act="record"]').dispatchEvent(new MouseEvent("click", { bubbles: true }));
+    });
+
+    t("detach stops the loop and leaves the page uninstrumented", function () {
+        const cancelled = clock.cancelled;
+
+        P.detach(state);
+        eq(clock.cancelled, cancelled + 1, "the frame was cancelled");
+        eq(state.ui.loop.running, false, "loop stopped");
+        eq(S.wrapped(), false, "and nothing of ours is left wrapped around the page");
     });
 
     H.finish();
