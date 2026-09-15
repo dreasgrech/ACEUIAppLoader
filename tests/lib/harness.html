@@ -848,6 +848,7 @@ document.addEventListener("DOMContentLoaded", function () {
                 { name: "beta", info: { title: "Beta App" }, status: "failed" }
             ]);
             eq(panel.style.transform, "translateX(100%)", "starts closed, off the right edge");
+            eq(panel.style.opacity, "0", "and transparent, so it fades in rather than only sliding");
             eq(panel.style.position, "fixed", "fixed to the screen, not the HUD layout");
             ok(ACEUIModLoader.drawer.state.hot, "hot zone created");
             eq(ACEUIModLoader.drawer.state.hot.style.right, "0px", "hot zone sits on the right edge");
@@ -862,6 +863,7 @@ document.addEventListener("DOMContentLoaded", function () {
             d.state.hot.dispatchEvent(new Event("mouseenter"));
             eq(d.state.open, true, "pointer at the edge opens it");
             ok(d.state.panel.style.transform.indexOf("translateX(0") === 0, "slid in");
+            eq(d.state.panel.style.opacity, "1", "and faded up");
             d.state.panel.dispatchEvent(new Event("mouseleave"));
             eq(d.state.open, true, "still open: the close is delayed, not instant");
             ok(d.state.closeTimer !== 0, "a close is pending");
@@ -869,6 +871,23 @@ document.addEventListener("DOMContentLoaded", function () {
             eq(d.state.closeTimer, 0, "coming back cancels the pending close");
             d.close();
             eq(d.state.panel.style.transform, "translateX(100%)", "closed again");
+            eq(d.state.panel.style.opacity, "0", "and faded back out");
+        });
+
+        /*
+         * Measured in game (dev/snippets/fpsprobe.js, 2026-09-15): the HUD page advances
+         * at 58.5 fps, so an animation gets one frame every 17 ms. At 180 ms the slide had
+         * eleven frames for the panel's whole width and one of them moved it a quarter of
+         * that width. This is the guard against quietly shortening it again.
+         */
+        t("drawer: the slide is long enough to have frames to animate in", function () {
+            const d = ACEUIModLoader.drawer;
+            const FRAME_MS = 1000 / 58.5;
+            const frames = d.SLIDE_MS / FRAME_MS;
+
+            ok(frames >= 15, "the slide gets " + Math.round(frames) + " frames at the measured rate");
+            ok(d.FADE_MS < d.SLIDE_MS, "the fade finishes before the move does");
+            ok(d.state.panel.style.transition.indexOf("opacity") > 0, "opacity is animated, not just set");
         });
 
         t("drawer: a switch hides the mod's own root element and remembers the choice", function () {

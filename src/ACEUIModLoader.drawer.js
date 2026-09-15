@@ -25,8 +25,18 @@
  * build. Inline styles need neither, and inline `transition` still animates the slide.
  *
  * Cohtml notes: the panel is built once, and the only per-interaction writes are a
- * transform on the panel and colours on a row. Nothing is rebuilt per frame -- there is
- * no frame loop here at all; the drawer reacts to mouse events only.
+ * transform and an opacity on the panel and colours on a row. Nothing is rebuilt per
+ * frame -- there is no frame loop here at all; the drawer reacts to mouse events only.
+ *
+ * The slide is shaped by measurement, not taste (dev/snippets/fpsprobe.js, in game
+ * 2026-09-15). The HUD page advances at a rock-steady 58.5 frames per second -- half the
+ * game's 117, with no hitches and no measurable cost from any mod -- so an animation gets
+ * a frame every 17 ms and no more. At the original 180 ms the panel crossed in eleven
+ * frames, one of which moved it a quarter of its own width, and then spent its last five
+ * frames creeping through the final 7%: a jump followed by a crawl, which is what
+ * "choppy" was. Hence a longer slide and a fade over it -- the stock UI's own idiom
+ * (uicomponents.css: 0.25-0.5 s, opacity paired with transform, 1-2 rem of travel).
+ * `will-change` is not in this engine at all, so there is no layer hint to reach for.
  */
 ACEUIModLoader.drawer = (function () {
 
@@ -49,7 +59,9 @@ ACEUIModLoader.drawer = (function () {
     const PANEL_WIDTH = "15rem";
     const PANEL_TOP = "4rem";
     const PANEL_BOTTOM = "4rem";
-    const SLIDE_MS = 180;
+    const SLIDE_MS = 300;
+    /** The fade finishes first, so the panel is solid before it stops moving. */
+    const FADE_MS = 220;
     const CLOSE_DELAY_MS = 350;
 
     /** Above the stock HUD, below nothing in particular; the HUD does not use z-index much. */
@@ -299,6 +311,7 @@ ACEUIModLoader.drawer = (function () {
 
         state.open = true;
         state.panel.style.transform = "translateX(0)";
+        state.panel.style.opacity = "1";
     };
 
     const close = function () {
@@ -308,6 +321,7 @@ ACEUIModLoader.drawer = (function () {
 
         state.open = false;
         state.panel.style.transform = "translateX(100%)";
+        state.panel.style.opacity = "0";
     };
 
     const closeSoon = function () {
@@ -436,7 +450,8 @@ ACEUIModLoader.drawer = (function () {
             fontFamily: "var(--font-family-main)",
             zIndex: Z_INDEX,
             transform: "translateX(100%)",
-            transition: "transform " + SLIDE_MS + "ms ease",
+            opacity: "0",
+            transition: "transform " + SLIDE_MS + "ms ease-out, opacity " + FADE_MS + "ms ease-out",
             overflow: "hidden"
         });
         const header = div({
@@ -522,6 +537,8 @@ ACEUIModLoader.drawer = (function () {
 
     return {
         STORE_KEY: STORE_KEY,
+        SLIDE_MS: SLIDE_MS,
+        FADE_MS: FADE_MS,
         CLOSE_DELAY_MS: CLOSE_DELAY_MS,
         state: state,
         build: build,
