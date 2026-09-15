@@ -75,6 +75,23 @@ const DevConsole = (function () {
     const KEY_CODES = { Backquote: 192, Enter: 13, ArrowUp: 38, ArrowDown: 40, Escape: 27, Tab: 9 };
 
     /**
+     * Settings, drawn by the loader in the app drawer's options pane. The toggle key is
+     * here because a hardcoded hotkey collides with whatever the player has bound in the
+     * game; this lets them move ours rather than lose theirs.
+     */
+    const options = ACEUIModLoader.settings
+        ? ACEUIModLoader.settings.define("devconsole", [
+            {
+                key: "toggleKey",
+                type: "key",
+                label: "Toggle key",
+                value: TOGGLE_CODE,
+                hint: "Click, then press the key you want"
+            }
+        ])
+        : { toggleKey: TOGGLE_CODE };
+
+    /**
      * Printing a value. A game model is a wall of fields, so a result is expanded over
      * many lines -- one property per line, indented -- rather than squashed onto one the
      * way ACEUIModLoader.console.format does for log lines. Depth and counts are capped so
@@ -1204,8 +1221,21 @@ const DevConsole = (function () {
 
     // ---- input -----------------------------------------------------------------------
 
+    /**
+     * The toggle key is a setting, not a constant: a hardcoded backquote collides with
+     * whatever the player has bound in the game, and their bindings are not ours to
+     * shadow. The default stays `Backquote`; the settings pane in the app drawer moves it.
+     */
     const isToggleKey = function (e) {
-        return keyIs(e, TOGGLE_CODE) || e.key === TOGGLE_KEY;
+        const want = options.toggleKey || TOGGLE_CODE;
+
+        if (e.code === want || e.key === want) { return true; }
+
+        // the engine reports legacy keyCode most reliably, so honour it for keys we know
+        if (KEY_CODES[want] !== undefined && e.keyCode === KEY_CODES[want]) { return true; }
+
+        // the backquote's `key` is the character, not the code
+        return want === TOGGLE_CODE && e.key === TOGGLE_KEY;
     };
 
     const onWindowKey = function (state, e) {
