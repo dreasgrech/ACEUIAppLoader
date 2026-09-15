@@ -2,11 +2,61 @@
 
 The single package that lets several UI mods coexist in Assetto Corsa EVO, the
 shared library those mods are built on, and the tools that build it and install
-mods for it. Version 0.6.0.
+mods for it. Version 0.7.3.
 
 Why a loader is needed at all, and why it has this shape, is in
 [`docs/design.md`](docs/design.md); the game mechanics it relies on are
 documented in the `ACEGameInternals` repository.
+
+## Keeping keystrokes out of the car
+
+A mod that takes typed input has to stop the game reading those keys as gameplay
+bindings, or typing toggles headlights and wipers and the arrow keys shove the seat
+about. `ACEUIModLoader.input` does that:
+
+```js
+const release = ACEUIModLoader.input.bindFocus(myTextBox, "mymod");     // a text box
+const release = ACEUIModLoader.input.bindClickFocus(myPanel, "mymod"); // click to focus
+ACEUIModLoader.input.capture("mymod");        // or by hand (DOOM does this while open)
+ACEUIModLoader.input.release("mymod");
+ACEUIModLoader.input.releaseAll("mymod");     // in detach
+```
+
+`UIMenuState` carries **two** flags and both are needed:
+
+| `ksUI.menuState` method | flag | covers |
+|---|---|---|
+| `toggleKeyboardInput` | `is_chat_active` (field 10) | the text path — letters |
+| `ignoreInputActions` | `ignore_gameplay_input_actions` (field 7) | bound gameplay actions |
+
+The stock chat box only flips the first, which is why letters stop toggling car functions
+but the arrow keys still move the seat — a gap in the base game that anyone copying the
+chat box inherits.
+
+`bindClickFocus` is for a panel that is not a text box: it takes the keyboard when the
+pointer goes down inside the element and gives it back on a click anywhere else. That is
+what lets a mod stay open without holding the keyboard hostage — DOOM can sit in a corner
+while you drive, and take the keys back when you click it.
+
+**Getting the keyboard back never depends on one key.** `ignore_gameplay_input_actions`
+suppresses bound actions, and the pause action is one of them — so a capture that is never
+released leaves the game with no way to open the pause menu, and because the flags live in
+the game's menu state they survive the HUD reload. That happened once, from a `blur` that
+never fired.
+
+Crucially the escape hatch must respect **custom bindings**: a player who moved pause off
+Escape would be stranded by a hardcoded Escape check. So the primary signal is the
+player's own bound action, by name — the engine sends `UIExInputsAction` with
+`e.action`, and `InputAction_UI_Menu` / `InputAction_UI_Cancel` arrive under those names
+whatever key produced them. On top of that: the raw Escape key, losing window focus
+(alt-tab), a fresh HUD page clearing the flags whether or not it thinks anything is held,
+and `bindFocus` releasing on a click outside the element rather than trusting `blur`.
+
+**Holders are counted, not a boolean.** The console wants the keyboard while its prompt
+has focus and DOOM wants it while it is open; if the console released on blur it would
+yank the keyboard out from under DOOM. The flags only drop when the last holder lets go.
+Always release in detach: a mod that keeps the capture after it is gone leaves the car
+unable to read its own controls.
 
 ## The app drawer
 

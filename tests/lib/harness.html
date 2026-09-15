@@ -160,6 +160,220 @@ document.addEventListener("DOMContentLoaded", function () {
 
     // ---- panel ------------------------------------------------------------------------------
 
+    t("input: capture sets both levers, release clears them", function () {
+        const calls = [];
+        window.ksUI = { menuState: {
+            toggleKeyboardInput: function (on) { calls.push("chat:" + on); },
+            ignoreInputActions: function (on) { calls.push("actions:" + on); }
+        } };
+
+        ok(ACEUIModLoader.input.available(), "the engine offers the levers");
+        ACEUIModLoader.input.capture("one");
+        eq(calls.join(" "), "chat:true actions:true", "both levers go up");
+        /* is_chat_active alone left the arrow keys moving the seat, which is why the
+           second lever has to be here too */
+        ok(ACEUIModLoader.input.isCaptured(), "held");
+
+        calls.length = 0;
+        ACEUIModLoader.input.release("one");
+        eq(calls.join(" "), "chat:false actions:false", "and both come down");
+        eq(ACEUIModLoader.input.isCaptured(), false, "released");
+    });
+
+    t("input: two holders share it; the flags drop only when the last lets go", function () {
+        const calls = [];
+        window.ksUI = { menuState: {
+            toggleKeyboardInput: function (on) { calls.push(on); },
+            ignoreInputActions: function () {}
+        } };
+
+        /* the console holds it while typing, DOOM while it is open: if the console
+           released on blur it would yank the keyboard out from under DOOM */
+        ACEUIModLoader.input.capture("devconsole");
+        ACEUIModLoader.input.capture("doom");
+        eq(calls.length, 1, "the engine is told once, not twice");
+        eq(ACEUIModLoader.input.holders().length, 2, "both are holding");
+
+        calls.length = 0;
+        ACEUIModLoader.input.release("devconsole");
+        eq(calls.length, 0, "one letting go changes nothing");
+        ok(ACEUIModLoader.input.isCaptured(), "still held by the other");
+
+        ACEUIModLoader.input.release("doom");
+        eq(calls.join(""), "false", "released only when the last holder lets go");
+        eq(ACEUIModLoader.input.isCaptured(), false);
+    });
+
+    t("input: repeated capture by one owner counts once, and releasing an unknown owner is harmless", function () {
+        const calls = [];
+        window.ksUI = { menuState: { toggleKeyboardInput: function (on) { calls.push(on); } } };
+
+        ACEUIModLoader.input.capture("same");
+        ACEUIModLoader.input.capture("same");
+        eq(ACEUIModLoader.input.holders().length, 1, "counted once");
+        ACEUIModLoader.input.release("nobody");
+        ok(ACEUIModLoader.input.isCaptured(), "releasing a stranger does not drop it");
+        ACEUIModLoader.input.release("same");
+        eq(ACEUIModLoader.input.isCaptured(), false, "its own release does");
+    });
+
+    t("input: bindFocus holds it exactly while the element has focus, and unbinding releases", function () {
+        window.ksUI = { menuState: { toggleKeyboardInput: function () {}, ignoreInputActions: function () {} } };
+        const box = document.createElement("input");
+        document.getElementById("center").appendChild(box);
+
+        const unbind = ACEUIModLoader.input.bindFocus(box, "boxy");
+        box.dispatchEvent(new Event("focus"));
+        ok(ACEUIModLoader.input.isCaptured(), "held on focus");
+        box.dispatchEvent(new Event("blur"));
+        eq(ACEUIModLoader.input.isCaptured(), false, "released on blur");
+
+        box.dispatchEvent(new Event("focus"));
+        ok(ACEUIModLoader.input.isCaptured(), "held again");
+        unbind();
+        eq(ACEUIModLoader.input.isCaptured(), false, "unbinding releases even while focused");
+        box.dispatchEvent(new Event("focus"));
+        eq(ACEUIModLoader.input.isCaptured(), false, "and the listeners are gone");
+
+        box.remove();
+    });
+
+    t("input: bindClickFocus takes the keyboard on a click inside and gives it back on a click outside", function () {
+        window.ksUI = { menuState: { toggleKeyboardInput: function () {}, ignoreInputActions: function () {} } };
+        const panel = document.createElement("div");
+        const inner = document.createElement("span");
+        const elsewhere = document.createElement("div");
+        panel.appendChild(inner);
+        document.getElementById("center").appendChild(panel);
+        document.getElementById("center").appendChild(elsewhere);
+
+        /* holding the keyboard for as long as a panel is open would mean never being able
+           to leave it open and drive; click-to-focus is what makes coexisting possible */
+        const unbind = ACEUIModLoader.input.bindClickFocus(panel, "panelly");
+        eq(ACEUIModLoader.input.isCaptured(), false, "binding alone takes nothing");
+
+        inner.dispatchEvent(new MouseEvent("mousedown", { bubbles: true }));
+        ok(ACEUIModLoader.input.isCaptured(), "a click on a descendant counts as inside");
+
+        elsewhere.dispatchEvent(new MouseEvent("mousedown", { bubbles: true }));
+        eq(ACEUIModLoader.input.isCaptured(), false, "a click outside gives it back");
+
+        panel.dispatchEvent(new MouseEvent("mousedown", { bubbles: true }));
+        ok(ACEUIModLoader.input.isCaptured(), "and clicking it again takes it back");
+
+        unbind();
+        eq(ACEUIModLoader.input.isCaptured(), false, "unbinding releases");
+        panel.dispatchEvent(new MouseEvent("mousedown", { bubbles: true }));
+        eq(ACEUIModLoader.input.isCaptured(), false, "and stops listening");
+
+        eq(ACEUIModLoader.input.within(panel, inner), true, "within() walks up the tree");
+        eq(ACEUIModLoader.input.within(panel, elsewhere), false);
+
+        panel.remove();
+        elsewhere.remove();
+    });
+
+    t("input: Escape always takes the keyboard back, whoever is holding it", function () {
+        const calls = [];
+        window.ksUI = { menuState: {
+            toggleKeyboardInput: function (on) { calls.push(on); },
+            ignoreInputActions: function () {}
+        } };
+
+        /* Escape is itself a bound gameplay action, so suppressing actions suppressed the
+           pause menu: a stuck capture left the game with no way to open it at all. */
+        ACEUIModLoader.input.capture("clingy");
+        ACEUIModLoader.input.capture("alsoclingy");
+        ok(ACEUIModLoader.input.isCaptured(), "two holders");
+
+        calls.length = 0;
+        window.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true }));
+        eq(ACEUIModLoader.input.isCaptured(), false, "Escape drops every holder");
+        eq(ACEUIModLoader.input.holders().length, 0, "nobody is left holding");
+        eq(calls.join(""), "false", "and the engine is told");
+
+        /* the legacy keyCode path too, since that is what the engine reports */
+        ACEUIModLoader.input.capture("clingy");
+        window.dispatchEvent(new KeyboardEvent("keydown", { keyCode: 27, bubbles: true }));
+        eq(ACEUIModLoader.input.isCaptured(), false, "keyCode 27 works as well");
+    });
+
+    t("input: releaseEverything clears the engine even when nothing is recorded as held", function () {
+        const calls = [];
+        window.ksUI = { menuState: {
+            toggleKeyboardInput: function (on) { calls.push(on); },
+            ignoreInputActions: function (on) { calls.push(on); }
+        } };
+
+        /* the flags live in the game's menu state and survive a HUD reload, so a fresh
+           page has to be able to clear a capture it never made */
+        ACEUIModLoader.input.state.owners = {};
+        ACEUIModLoader.input.state.count = 0;
+        ACEUIModLoader.input.state.applied = true;      // as if a previous page left it on
+
+        calls.length = 0;
+        ok(ACEUIModLoader.input.releaseEverything("test"), "it writes");
+        eq(calls.join(" "), "false false", "both levers cleared");
+        eq(ACEUIModLoader.input.isCaptured(), false);
+    });
+
+    t("input: a missed blur does not strand the capture -- a click elsewhere releases too", function () {
+        window.ksUI = { menuState: { toggleKeyboardInput: function () {}, ignoreInputActions: function () {} } };
+        const box = document.createElement("input");
+        const elsewhere = document.createElement("div");
+        document.getElementById("center").appendChild(box);
+        document.getElementById("center").appendChild(elsewhere);
+
+        const unbind = ACEUIModLoader.input.bindFocus(box, "typer");
+        box.dispatchEvent(new Event("focus"));
+        ok(ACEUIModLoader.input.isCaptured(), "held while focused");
+
+        /* no blur is fired here on purpose: that is the case that stranded it in game */
+        elsewhere.dispatchEvent(new MouseEvent("mousedown", { bubbles: true }));
+        eq(ACEUIModLoader.input.isCaptured(), false, "a click elsewhere releases it anyway");
+
+        unbind();
+        box.remove();
+        elsewhere.remove();
+    });
+
+    t("input: the player's own menu binding releases it, whatever key they put it on", function () {
+        window.ksUI = { menuState: { toggleKeyboardInput: function () {}, ignoreInputActions: function () {} } };
+
+        /* A player can rebind pause off Escape, so releasing only on the Escape key would
+           strand exactly the players who customised their controls. The engine reports
+           bound actions by name, which is the same whatever key produced them. */
+        ACEUIModLoader.input.capture("holder");
+        ACEUIModLoader.input.onAction({ action: "InputAction_UI_Menu" });
+        eq(ACEUIModLoader.input.isCaptured(), false, "the menu action releases it");
+
+        ACEUIModLoader.input.capture("holder");
+        ACEUIModLoader.input.onAction({ action: "InputAction_UI_Cancel" });
+        eq(ACEUIModLoader.input.isCaptured(), false, "so does cancel");
+
+        ACEUIModLoader.input.capture("holder");
+        ACEUIModLoader.input.onAction({ action: "InputAction_Car_Headlights" });
+        ok(ACEUIModLoader.input.isCaptured(), "an unrelated action does not");
+        ACEUIModLoader.input.onAction({});
+        ok(ACEUIModLoader.input.isCaptured(), "nor does a malformed one");
+        ACEUIModLoader.input.releaseEverything("cleanup");
+    });
+
+    t("input: losing window focus releases it, so alt-tab cannot strand the game", function () {
+        window.ksUI = { menuState: { toggleKeyboardInput: function () {}, ignoreInputActions: function () {} } };
+        ACEUIModLoader.input.capture("holder");
+        window.dispatchEvent(new Event("blur"));
+        eq(ACEUIModLoader.input.isCaptured(), false, "released on alt-tab");
+    });
+
+    t("input: outside the game there is nothing to capture, and it says so", function () {
+        delete window.ksUI;
+        eq(ACEUIModLoader.input.available(), false, "no levers");
+        ACEUIModLoader.input.capture("nowhere");
+        ACEUIModLoader.input.release("nowhere");
+        eq(ACEUIModLoader.input.isCaptured(), false, "and nothing is left holding");
+    });
+
     t("panel: attach hides until placed; drag moves, clamps and saves fractions", function () {
         window.HUD = null; localStorage.clear();
         const p = makePanel(); const root = p.root;

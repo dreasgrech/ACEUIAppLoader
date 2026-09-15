@@ -34,6 +34,7 @@ LIB_ORDER = [
     "ACEUIModLoader.persist.js",
     "ACEUIModLoader.panel.js",
     "ACEUIModLoader.loop.js",
+    "ACEUIModLoader.input.js",
     "ACEUIModLoader.loader.js",
     "ACEUIModLoader.drawer.js",
 ]
