@@ -2,7 +2,7 @@
 
 The single package that lets several UI mods coexist in Assetto Corsa EVO, the
 shared library those mods are built on, and the tools that build it and install
-mods for it. Version 0.5.1.
+mods for it. Version 0.5.2.
 
 Why a loader is needed at all, and why it has this shape, is in
 [`docs/design.md`](docs/design.md); the game mechanics it relies on are
@@ -18,6 +18,14 @@ row, saying why, rather than vanishing silently.
 
 The drawer is part of the loader rather than a mod, because the loader is the only thing
 that knows what is installed.
+
+Switches are written to **both** stores: `localStorage` so a switched-off app is hidden
+instantly on the Escape/resume reload, and the stock **HUD layout container**, which is
+the only one the game writes to disk and therefore the only one that survives a game
+restart. The HUD store appears a little after mod scripts run, so it is adopted when it
+turns up and mirrored back into `localStorage`; a switch flipped in the meantime wins
+over the copy from disk. The game saves that store when the HUD closes, so quitting via
+Escape is what commits it.
 
 A mod can add its own options pane, which the drawer opens from the gear on its row:
 

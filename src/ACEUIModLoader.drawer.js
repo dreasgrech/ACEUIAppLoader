@@ -32,6 +32,18 @@ ACEUIModLoader.drawer = (function () {
 
     const STORE_KEY = "acedrawer.apps";
 
+    /**
+     * Where the switches live. localStorage is read synchronously and is what makes a
+     * switched-off app hide instantly on an Escape/resume reload -- but it dies with the
+     * game. The stock HUD layout container is the one the game writes to disk, so it is
+     * what survives a restart; it only appears a little after mod scripts run, so it is
+     * adopted when it turns up (see adoptHudStore). Ids there follow the stock
+     * `hud_<name>` convention.
+     */
+    const HUD_ID = "hud_acedrawer";
+    const HUD_POLL_MS = 50;
+    const HUD_WAIT_MS = 8000;
+
     /** Geometry. The hot zone is a thin strip the pointer has to reach to open the drawer. */
     const HOT_WIDTH = "10px";
     const PANEL_WIDTH = "15rem";
@@ -67,6 +79,7 @@ ACEUIModLoader.drawer = (function () {
         apps: [],               // { name, title, status, row, box, pane, filled }
         visible: {},            // name -> bool, persisted
         options: {},            // name -> render function a mod registered
+        touched: false,         // the user flipped a switch: newer than anything on disk
         closeTimer: 0
     };
 
@@ -75,12 +88,13 @@ ACEUIModLoader.drawer = (function () {
     /**
      * Read the saved switches immediately, while the library is still loading and before
      * any mod root exists, so applyStored() can hide a switched-off mod the moment the
-     * loader creates it. build() re-reads from the same store later; nothing is lost.
+     * loader creates it. The HUD store is preferred when it happens to be ready already;
+     * otherwise localStorage carries us until adoptHudStore() picks it up.
      */
     const loadStored = function () {
-        const stored = persist.readLocal(STORE_KEY);
+        const stored = persist.readHud(HUD_ID) || persist.readLocal(STORE_KEY);
 
-        if (stored) { state.visible = stored; }
+        if (stored && !state.touched) { state.visible = stored; }
     };
 
     loadStored();
@@ -113,8 +127,9 @@ ACEUIModLoader.drawer = (function () {
         return state.visible[name] !== false;
     };
 
+    /** Write to both stores: localStorage for the instant reload, the HUD store for disk. */
     const store = function () {
-        persist.writeLocal(STORE_KEY, state.visible);
+        persist.save(HUD_ID, STORE_KEY, state.visible);
     };
 
     /** Show or hide a mod's root element. Restoring uses "" so the mod's own CSS wins again. */
@@ -151,12 +166,51 @@ ACEUIModLoader.drawer = (function () {
 
     const setVisible = function (name, on) {
         state.visible[name] = Boolean(on);
+        state.touched = true;
         applyVisibility(name);
         store();
 
         state.apps.forEach(function (app) {
             if (app.name === name) { paintSwitch(app); }
         });
+    };
+
+    /** Re-apply every switch: after adopting the HUD store, mods may need hiding. */
+    const refreshAll = function () {
+        const mods = ACEUIModLoader.mods || [];
+
+        mods.forEach(function (entry) { applyVisibility(entry.name); });
+        state.apps.forEach(function (app) {
+            applyVisibility(app.name);
+            paintSwitch(app);
+        });
+    };
+
+    /**
+     * The HUD layout container is the only store that survives a game restart, but it
+     * appears a little after mod scripts run, so it cannot be read at load time. Poll for
+     * it, adopt it once, and mirror it into localStorage so the *next* HUD reload in this
+     * session hides switched-off apps instantly. A switch the user flipped in the
+     * meantime wins -- their intent is newer than anything on disk.
+     */
+    const adoptHudStore = function (deadline) {
+        if (state.touched) { return; }
+
+        if (persist.hudAvailable()) {
+            const stored = persist.readHud(HUD_ID);
+
+            if (stored) {
+                state.visible = stored;
+                persist.writeLocal(STORE_KEY, stored);
+                refreshAll();
+            }
+
+            return;                 // the store is ready; nothing more to wait for
+        }
+
+        if (Date.now() > deadline) { return; }
+
+        window.setTimeout(function () { adoptHudStore(deadline); }, HUD_POLL_MS);
     };
 
     const toggleApp = function (name) {
@@ -324,7 +378,7 @@ ACEUIModLoader.drawer = (function () {
     const build = function (mods) {
         const selector = ACEUIModLoader.loader ? ACEUIModLoader.loader.CONTAINER_SELECTOR : "";
         const container = (selector && document.querySelector(selector)) || document.body;
-        const stored = persist.readLocal(STORE_KEY);
+        const stored = persist.readHud(HUD_ID) || persist.readLocal(STORE_KEY);
         const panel = div({
             position: "fixed",
             top: PANEL_TOP,
@@ -371,7 +425,7 @@ ACEUIModLoader.drawer = (function () {
         cancelClose();
         state.apps = [];
 
-        if (stored) { state.visible = stored; }
+        if (stored && !state.touched) { state.visible = stored; }
 
         header.appendChild(css(text(document.createElement("span"), TITLE_TEXT), {
             color: "#fff", fontSize: "0.75rem", fontWeight: "700", letterSpacing: "0.08em"
@@ -412,6 +466,9 @@ ACEUIModLoader.drawer = (function () {
         return panel;
     };
 
+    // the HUD store shows up shortly after this file runs; adopt it when it does
+    adoptHudStore(Date.now() + HUD_WAIT_MS);
+
     /** Build once the loader knows what is installed. */
     if (typeof ACEUIModLoader.ready === "function") {
         ACEUIModLoader.ready(function (mods) {
@@ -431,6 +488,9 @@ ACEUIModLoader.drawer = (function () {
         toggle: toggle,
         isVisible: isVisible,
         applyStored: applyStored,
+        adoptHudStore: adoptHudStore,
+        refreshAll: refreshAll,
+        HUD_ID: HUD_ID,
         setVisible: setVisible,
         toggleApp: toggleApp,
         registerOptions: registerOptions

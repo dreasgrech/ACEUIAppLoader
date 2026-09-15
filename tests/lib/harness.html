@@ -461,6 +461,41 @@ document.addEventListener("DOMContentLoaded", function () {
             root.parentNode.removeChild(root);
         });
 
+        t("drawer: switches survive a game restart, because they go to the HUD store too", function () {
+            const d = ACEUIModLoader.drawer;
+            const P = ACEUIModLoader.persist;
+            window.HUD = makeHud({});     // the earlier panel cases leave it null
+            /* localStorage dies with the game; the stock HUD layout container is the one
+               the game writes to disk. Saving only to localStorage meant every app came
+               back enabled after a restart. */
+            d.setVisible("restarty", false);
+
+            const local = P.readLocal(d.STORE_KEY);
+            eq(local.restarty, false, "localStorage written (fast path for Escape/resume)");
+            const hud = P.readHud(d.HUD_ID);
+            ok(hud, "the HUD layout store took it as well");
+            eq(hud.restarty, false, "and that is the copy that reaches disk");
+
+            /* now act out a restart: localStorage gone, HUD store restored from disk */
+            P.removeLocal(d.STORE_KEY);
+            d.state.visible = {};
+            d.state.touched = false;
+            eq(d.isVisible("restarty"), true, "with nothing loaded it would default back to on");
+
+            d.adoptHudStore(Date.now() + 1000);
+            eq(d.isVisible("restarty"), false, "adopted from the HUD store");
+            eq(P.readLocal(d.STORE_KEY).restarty, false, "and mirrored back so the next reload is instant");
+            window.HUD = null;
+        });
+
+        t("drawer: a switch flipped before the HUD store arrives is not overwritten by it", function () {
+            const d = ACEUIModLoader.drawer;
+            d.setVisible("racy", false);          // user acts first
+            d.state.touched = true;
+            d.adoptHudStore(Date.now() + 1000);   // disk copy turns up afterwards
+            eq(d.isVisible("racy"), false, "the newer choice wins over what was on disk");
+        });
+
         t("drawer: a mod's options pane is built lazily, only when it is first opened", function () {
             const d = ACEUIModLoader.drawer;
             let built = 0;
