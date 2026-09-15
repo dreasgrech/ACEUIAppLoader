@@ -350,6 +350,74 @@ ACEUIModLoader.loader = (function () {
         const info = entry && entry.info ? entry.info : {};
         const title = info.title || name;
         const key = function (suffix) { return KEY_PREFIX + name + "." + suffix; };
+        const log = ACEUIModLoader.logger("[" + title + "]");
+
+        /**
+         * A value this mod wants back after the HUD reloads on Escape/resume. It lives in
+         * `localStorage`, which is per view: it survives that reload and dies with the
+         * game. Anything that must outlive the game belongs in a declared setting
+         * (ACEUIModLoader.settings) or, if it is large, in the engine's own container
+         * (ACEUIModLoader.persist.writeStore).
+         */
+        const recall = function (suffix, fallback) {
+            const value = ACEUIModLoader.persist.readLocal(key(suffix));
+
+            return value === null || value === undefined ? fallback : value;
+        };
+
+        const remember = function (suffix, value) {
+            return ACEUIModLoader.persist.writeLocal(key(suffix), value);
+        };
+
+        const forget = function (suffix) {
+            ACEUIModLoader.persist.removeLocal(key(suffix));
+        };
+
+        /**
+         * The whole widget lifecycle: a draggable panel that remembers where the player
+         * put it, and the frame loop that drives it.
+         *
+         *     state.ui = me.panel(root, function (now) { tick(state, now); });
+         *     ...
+         *     state.ui.stop();          // in detach
+         *
+         * Two things this owns that every mod used to repeat, and that go wrong quietly
+         * when they are forgotten: the panel has to be ticked every frame until its
+         * position restore settles (miss it and the widget never moves to where it was
+         * left), and the loop has to be stopped in detach (miss it and a mod switched off
+         * in the app drawer keeps running for ever).
+         *
+         * `stop()` is safe to call twice. The handle carries `panel` for the rare mod that
+         * needs the panel itself -- to save a position by hand, say.
+         */
+        const panelFor = function (root, onFrame, options) {
+            const opts = options || {};
+            const panel = ACEUIModLoader.panel.attach(root, {
+                hudId: HUD_ID_PREFIX + name,
+                storageKey: key(POSITION_SUFFIX),
+                log: log,
+                onSaved: opts.onSaved || null
+            });
+            const handle = { panel: panel, loop: null, stopped: false };
+
+            handle.loop = ACEUIModLoader.loop.start(function (now) {
+                ACEUIModLoader.panel.update(panel, now);
+
+                if (onFrame) { onFrame(now); }
+            });
+
+            handle.stop = function () {
+                if (handle.stopped) { return false; }
+
+                handle.stopped = true;
+                ACEUIModLoader.loop.stop(handle.loop);
+                ACEUIModLoader.panel.detach(panel);
+
+                return true;
+            };
+
+            return handle;
+        };
         /** Call `attach(root)` with `#<name>` once the DOM has it (now, or on DOMContentLoaded); once per root. */
         /**
          * `mount(attach, detach)`. Passing detach is what lets the app drawer really turn
@@ -359,10 +427,24 @@ ACEUIModLoader.loader = (function () {
          * the first place.
          */
         const mount = function (attach, detach) {
+            // every mod logged this line for itself; mount is called once, at the end of a
+            // mod's script, so it says "the script ran" even for a mod switched off in the
+            // drawer -- which is exactly when you want to know
+            log("script loaded, version " + (info.version || DEV_VERSION)
+                + ", library " + ACEUIModLoader.VERSION + ", page " + ACEUIModLoader.page);
+
             const boot = function () {
                 const root = document.getElementById(name);
 
-                if (!root || root.hasAttribute(MOUNTED_ATTR)) { return; }
+                if (!root) {
+                    // in game the loader creates this before the mod's scripts run, so a
+                    // missing root means a preview page whose markup does not match the name
+                    log("nothing to attach to: no element with id \"" + name + "\" on this page");
+
+                    return;
+                }
+
+                if (root.hasAttribute(MOUNTED_ATTR)) { return; }
 
                 if (entry) {
                     entry.attach = attach;
@@ -394,10 +476,14 @@ ACEUIModLoader.loader = (function () {
             loaded: Boolean(entry),
             root: document.getElementById(name),
             prefix: "[" + title + "]",
-            log: ACEUIModLoader.logger("[" + title + "]"),
+            log: log,
             hudId: HUD_ID_PREFIX + name,
             storageKey: key(POSITION_SUFFIX),
             key: key,
+            recall: recall,
+            remember: remember,
+            forget: forget,
+            panel: panelFor,
             mount: mount
         };
     };

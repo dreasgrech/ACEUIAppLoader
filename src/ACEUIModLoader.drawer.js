@@ -12,11 +12,14 @@
  * useless. It also gives mods somewhere to put settings without each one growing its own
  * settings window.
  *
- * A mod adds its own options pane with:
+ * A mod gets a way in by declaring settings -- ACEUIModLoader.settings registers the
+ * opener on its behalf, and clicking it opens that mod's own window. A mod with something
+ * more bespoke than a settings page registers what to open itself:
  *
- *     ACEUIModLoader.drawer.registerOptions("telemetry", function (pane) {
- *         pane.appendChild(myControls);      // called once, lazily, when first opened
- *     });
+ *     ACEUIModLoader.drawer.registerOpener("telemetry", function () { myWindow.open(); });
+ *
+ * It opens a window rather than unfolding a pane inside the drawer because an inline pane
+ * pushes every row below it down the list, which with a dozen apps makes the list unusable.
  *
  * Styling note: everything here is styled with inline styles rather than a stylesheet.
  * The loader ships as a single overriding file inside a package whose layout is delicate
@@ -87,10 +90,9 @@ ACEUIModLoader.drawer = (function () {
         list: null,
         count: null,
         hot: null,
-        apps: [],               // { name, title, status, row, box, pane, filled }
+        apps: [],               // { name, title, status, row, box, label, gear }
         visible: {},            // name -> bool, persisted
-        options: {},            // name -> render function a mod registered (inline pane)
-        openers: {},            // name -> function that opens the mod's own settings window
+        openers: {},            // name -> what to open when its OPTIONS button is clicked
         touched: false,         // the user flipped a switch: newer than anything on disk
         closeTimer: 0
     };
@@ -238,42 +240,15 @@ ACEUIModLoader.drawer = (function () {
         });
     };
 
-    /** A mod registers a callback that fills its pane; it is called once, when first opened. */
-    const registerOptions = function (name, render) {
-        if (typeof render !== "function") { return; }
-
-        state.options[name] = render;
-        revealGear(name);
-    };
-
     /**
-     * A mod (or the settings module on its behalf) registers something to *open* instead
-     * of a pane that unfolds inside the drawer. With more than a couple of mods an inline
-     * pane pushes every row below it down the list, so anything with real settings opens
-     * its own window; the pane stays for small bespoke cases.
+     * What the OPTIONS button on a mod's row should open. ACEUIModLoader.settings calls
+     * this for every mod that declares settings, so most mods never call it themselves.
      */
     const registerOpener = function (name, open) {
         if (typeof open !== "function") { return; }
 
         state.openers[name] = open;
         revealGear(name);
-    };
-
-    const togglePane = function (app) {
-        const showing = app.pane.style.display !== "none";
-
-        if (!showing && !app.filled && state.options[app.name]) {
-            app.filled = true;
-
-            try {
-                state.options[app.name](app.pane);
-            } catch (e) {
-                text(app.pane, "options failed: " + ACEUIModLoader.errorText(e));
-            }
-        }
-
-        app.pane.style.display = showing ? "none" : "";
-        app.gear.style.color = showing ? THEME.inkDim : THEME.accent;
     };
 
     // ---- opening and closing -------------------------------------------------------
@@ -346,7 +321,7 @@ ACEUIModLoader.drawer = (function () {
             padding: "0 0.2rem",
             color: THEME.inkDim,
             fontSize: "0.8rem",
-            display: state.options[app.name] || state.openers[app.name] ? "" : "none"
+            display: state.openers[app.name] ? "" : "none"
         });
 
         row.appendChild(box);
@@ -359,9 +334,7 @@ ACEUIModLoader.drawer = (function () {
             if (e.target !== gear) {
                 toggleApp(app.name);
             } else if (state.openers[app.name]) {
-                state.openers[app.name]();          // its own window
-            } else {
-                togglePane(app);                    // the old inline pane
+                ACEUIModLoader.safely("[drawer] " + app.name + " options", state.openers[app.name]);
             }
 
             e.stopPropagation();
@@ -389,23 +362,14 @@ ACEUIModLoader.drawer = (function () {
         const app = {
             name: entry.name,
             title: info.title || entry.name,
-            status: entry.status,
-            filled: false
+            status: entry.status
         };
         const holder = div({ borderBottom: THEME.border });
-        const pane = div({
-            display: "none",
-            padding: "0.2rem 0.6rem 0.5rem 1.7rem",
-            color: THEME.inkDim,
-            fontSize: "0.7rem"
-        });
 
-        app.pane = pane;
         holder.appendChild(buildRow(app));
 
         if (entry.status !== "loaded") { holder.appendChild(buildStatus(app)); }
 
-        holder.appendChild(pane);
         state.apps.push(app);
         paintSwitch(app);
 
@@ -533,7 +497,6 @@ ACEUIModLoader.drawer = (function () {
         HUD_ID: HUD_ID,
         setVisible: setVisible,
         toggleApp: toggleApp,
-        registerOptions: registerOptions,
         registerOpener: registerOpener
     };
 }());

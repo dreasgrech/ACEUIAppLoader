@@ -478,8 +478,19 @@ ACEUIModLoader.settings = (function () {
      * merged in, so a mod can read it immediately. Calling again replaces the schema.
      */
     const define = function (mod, specs) {
+        // a mistyped `type` used to drop the control with nothing said, which reads in
+        // game as "my setting did not appear" with no way to tell why
         const list = (specs || []).filter(function (spec) {
-            return spec && spec.key && TYPES.indexOf(spec.type) >= 0;
+            const usable = Boolean(spec) && Boolean(spec.key) && TYPES.indexOf(spec.type) >= 0;
+
+            if (!usable) {
+                ACEUIModLoader.log("[settings] " + mod + ": ignoring "
+                    + (spec && spec.key ? "\"" + spec.key + "\"" : "a spec with no key")
+                    + " -- type must be one of " + TYPES.join(", ")
+                    + (spec && spec.type ? " (got \"" + spec.type + "\")" : ""));
+            }
+
+            return usable;
         });
         const saved = stored(mod);
         const values = {};

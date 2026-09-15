@@ -814,7 +814,7 @@ document.addEventListener("DOMContentLoaded", function () {
            with more than a couple of mods it has to be a window of its own */
         app.gear.dispatchEvent(new MouseEvent("click", { bubbles: true }));
         ok(S.isOpen("geary"), "a window opened");
-        eq(app.pane.style.display, "none", "and nothing unfolded inside the drawer");
+        eq(app.row.nextSibling, null, "and nothing unfolded inside the drawer");
 
         const win = document.querySelector("[data-ace-window='" + S.windowId("geary") + "']");
         ok(win, "the window is in the page");
@@ -937,6 +937,78 @@ document.addEventListener("DOMContentLoaded", function () {
     });
 
     // ---- loop ----------------------------------------------------------------------------
+
+    /*
+     * The five lines every mod in this project opened with, and the three it closed with.
+     * Two of them fail quietly when forgotten: without the per-frame panel.update a widget
+     * never returns to where it was left, and without loop.stop a mod switched off in the
+     * app drawer keeps its frame loop for ever.
+     */
+    t("mod: panel() places the widget, drives its frame loop and stops both in one call", function () {
+        const root = document.createElement("div");
+        const me = ACEUIModLoader.mod("lifecycle");
+        const frames = [];
+        let ui;
+
+        root.id = "lifecycle";
+        root.className = "panel";
+        center.appendChild(root);
+        window.HUD = makeHud({ hud_lifecycle: { fx: 0.25, fy: 0.5 } });
+
+        ui = me.panel(root, function (now) { frames.push(now); });
+        eq(root.style.visibility, "hidden", "hidden until it has been placed");
+
+        clock.step(1000);
+        eq(frames.length, 1, "the callback runs on every frame");
+        eq(root.style.visibility, "", "and the panel was ticked, so its position restored");
+        near(parseFloat(root.style.left), 0.25 * center.clientWidth, 2, "restored from the HUD store");
+        ok(ui.panel, "the panel itself is there for a mod that needs it");
+
+        clock.step(1016);
+        eq(frames.length, 2, "still running");
+        eq(ui.stop(), true, "stop stops it");
+        clock.step(1032);
+        eq(frames.length, 2, "no frames after stop");
+        eq(ui.stop(), false, "and stopping twice is harmless");
+
+        mouse("mousedown", 10, 10, root);
+        mouse("mousemove", 400, 400);
+        mouse("mouseup", 400, 400);
+        near(parseFloat(root.style.left), 0.25 * center.clientWidth, 2, "and its drag listeners went with it");
+
+        window.HUD = undefined;
+        root.parentNode.removeChild(root);
+    });
+
+    t("settings: a spec the loader cannot draw is named in the log, not dropped in silence", function () {
+        const S = ACEUIModLoader.settings;
+        const before = window.__log.length;
+        const values = S.define("noisy", [
+            { key: "good", type: "toggle", label: "Good", value: true },
+            { key: "typo", type: "slider", label: "Mistyped", value: 1 },
+            { type: "toggle", label: "No key at all" }
+        ]);
+
+        eq(Object.keys(values).length, 1, "only the usable one is kept");
+        eq(values.good, true, "and it works");
+        ok(window.__log.length >= before + 2, "both bad specs were reported");
+        ok(window.__log.join(" | ").indexOf("ignoring \"typo\"") >= 0, "the mistyped one by name");
+        ok(window.__log.join(" | ").indexOf("(got \"slider\")") >= 0, "with the type it was given");
+        ok(window.__log.join(" | ").indexOf("a spec with no key") >= 0, "and the one with no key");
+    });
+
+    t("mod: recall and remember keep a small value under the mod's own key", function () {
+        const me = ACEUIModLoader.mod("keeper");
+
+        eq(me.recall("open", true), true, "nothing stored: the fallback");
+        me.remember("open", false);
+        eq(localStorage.getItem("acekeeper.open"), "false", "stored under the mod's prefix");
+        eq(me.recall("open", true), false, "and read back, not the fallback");
+        eq(me.recall("open"), false, "no fallback needed once it is there");
+        me.forget("open");
+        eq(me.recall("open", true), true, "forgotten: the fallback again");
+        eq(me.key("open"), "acekeeper.open", "the key is still there for anything bespoke");
+    });
 
     t("loop: start schedules frames before the callback, stop cancels", function () {
         const seen = [];
@@ -1237,35 +1309,34 @@ document.addEventListener("DOMContentLoaded", function () {
             ACEUIModLoader.loader.mods.splice(ACEUIModLoader.loader.mods.indexOf(entry), 1);
         });
 
-        t("drawer: a mod's options pane is built lazily, only when it is first opened", function () {
+        /*
+         * The drawer used to offer two ways in: a pane that unfolded inside it, and a
+         * window of the mod's own. The pane pushed every row below it down the list, so
+         * with a dozen apps it was unusable; it is gone, and this is the one way in.
+         */
+        t("drawer: the OPTIONS button opens what the mod registered, and a throwing one does not take the drawer down", function () {
             const d = ACEUIModLoader.drawer;
-            let built = 0;
-            d.registerOptions("alpha", function (pane) {
-                built += 1;
-                pane.appendChild(document.createTextNode("my options"));
-            });
             const app = d.state.apps.filter(function (a) { return a.name === "alpha"; })[0];
-            eq(app.gear.style.display, "", "registering reveals the gear");
-            eq(built, 0, "nothing built until asked");
+            const bad = d.state.apps.filter(function (a) { return a.name === "beta"; })[0];
+            let opened = 0;
+
+            eq(app.gear.style.display, "none", "nothing registered, nothing offered");
+            d.registerOpener("alpha", function () { opened += 1; });
+            eq(app.gear.style.display, "", "registering reveals it");
 
             app.gear.dispatchEvent(new MouseEvent("click", { bubbles: true }));
-            eq(built, 1, "built on first open");
-            eq(app.pane.style.display, "", "pane shown");
-            ok(app.pane.textContent.indexOf("my options") >= 0, "the mod filled it");
+            eq(opened, 1, "clicking it opens what the mod registered");
+            eq(d.isVisible("alpha"), true, "and does not toggle the app off");
 
-            app.gear.dispatchEvent(new MouseEvent("click", { bubbles: true }));
-            eq(app.pane.style.display, "none", "closes again");
-            app.gear.dispatchEvent(new MouseEvent("click", { bubbles: true }));
-            eq(built, 1, "and is not rebuilt on reopen");
+            d.registerOpener("beta", function () { throw new Error("boom"); });
+            bad.gear.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+            eq(d.state.apps.length, 2, "a throwing opener leaves the drawer intact");
+            ok(last(window.__log).indexOf("beta options failed: Error: boom") >= 0, "and says so in the log");
         });
 
-        t("drawer: a mod whose options throw does not take the drawer down", function () {
-            const d = ACEUIModLoader.drawer;
-            d.registerOptions("beta", function () { throw new Error("boom"); });
-            const app = d.state.apps.filter(function (a) { return a.name === "beta"; })[0];
-            app.gear.dispatchEvent(new MouseEvent("click", { bubbles: true }));
-            ok(app.pane.textContent.indexOf("boom") >= 0, "the failure is shown in the pane");
-            eq(d.state.apps.length, 2, "the rest of the drawer is intact");
+        t("drawer: registerOptions is gone; a mod opens its own window instead", function () {
+            eq(typeof ACEUIModLoader.drawer.registerOptions, "undefined", "one way in, not two");
+            eq(typeof ACEUIModLoader.input.releaseAll, "undefined", "and release() has no alias");
         });
 
         waitFor(function () { return seen !== null; }, function () {

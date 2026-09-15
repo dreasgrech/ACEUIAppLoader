@@ -2,7 +2,7 @@
 
 The single package that lets several UI mods coexist in Assetto Corsa EVO, the
 shared library those mods are built on, and the tools that build it and install
-mods for it. Version 0.12.1.
+mods for it. Version 0.14.0.
 
 Why a loader is needed at all, and why it has this shape, is in
 [`docs/design.md`](docs/design.md); the game mechanics it relies on are
@@ -81,8 +81,8 @@ is a normal draggable panel with an [X] at its top right, whose position is reme
 mod. It can also be driven directly: `settings.open(mod)`, `.close(mod)`, `.toggle(mod)`,
 `.isOpen(mod)`. Settings deliberately do *not*
 unfold inside the drawer: with more than a couple of mods an inline pane pushes every row
-below it down the list and the drawer stops being usable. `registerOptions` still exists
-for a small bespoke pane; `registerOpener` is what the settings module uses.
+below it down the list and the drawer stops being usable. A mod with something more
+bespoke than a settings page registers what to open itself, with `registerOpener`.
 
 Besides the value types there are two that carry no value: **`action`** is a button the
 mod handles (`{ type: "action", label, button, press: fn }`) and **`info`** is a line the
@@ -118,6 +118,8 @@ them, it is already here:
 | recognise a key the engine may report three ways | `ACEUIModLoader.keys.is(e, "Backquote")` |
 | let go of every listener in `detach` | `ACEUIModLoader.dom.listeners()` |
 | a switch, a slider, a hotkey or a button in your own settings window | `ACEUIModLoader.settings.define(...)` |
+| a draggable panel that remembers where it was, and its frame loop | `ACEUIModLoader.mod("x").panel(root, onFrame)` |
+| keep a small value across the Escape/resume reload | `me.remember(key, value)` / `me.recall(key, fallback)` |
 
 The last one matters most: a declared setting is stored in both stores, drawn in the mod's
 own window, reachable from the app drawer, and announced to the mod when it changes. A
@@ -162,8 +164,7 @@ about. `ACEUIModLoader.input` does that:
 const release = ACEUIModLoader.input.bindFocus(myTextBox, "mymod");     // a text box
 const release = ACEUIModLoader.input.bindClickFocus(myPanel, "mymod"); // click to focus
 ACEUIModLoader.input.capture("mymod");        // or by hand (DOOM does this while open)
-ACEUIModLoader.input.release("mymod");
-ACEUIModLoader.input.releaseAll("mymod");     // in detach
+ACEUIModLoader.input.release("mymod");        // and in detach
 ```
 
 `UIMenuState` carries **two** flags and both are needed:
@@ -235,17 +236,17 @@ frame loop and its sounds. With a detach the loader stops the mod through it, an
 switched off at startup is never attached at all. A mod that supplies no detach is only
 hidden, which is all the drawer can do for it.
 
+Each row's OPTIONS button opens whatever that mod registered:
+
 ```js
-ACEUIModLoader.drawer.registerOptions("telemetry", function (pane) {
-    pane.appendChild(myControls);     // called once, lazily, the first time it is opened
-});
+ACEUIModLoader.drawer.registerOpener("telemetry", function () { myWindow.open(); });
 ```
 
-If that callback throws, the failure is shown inside the pane and the rest of the drawer
-keeps working.
+Declaring settings does this for you, so most mods never call it. If the opener throws,
+the failure is logged and the rest of the drawer keeps working.
 
 API: `open()`, `close()`, `toggle()`, `isVisible(name)`, `setVisible(name, on)`,
-`toggleApp(name)`, `registerOptions(name, render)`, `build(mods)`.
+`toggleApp(name)`, `registerOpener(name, open)`, `build(mods)`.
 
 The drawer is styled with inline styles rather than a stylesheet: the loader ships as a
 single overriding file inside a package whose layout is delicate, so adding a CSS file to
@@ -318,10 +319,38 @@ the mod being loaded, and `ACEUIModLoader.mod("<name>")` does so at any time:
 | `log`, `prefix` | a logger writing `[Title] ...` |
 | `hudId`, `storageKey`, `key(suffix)` | `hud_<name>`, `ace<name>.pos`, `ace<name>.<suffix>`: the HUD layout id and storage keys for `ACEUIModLoader.panel` / `.persist` |
 | `base`, `loaded` | the mod folder's URL; whether this loader instance loaded it |
-| `mount(attach)` | calls `attach(#<name>)` once the DOM has the root (now or on DOMContentLoaded), once per root: the whole boot code of a mod is `ACEUIModLoader.mod("x").mount(X.attach);` |
+| `panel(root, onFrame)` | the whole widget lifecycle: a draggable panel that remembers its position plus the frame loop that drives it. Returns a handle with `panel`, `loop` and `stop()` (safe to call twice) |
+| `recall(key, fallback)`, `remember(key, value)`, `forget(key)` | a small value under the mod's own key, for state that must survive the HUD reload on Escape/resume |
+| `mount(attach, detach)` | calls `attach(#<name>)` once the DOM has the root (now or on DOMContentLoaded), once per root, and logs the mod's script-loaded line. Passing `detach` is what lets the app drawer really stop the mod |
 
-So a mod's script declares none of that itself. Everything the loader logs
-starts with `[ACEUIModLoader]` and lands in the game log as `[gameface]` lines.
+So a mod's script declares none of that itself, and a widget's whole lifecycle is:
+
+```js
+const me = ACEUIModLoader.mod("mymod");
+
+const attach = function (root) {
+    const state = create(root);
+
+    state.ui = me.panel(root, function (now) { tick(state, now); });   // panel + frame loop
+
+    return state;
+};
+
+const detach = function (state) {
+    state.ui.stop();                  // stops the loop and releases the panel's listeners
+};
+
+me.mount(attach, detach);
+```
+
+`me.panel` owns two rules that used to be every mod's to remember, and that fail
+quietly when they are not: the panel must be ticked every frame until its stored
+position settles (miss it and the widget never returns to where the player left it),
+and the frame loop must be stopped in `detach` (miss it and a mod switched off in the
+app drawer keeps running for ever).
+
+Everything the loader logs starts with `[ACEUIModLoader]` and lands in the game log as
+`[gameface]` lines; each mod's own lines start with its `[Title]`.
 
 ## The library (`ACEUIModLoader.*`)
 

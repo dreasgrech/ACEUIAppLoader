@@ -26,11 +26,11 @@
  *     const release = ACEUIModLoader.input.bindFocus(myInput, "mymod");       // a text box
  *     const release = ACEUIModLoader.input.bindClickFocus(myPanel, "mymod");  // click to focus
  *     ACEUIModLoader.input.capture("mymod");                             // or by hand
- *     ACEUIModLoader.input.release("mymod");
- *     ACEUIModLoader.input.releaseAll("mymod");                          // on detach
+ *     ACEUIModLoader.input.release("mymod");                             // and in detach
  *
  * Releasing matters more than capturing: a mod that keeps the capture after it is gone
- * leaves the car unable to read its own controls, so call `releaseAll(owner)` in detach.
+ * leaves the car unable to read its own controls, so call `release(owner)` in detach --
+ * or use the unbind function `bindFocus`/`bindClickFocus` hand back, which does it.
  */
 ACEUIModLoader.input = (function () {
 
@@ -140,11 +140,6 @@ ACEUIModLoader.input = (function () {
         if (state.count === 0) { apply(false); }
 
         return isCaptured();
-    };
-
-    /** Release `owner` whatever it thought it held; for detach paths. */
-    const releaseAll = function (owner) {
-        return release(owner);
     };
 
     /**
@@ -316,7 +311,6 @@ ACEUIModLoader.input = (function () {
         holders: holders,
         capture: capture,
         release: release,
-        releaseAll: releaseAll,
         releaseEverything: releaseEverything,
         RELEASE_ACTIONS: RELEASE_ACTIONS,
         onAction: onAction,
