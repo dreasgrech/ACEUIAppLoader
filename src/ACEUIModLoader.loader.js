@@ -279,6 +279,11 @@ ACEUIModLoader.loader = (function () {
         root.setAttribute(MOD_ATTR, name);
         container.appendChild(root);
 
+        // A mod switched off in the app drawer must be hidden the moment its root exists,
+        // not when the drawer is built: the drawer builds on ready(), which fires only
+        // after every mod has loaded, so the app would flash on for that whole time.
+        if (ACEUIModLoader.drawer) { ACEUIModLoader.drawer.applyStored(name); }
+
         return root;
     };
 

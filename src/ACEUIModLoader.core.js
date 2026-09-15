@@ -13,7 +13,7 @@
 const ACEUIModLoader = (function () {
 
     /** Loader/library version -- keep in step with the VERSION file at the repo root. */
-    const VERSION = "0.5.0";
+    const VERSION = "0.5.1";
 
     /** Prefix of every loader log line; the game log and check_ingame_log.py grep for it. */
     const LOG_PREFIX = "[ACEUIModLoader]";

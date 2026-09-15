@@ -99,6 +99,19 @@ class LibrarySourceTests(unittest.TestCase):
         for name in ("MAX_ENTRIES", "LEVELS", "entries", "clear", "capture", "subscribe", "listenerCount", "format"):
             self.assertRegex(js, rf"\n\s+{name}: [A-Za-z_.]+,?\n", f"console.{name} not exported")
 
+    def test_mod_roots_are_hidden_at_creation_when_switched_off(self):
+        # the drawer builds on ready(), which fires only after every mod has loaded, so a
+        # switched-off app stayed visible for that whole window and appeared to flash on
+        # and off again after a pause-menu reload
+        js = self.files["ACEUIModLoader.loader.js"]
+        self.assertIn("if (ACEUIModLoader.drawer) { ACEUIModLoader.drawer.applyStored(name); }", js,
+                      "mountRoot must apply the saved switch as soon as it creates the root")
+        self.assertLess(js.find("ACEUIModLoader.drawer.applyStored(name)"), js.find("return root;"),
+                        "applied before the root is handed back and the mod's scripts run")
+        drawer = self.files["ACEUIModLoader.drawer.js"]
+        self.assertIn("loadStored();", drawer, "the saved switches are read as the library loads")
+        self.assertIn("applyStored: applyStored,", drawer, "and exported for the loader to call")
+
     def test_panel_contract(self):
         js = self.files["ACEUIModLoader.panel.js"]
         self.assertIn('const NO_DRAG_ATTR = "data-nodrag";', js)

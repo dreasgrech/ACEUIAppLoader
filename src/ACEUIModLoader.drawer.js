@@ -72,6 +72,19 @@ ACEUIModLoader.drawer = (function () {
 
     const persist = ACEUIModLoader.persist;
 
+    /**
+     * Read the saved switches immediately, while the library is still loading and before
+     * any mod root exists, so applyStored() can hide a switched-off mod the moment the
+     * loader creates it. build() re-reads from the same store later; nothing is lost.
+     */
+    const loadStored = function () {
+        const stored = persist.readLocal(STORE_KEY);
+
+        if (stored) { state.visible = stored; }
+    };
+
+    loadStored();
+
     // ---- tiny DOM helpers ----------------------------------------------------------
 
     const css = function (node, props) {
@@ -112,6 +125,18 @@ ACEUIModLoader.drawer = (function () {
         if (root) { root.style.display = on ? "" : "none"; }
 
         return on;
+    };
+
+    /**
+     * Called by the loader the instant it creates a mod's root, before the mod's scripts
+     * run. Without this a switched-off mod is visible from the moment its root exists
+     * until the drawer is built -- and the drawer is built on ACEUIModLoader.ready, which
+     * only fires once *every* mod has finished loading. With a large mod in the queue
+     * that is about a second of the app flashing on and then vanishing again after a
+     * pause-menu reload, which is exactly what it looked like.
+     */
+    const applyStored = function (name) {
+        return applyVisibility(name);
     };
 
     const paintSwitch = function (app) {
@@ -405,6 +430,7 @@ ACEUIModLoader.drawer = (function () {
         close: close,
         toggle: toggle,
         isVisible: isVisible,
+        applyStored: applyStored,
         setVisible: setVisible,
         toggleApp: toggleApp,
         registerOptions: registerOptions

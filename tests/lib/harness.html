@@ -440,6 +440,27 @@ document.addEventListener("DOMContentLoaded", function () {
             eq(d.isVisible("alpha"), true);
         });
 
+        t("drawer: a switched-off mod is hidden the instant its root is created, not when the drawer builds", function () {
+            const d = ACEUIModLoader.drawer;
+            /* The drawer builds on ready(), which fires only after EVERY mod has loaded, so
+               anything that waits for build() leaves a switched-off app visible for that
+               whole time -- about a second with a big mod in the queue, seen in game as the
+               app flashing on and then vanishing again after a pause-menu reload. */
+            d.setVisible("flashy", false);
+
+            const root = document.createElement("div");
+            root.id = "flashy";
+            document.getElementById("center").appendChild(root);
+            eq(root.style.display, "", "just created, nothing has hidden it yet");
+
+            d.applyStored("flashy");
+            eq(root.style.display, "none", "hidden immediately, without build() having run for it");
+
+            d.setVisible("flashy", true);
+            eq(root.style.display, "", "and switching it back on restores it");
+            root.parentNode.removeChild(root);
+        });
+
         t("drawer: a mod's options pane is built lazily, only when it is first opened", function () {
             const d = ACEUIModLoader.drawer;
             let built = 0;
