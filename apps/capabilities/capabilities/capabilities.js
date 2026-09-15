@@ -574,6 +574,71 @@ const CapabilitiesProbe = (function () {
         }
     };
 
+    /**
+     * The other half of the network question: an XHR to a real TCP address. XHR to
+     * `coui://` is proven (the stock UI loads templates that way), but that is the
+     * resource-request callback, not a socket. This goes to the same loopback port
+     * `tools/ws_echo.py` listens on, which answers plain HTTP with a 200 as well as
+     * doing WebSocket handshakes -- so the listener's terminal says whether the request
+     * ever left the page, exactly as it does for the socket probe.
+     */
+    const xhrConnectProbe = function (setResult) {
+        const XHR = window.XMLHttpRequest;
+
+        if (typeof XHR !== "function") { setResult(NO, "no XMLHttpRequest"); return; }
+
+        let settled = false;
+        let req = null;
+
+        const finishProbe = function (status, detail) {
+            if (settled) { return; }
+
+            settled = true;
+
+            if (req && typeof req.abort === "function") {
+                try { req.abort(); } catch (e) { log("xhr abort threw: " + (e && e.message || e)); }
+            }
+
+            setResult(status, detail);
+        };
+
+        const timer = window.setTimeout ? window.setTimeout(function () { finishProbe(WARN, "no response in 3s (inconclusive)"); }, 3000) : 0;
+        const clear = function () { if (timer && window.clearTimeout) { window.clearTimeout(timer); } };
+
+        try {
+            // slashes from char codes so the linter's comment-stripper does not eat the line
+            const url = "http:" + String.fromCharCode(47, 47) + "127.0.0.1:47800/probe";
+
+            req = new XHR();
+            req.open("GET", url, true);
+
+            // An onload alone proves nothing: Cohtml routes EVERY url through the host
+            // resource-request callback, so a miss there calls back with a 404 that
+            // looks exactly like a real HTTP reply. Only a 200 carrying the listener's
+            // own marker proves the request actually reached the network.
+            req.onload = function () {
+                const body = String(req.responseText || "");
+                const fromListener = body.indexOf("ws_echo") >= 0;
+                const detail = fromListener
+                    ? "200 from the listener -- a network XHR really works"
+                    : "status " + req.status + ", " + body.length + " chars, not the listener -- the host resource manager answered; the request never reached the network";
+
+                clear();
+                finishProbe(fromListener && req.status === 200 ? YES : NO, detail);
+            };
+
+            req.onerror = function () {
+                clear();
+                finishProbe(PARTIAL, "error event -- check the listener terminal: a logged request means it left the page");
+            };
+
+            req.send(null);
+        } catch (e) {
+            clear();
+            finishProbe(NO, "threw: " + (e && e.message || e));
+        }
+    };
+
     // ---- the battery ---------------------------------------------------------------
 
     const CATEGORIES = [
@@ -639,7 +704,8 @@ const CapabilitiesProbe = (function () {
             p("WebTransport", "WebTransport"),
             p("navigator.onLine", "navigator.onLine"),
             active("fetch(data:) round-trip", "probing data: URI...", fetchDataProbe),
-            active("WebSocket connect (loopback)", "opening ws to 127.0.0.1...", socketConnectProbe)
+            active("WebSocket connect (loopback)", "opening ws to 127.0.0.1...", socketConnectProbe),
+            active("XHR to a network host (loopback)", "GET to 127.0.0.1...", xhrConnectProbe)
         ] },
         { cat: "Graphics & pixel path", checks: [
             f("canvas 2d context", canvas2d),
