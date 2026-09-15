@@ -473,12 +473,66 @@ const DevConsole = (function () {
 
     // ---- state changes -----------------------------------------------------------------
 
+    /**
+     * While a text box here has focus the game must stop reading keystrokes as car
+     * controls, or typing an expression toggles headlights, wipers and everything else
+     * bound to a letter.
+     *
+     * The stock chat box has the same problem and solves it by flipping
+     * `ModelMenuState.is_chat_active` and pushing the menu state back to the engine
+     * (`ksUI.menuState.toggleKeyboardInput` -> `save()` ->
+     * `triggerUICommand("UIMenuState", ...)`; components.js:4056 and 35038). We use that
+     * same path rather than inventing one -- it is what the engine already listens to.
+     *
+     * Releasing matters more than taking: a console left holding the capture would leave
+     * the car deaf to its own controls, so blur, close and detach all release it.
+     */
+    const callMenuState = function (menu, method, want) {
+        if (typeof menu[method] !== "function") { return false; }
+
+        try {
+            menu[method](want);
+
+            return true;
+        } catch (e) {
+            log(method + "(" + want + ") failed: " + (e && e.message ? e.message : e));
+
+            return false;
+        }
+    };
+
+    const captureKeyboard = function (on) {
+        const menu = window.ksUI && window.ksUI.menuState;
+        const want = Boolean(on);
+        let taken = 0;
+
+        if (!menu) { return false; }
+
+        // the text path: letters, what the stock chat box flips (is_chat_active)
+        if (callMenuState(menu, "toggleKeyboardInput", want)) { taken += 1; }
+
+        // bound gameplay actions: with only the flag above, the arrow keys still moved the
+        // seat while typing (ignore_gameplay_input_actions, UIMenuState field 7)
+        if (callMenuState(menu, "ignoreInputActions", want)) { taken += 1; }
+
+        return taken > 0;
+    };
+
     const setOpen = function (state, open) {
         state.open = open;
         setClass(state.root, CLASS.closed, !open);
         persist.writeLocal(OPEN_KEY, open);
 
-        if (open) { state.dirty = true; }
+        if (open) {
+            state.dirty = true;
+
+            return;
+        }
+
+        // closing while typing must not leave the game unable to read its own controls
+        state.input.blur();
+        state.search.blur();
+        captureKeyboard(false);
     };
 
     const setFilter = function (state, id, on) {
@@ -1232,7 +1286,9 @@ const DevConsole = (function () {
             thumbMove: function (e) { onThumbMove(state, e); },
             thumbUp: function () { onThumbUp(state); },
             searchChange: function () { onSearchChange(state); },
-            searchKey: function (e) { onSearchKey(state, e); }
+            searchKey: function (e) { onSearchKey(state, e); },
+            grabKeys: function () { captureKeyboard(true); },
+            releaseKeys: function () { captureKeyboard(false); }
         };
         window.addEventListener("keydown", state.handlers.key);
         state.input.addEventListener("keydown", state.handlers.inputKey);
@@ -1242,6 +1298,10 @@ const DevConsole = (function () {
         state.search.addEventListener("input", state.handlers.searchChange);
         state.search.addEventListener("keyup", state.handlers.searchChange);
         state.search.addEventListener("keydown", state.handlers.searchKey);
+        state.input.addEventListener("focus", state.handlers.grabKeys);
+        state.input.addEventListener("blur", state.handlers.releaseKeys);
+        state.search.addEventListener("focus", state.handlers.grabKeys);
+        state.search.addEventListener("blur", state.handlers.releaseKeys);
 
         state.open = storedOpen === null ? true : Boolean(storedOpen);
         setClass(root, CLASS.closed, !state.open);
@@ -1275,6 +1335,11 @@ const DevConsole = (function () {
             state.search.removeEventListener("input", state.handlers.searchChange);
             state.search.removeEventListener("keyup", state.handlers.searchChange);
             state.search.removeEventListener("keydown", state.handlers.searchKey);
+            state.input.removeEventListener("focus", state.handlers.grabKeys);
+            state.input.removeEventListener("blur", state.handlers.releaseKeys);
+            state.search.removeEventListener("focus", state.handlers.grabKeys);
+            state.search.removeEventListener("blur", state.handlers.releaseKeys);
+            captureKeyboard(false);          // never leave the game's controls captured
             onThumbUp(state);
             state.handlers = null;
         }
@@ -1307,6 +1372,7 @@ const DevConsole = (function () {
         create: create,
         render: render,
         evaluate: evaluate,
+        captureKeyboard: captureKeyboard,
         setOpen: setOpen,
         setFilter: setFilter,
         setFollow: setFollow,

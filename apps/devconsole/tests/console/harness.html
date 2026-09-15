@@ -452,6 +452,55 @@ console.warn("early warning");
         }
     });
 
+    t("prompt: focusing a text box stops the game reading keys as car controls, and always releases", function () {
+        /* Typing an expression used to toggle headlights, wipers and anything else bound
+           to a letter. The stock chat box solves it by flipping ModelMenuState.is_chat_active
+           and pushing the menu state back to the engine; ksUI.menuState.toggleKeyboardInput
+           is that path, so we take the same one. */
+        const calls = [];
+        const actions = [];
+        window.ksUI = { menuState: {
+            toggleKeyboardInput: function (on) { calls.push(on); },
+            ignoreInputActions: function (on) { actions.push(on); }
+        } };
+        state = DevConsole.attach(root);
+        const search = root.querySelector(".dc-search");
+
+        input.dispatchEvent(new Event("focus"));
+        eq(calls.pop(), true, "captured while the prompt has focus");
+        /* is_chat_active alone was not enough: the arrow keys still moved the seat, so the
+           bound gameplay actions have to be suppressed as well */
+        eq(actions.pop(), true, "bound gameplay actions suppressed too");
+        input.dispatchEvent(new Event("blur"));
+        eq(calls.pop(), false, "released on blur");
+        eq(actions.pop(), false, "and the actions released with it");
+
+        search.dispatchEvent(new Event("focus"));
+        eq(calls.pop(), true, "the filter box captures too");
+        search.dispatchEvent(new Event("blur"));
+        eq(calls.pop(), false, "and releases");
+
+        /* Releasing matters more than capturing: a console still holding it would leave
+           the car unable to read its own controls. */
+        input.dispatchEvent(new Event("focus"));
+        calls.length = 0;
+        DevConsole.setOpen(state, false);
+        ok(calls.indexOf(false) >= 0, "closing the console releases it");
+
+        DevConsole.setOpen(state, true);
+        input.dispatchEvent(new Event("focus"));
+        calls.length = 0;
+        DevConsole.detach(state);
+        ok(calls.indexOf(false) >= 0, "detaching releases it");
+
+        /* an engine that offers only one of the two still gets what it has */
+        window.ksUI = { menuState: { toggleKeyboardInput: function (on) { calls.push(on); } } };
+        eq(DevConsole.captureKeyboard(true), true, "one lever is enough to count as captured");
+
+        delete window.ksUI;
+        eq(DevConsole.captureKeyboard(true), false, "outside the game there is nothing to capture, and it says so");
+    });
+
     t("prompt: .run refuses anything but a plain name, unknown commands print the list, a good name adds the script", function () {
         state = DevConsole.attach(root);
         input.value = ".run ../x"; key(input, { key: "Enter" }); nextFrame();

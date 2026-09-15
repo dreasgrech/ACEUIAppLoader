@@ -19,6 +19,32 @@ and filters. Everything learned about the game and its UI engine is in
 and the tests load the library and the shared test fixtures from
 `../ACEUIModLoader/`.
 
+## Typing does not drive the car
+
+While the prompt or the filter box has focus, the game stops reading keystrokes as car
+controls — otherwise typing an expression toggles headlights, wipers and everything else
+bound to a letter.
+
+This uses the game's own mechanisms rather than new ones. `UIMenuState` carries two
+separate flags, and **both** are needed:
+
+| method on `ksUI.menuState` | flag | covers |
+|---|---|---|
+| `toggleKeyboardInput` | `is_chat_active` (field 10) | the text path — letters |
+| `ignoreInputActions` | `ignore_gameplay_input_actions` (field 7) | bound gameplay actions |
+
+The stock chat box (`components.js:35038`) only flips the first, which is why letters
+stopped toggling car functions but the **arrow keys still moved the seat**. Both are set
+on focus and cleared on blur; either one alone counts as captured, so an engine that
+offers only one still gets what it has. Both implementations are at `components.js:4033`
+and `4056`, and the menu state is pushed back with
+`triggerUICommand("UIMenuState", ...)`.
+
+Releasing it matters more than taking it — a console still holding the capture would
+leave the car unable to read its own controls — so it is released on blur, when the
+console is closed, and when the mod is detached (including being switched off in the app
+drawer).
+
 ## Commands
 
 Type a dot and a word at the prompt; they never collide with JavaScript (`.5 + 1` still
