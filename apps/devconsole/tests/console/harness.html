@@ -324,11 +324,21 @@ console.warn("early warning");
         eq(search.value, "", "Escape clears"); eq(state.query, ""); ok(texts(root).length > 2, "all lines back");
     });
 
+    t("scale set from the settings window moves the panel, and the panel's buttons write back", function () {
+        /* one source of truth: the -/+ buttons and the settings window are two views of
+           the same stored value, not two copies of it */
+        ACEUIModLoader.settings.set("devconsole", "scale", 1.4);
+        eq(state.scale, 1.4, "changing the setting scales the panel");
+        eq(root.style.fontSize, "1.4rem");
+        ACEUIModLoader.settings.set("devconsole", "scale", 1);
+        eq(state.scale, 1, "and back");
+    });
+
     t("- and + scale the whole panel in steps, clamped, persisted and restored; the thumb is re-applied", function () {
         eq(state.scale, 1); eq(root.style.fontSize, "1rem", "root font-size drives every em inside");
         const w = root.offsetWidth; const rowH = visibleRows(root)[0].offsetHeight;
         root.querySelector('[data-action="larger"]').dispatchEvent(new MouseEvent("click", { bubbles: true }));
-        eq(state.scale, 1.1); eq(root.style.fontSize, "1.1rem"); eq(localStorage.getItem(me.key("scale")), "1.1", "persisted");
+        eq(state.scale, 1.1); eq(root.style.fontSize, "1.1rem"); eq(ACEUIModLoader.settings.get("devconsole", "scale"), 1.1, "persisted through the settings store");
         ok(root.offsetWidth > w, "panel wider"); ok(visibleRows(root)[0].offsetHeight > rowH, "rows taller");
         eq(state.thumbHeight, -1, "thumb geometry invalidated"); nextFrame(); ok(state.thumbHeight > 0, "thumb re-applied");
         let i; for (i = 0; i < 30; i += 1) { root.querySelector('[data-action="smaller"]').dispatchEvent(new MouseEvent("click", { bubbles: true })); }

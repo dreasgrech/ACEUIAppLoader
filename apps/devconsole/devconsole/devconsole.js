@@ -74,22 +74,6 @@ const DevConsole = (function () {
     const COMPLETE_KEY = "Tab";
     const KEY_CODES = { Backquote: 192, Enter: 13, ArrowUp: 38, ArrowDown: 40, Escape: 27, Tab: 9 };
 
-    /**
-     * Settings, drawn by the loader in the app drawer's options pane. The toggle key is
-     * here because a hardcoded hotkey collides with whatever the player has bound in the
-     * game; this lets them move ours rather than lose theirs.
-     */
-    const options = ACEUIModLoader.settings
-        ? ACEUIModLoader.settings.define("devconsole", [
-            {
-                key: "toggleKey",
-                type: "key",
-                label: "Toggle key",
-                value: TOGGLE_CODE,
-                hint: "Click, then press the key you want"
-            }
-        ])
-        : { toggleKey: TOGGLE_CODE };
 
     /**
      * Printing a value. A game model is a wall of fields, so a result is expanded over
@@ -149,6 +133,15 @@ const DevConsole = (function () {
 
     /** Panel scale: the root's font-size in rem; everything inside is sized in em. */
     const SCALE_KEY = me.key("scale");
+    /**
+     * The scale lived under its own key before it was a setting. Seed the setting's
+     * default from it so upgrading does not silently reset a panel someone had sized.
+     */
+    const scaleWas = function () {
+        const was = ACEUIModLoader.persist.readLocal(SCALE_KEY);
+
+        return typeof was === "number" ? was : SCALE_DEFAULT;
+    };
     const SCALE_DEFAULT = 1;
     const SCALE_MIN = 0.6;
     const SCALE_MAX = 2;
@@ -156,6 +149,33 @@ const DevConsole = (function () {
     const SCALE_DIGITS = 2;
     const SMALLER_TEXT = "−";
     const LARGER_TEXT = "+";
+
+    /**
+     * Settings, drawn by the loader in the app drawer's options pane. The toggle key is
+     * here because a hardcoded hotkey collides with whatever the player has bound in the
+     * game; this lets them move ours rather than lose theirs.
+     */
+    const options = ACEUIModLoader.settings
+        ? ACEUIModLoader.settings.define("devconsole", [
+            {
+                key: "toggleKey",
+                type: "key",
+                label: "Toggle key",
+                value: TOGGLE_CODE,
+                hint: "Click, then press the key you want"
+            },
+            {
+                key: "scale",
+                type: "range",
+                label: "Panel scale",
+                value: scaleWas(),
+                min: SCALE_MIN,
+                max: SCALE_MAX,
+                step: SCALE_STEP,
+                digits: SCALE_DIGITS
+            }
+        ])
+        : { toggleKey: TOGGLE_CODE, scale: scaleWas() };
 
     /** Class names shared with devconsole.css. */
     const CLASS = {
@@ -396,6 +416,7 @@ const DevConsole = (function () {
             completePartial: "",        // the text the next completion replaces
             completeSource: "",         // the prompt text we last produced, to spot edits
             unsubscribe: null,
+            unsubscribeSettings: null,
             handlers: null,
             panel: null,                // ACEUIModLoader.panel state (drag + position)
             loop: null                  // ACEUIModLoader.loop handle
@@ -554,7 +575,13 @@ const DevConsole = (function () {
 
         state.scale = value;
         state.root.style.fontSize = value + "rem";
-        persist.writeLocal(SCALE_KEY, value);
+
+        if (ACEUIModLoader.settings) {
+            ACEUIModLoader.settings.set(me.name, "scale", value);
+        } else {
+            persist.writeLocal(SCALE_KEY, value);
+        }
+
         state.thumbHeight = -1;         // geometry changed: re-apply the thumb on the next render
         state.thumbY = -1;
         state.dirty = true;
@@ -1288,7 +1315,9 @@ const DevConsole = (function () {
     const attach = function (root) {
         const state = create(root);
         const storedOpen = persist.readLocal(OPEN_KEY);
-        const storedScale = persist.readLocal(SCALE_KEY);
+        const storedScale = ACEUIModLoader.settings
+            ? ACEUIModLoader.settings.get(me.name, "scale")
+            : persist.readLocal(SCALE_KEY);
 
         state.handlers = {
             key: function (e) { onWindowKey(state, e); },
@@ -1320,6 +1349,12 @@ const DevConsole = (function () {
         setClass(root, CLASS.closed, !state.open);
         setScale(state, typeof storedScale === "number" ? storedScale : SCALE_DEFAULT);
 
+        if (ACEUIModLoader.settings) {
+            state.unsubscribeSettings = ACEUIModLoader.settings.onChange(me.name, function (key, value) {
+                if (key === "scale" && value !== state.scale) { setScale(state, value); }
+            });
+        }
+
         state.panel = ACEUIModLoader.panel.attach(root, { hudId: me.hudId, storageKey: me.storageKey, log: log });
         state.unsubscribe = lines.subscribe(function () { state.dirty = true; });
         state.loop = ACEUIModLoader.loop.start(function (now) { tick(state, now); });
@@ -1337,6 +1372,11 @@ const DevConsole = (function () {
         if (state.unsubscribe) {
             state.unsubscribe();
             state.unsubscribe = null;
+        }
+
+        if (state.unsubscribeSettings) {
+            state.unsubscribeSettings();
+            state.unsubscribeSettings = null;
         }
 
         if (state.handlers) {
