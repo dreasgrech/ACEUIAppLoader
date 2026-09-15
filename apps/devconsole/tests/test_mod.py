@@ -29,7 +29,7 @@ class ConsoleContractTests(unittest.TestCase):
     def test_rows_are_a_fixed_pool(self):
         self.assertEqual(self.js.count("root.innerHTML = markup()"), 1, "markup built once, at attach")
         self.assertIn("if (row.seq === entry.seq) { return; }", self.js, "unchanged rows are skipped")
-        self.assertIn("if (!state.open || !state.dirty || ACEUIModLoader.hudHidden()) { return; }", self.js, "render only when dirty")
+        self.assertIn("if (!state.dirty || ACEUIModLoader.hudHidden()) { return; }", self.js, "render only when dirty")
 
     def test_keys_go_through_the_library_rather_than_a_private_table(self):
         """The engine reports legacy keyCode only (the stock bundle checks `keyCode == 13`)
@@ -45,13 +45,15 @@ class ConsoleContractTests(unittest.TestCase):
     def test_scrolling_and_the_toggle_key_come_from_the_library(self):
         """Cohtml does not scroll an overflowing box and reports the wheel with the
         opposite sign to a browser; the capabilities probe needed the same behaviour, so
-        it is ACEUIModLoader.scroll's now. The toggle key binds through the library too,
+        it is ACEUIModLoader.scroll's now. The toggle key binds through the loader,
         which is what keeps it from firing while the player is typing."""
         self.assertIn("const scrolling = ACEUIModLoader.scroll;", self.js)
         self.assertIn("scrolling.attach({", self.js, "the scrollbar is the library's")
         self.assertNotIn("const WHEEL_SIGN", self.js, "no private wheel handling")
         self.assertNotIn("const syncScrollbar", self.js, "no private thumb geometry")
-        self.assertIn("keys.bind(toggleKey,", self.js, "the hotkey binds through the library")
+        self.assertIn('ACEUIModLoader.mod("devconsole").toggle(DevConsole.toggleKey);', self.js,
+                      "the hotkey is the loader's, so it still works once the app is switched off")
+        self.assertNotIn("state.unbindToggle", self.js, "and the panel no longer holds one of its own")
         self.assertNotIn("isToggleKey", self.js, "no private hotkey matching")
 
     def test_every_listener_it_adds_goes_into_one_bag(self):

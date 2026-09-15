@@ -74,7 +74,7 @@ console.warn("early warning");
         eq(root.querySelector(".dc-scrollbar").getAttribute("data-nodrag"), "", "scrollbar does not drag the panel");
         ok(root.querySelector(".dc-follow").classList.contains("dc-hidden"), "follow chip hidden while following");
         eq(root.querySelector('[data-action="close"]').textContent, "×", "close glyph");
-        eq(state.open, true, "open by default"); ok(!root.classList.contains("dc-closed"));
+        eq(ACEUIModLoader.drawer.isVisible("devconsole"), true, "on by default");
         eq(state.ui.panel.hudId, me.hudId); eq(state.ui.panel.storageKey, me.storageKey);
         eq(root.style.visibility, "hidden", "hidden until positioned"); ok(state.ui.loop.running, "loop running");
         eq(getComputedStyle(root).position, "absolute", "stylesheet applied");
@@ -224,8 +224,10 @@ console.warn("early warning");
         eq(texts(root).pop(), "42", "Enter by keyCode");
         key(input, { keyCode: 38 }); eq(input.value, "2 * 21", "ArrowUp by keyCode");
         key(input, { keyCode: 40 }); eq(input.value, "", "ArrowDown by keyCode");
-        key(window, { keyCode: 192 }); eq(state.open, false, "toggle by keyCode");
-        key(window, { keyCode: 192 }); eq(state.open, true);
+        key(window, { keyCode: 192 });
+        eq(ACEUIModLoader.drawer.isVisible("devconsole"), false, "toggle by keyCode");
+        key(window, { keyCode: 192 });
+        eq(ACEUIModLoader.drawer.isVisible("devconsole"), true, "and back by keyCode");
         eq(DevConsole.KEY_CODES.Enter, 13);
     });
 
@@ -317,7 +319,8 @@ console.warn("early warning");
         search.value = "NEEDLE"; search.dispatchEvent(new Event("input", { bubbles: true })); nextFrame();
         eq(texts(root).join("|"), "Needle in the haystack", "only the match is shown");
         eq(root.querySelector('[data-filter="log"] .dc-count').textContent, logCount, "counts are the buffer's");
-        key(search, { code: "Backquote", key: "`" }); eq(state.open, true, "backquote in the filter field does not toggle");
+        key(search, { code: "Backquote", key: "`" });
+        eq(ACEUIModLoader.drawer.isVisible("devconsole"), true, "backquote in the filter field does not toggle");
         search.value = "nomatchxyz"; search.dispatchEvent(new Event("keyup", { bubbles: true })); nextFrame();
         eq(visibleRows(root).length, 0, "no match, nothing shown"); ok(track.classList.contains("dc-nofit"), "no thumb when nothing is shown");
         key(search, { key: "Escape" }); nextFrame();
@@ -362,29 +365,30 @@ console.warn("early warning");
         ok(atBottom(), "at the bottom"); eq(state.follow, true);
     });
 
-    t("toggle key closes and opens, persists, is ignored while typing in the prompt; the x button closes", function () {
+    /* Closing used to hide the root and leave the drawer saying the console was on, which
+       is the one place in the UI you can get an app back from. Both the key and the x now
+       switch the app off, and the key is the loader's so it still works once it is off. */
+    t("the toggle key and the x switch the app off, where the drawer can see it", function () {
+        const drawer = ACEUIModLoader.drawer;
+
         key(window, { code: "Backquote", key: "`" });
-        eq(state.open, false); ok(root.classList.contains("dc-closed")); eq(localStorage.getItem(me.key("open")), "false");
-        console.log("while closed"); nextFrame();
-        eq(state.dirty, true, "no render while closed");
+        eq(drawer.isVisible("devconsole"), false, "off in the drawer");
+
         key(window, { code: "Backquote", key: "`" });
-        eq(state.open, true); ok(!root.classList.contains("dc-closed")); nextFrame(); eq(state.dirty, false, "rendered once open");
-        eq(texts(root).pop(), "while closed");
+        eq(drawer.isVisible("devconsole"), true, "the same key brings it back while it is off");
+
         key(input, { code: "Backquote", key: "`" });
-        eq(state.open, true, "typing a backquote in the prompt does not toggle");
+        eq(drawer.isVisible("devconsole"), true, "typing a backquote in the prompt does not toggle");
+
         root.querySelector('[data-action="close"]').dispatchEvent(new MouseEvent("click", { bubbles: true }));
-        eq(state.open, false, "x closes"); DevConsole.setOpen(state, true);
+        eq(drawer.isVisible("devconsole"), false, "x closes");
+        ACEUIModLoader.mod("devconsole").show(true);
     });
 
-    t("hidden HUD skips rendering; stored open state is honoured on attach", function () {
+    t("a hidden HUD skips rendering", function () {
         document.body.classList.add(ACEUIModLoader.HUD_HIDDEN_CLASS);
         console.log("hud hidden line"); nextFrame(); eq(state.dirty, true, "not rendered while the HUD is hidden");
         document.body.classList.remove(ACEUIModLoader.HUD_HIDDEN_CLASS); nextFrame(); eq(state.dirty, false);
-        localStorage.setItem(me.key("open"), "false");
-        const root2 = document.createElement("div"); center.appendChild(root2);
-        const state2 = DevConsole.attach(root2);
-        eq(state2.open, false, "restored closed"); ok(root2.classList.contains("dc-closed"));
-        DevConsole.detach(state2); root2.remove(); localStorage.removeItem(me.key("open"));
     });
 
     t("mousedown on the prompt or a button does not drag; on the header it does and saves under the mod's keys", function () {
@@ -408,8 +412,8 @@ console.warn("early warning");
         const follow = state.follow; wheelUp(); eq(state.follow, follow, "wheel released");
         const search = root.querySelector(".dc-search"); search.value = "zzz"; search.dispatchEvent(new Event("input", { bubbles: true }));
         eq(state.query, "", "search released"); search.value = "";
-        const open = state.open;
-        key(window, { code: "Backquote", key: "`" }); eq(state.open, open, "toggle key released");
+        // the toggle key belongs to the loader rather than to this panel, so there is
+        // nothing here for detach to release: that is what makes it work once the app is off
         state.dirty = false;
         console.log("after detach"); eq(state.dirty, false, "no longer following the buffer");
         input.value = "1"; key(input, { key: "Enter" }); eq(input.value, "1", "prompt released");

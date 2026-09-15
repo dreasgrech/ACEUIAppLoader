@@ -5,12 +5,14 @@
  * stock bundle's own console.* output and uncaught errors) in a draggable panel,
  * with per-level filters, and runs JavaScript typed into its prompt against the
  * HUD page (e.g. `ModelCurrentCar.speed`, `ACEUIModLoader.mods`). Toggle with the
- * backquote key.
+ * backquote key, which the loader holds so that it works while the console is switched off.
  *
  * Built on the ACEUIModLoader library: `ACEUIModLoader.console` is the source of lines and
  * takes the prompt's echo/result lines, `ACEUIModLoader.panel` handles drag and position
- * persistence, `ACEUIModLoader.loop` the frame loop, `ACEUIModLoader.persist` the open state and
- * filter choices. Styling lives in devconsole.css.
+ * persistence, `ACEUIModLoader.loop` the frame loop, `ACEUIModLoader.persist` the filter
+ * choices. Being on or off is the app drawer's business: the x and the toggle key both go
+ * through `me.show`, the same call the drawer's own switch makes, so the drawer can always
+ * bring the console back. Styling lives in devconsole.css.
  *
  * Rendering rules (Cohtml): a fixed pool of MAX_ROWS row elements is created once;
  * a frame only rewrites `textContent`, one attribute and a class on rows whose
@@ -145,23 +147,14 @@ const DevConsole = (function () {
      * game; this lets them move ours rather than lose theirs.
      */
     const options = ACEUIModLoader.settings.define(me.name, [
-            {
-                key: "toggleKey",
-                type: "key",
-                label: "Toggle key",
-                value: TOGGLE_CODE,
-                hint: "Click, then press the key you want"
-            },
-            {
-                key: "scale",
-                type: "range",
-                label: "Panel scale",
-                value: scaleWas(),
-                min: SCALE_MIN,
-                max: SCALE_MAX,
-                step: SCALE_STEP,
-                digits: SCALE_DIGITS
-        }
+        {
+            key: "toggleKey",
+            type: "key",
+            label: "Toggle key",
+            value: TOGGLE_CODE,
+            hint: "Click, then press the key you want"
+        },
+        me.scaleSpec({ value: scaleWas(), min: SCALE_MIN, max: SCALE_MAX, step: SCALE_STEP })
     ]);
 
     /** Class names shared with devconsole.css. */
@@ -376,7 +369,8 @@ const DevConsole = (function () {
             input: root.querySelector("." + CLASS.input),
             search: root.querySelector("." + CLASS.search),
             query: "",                  // lower-cased text filter, "" for none
-            scale: SCALE_DEFAULT,       // root font-size in rem, see setScale
+            scale: SCALE_DEFAULT,       // mirrors me.scale's value, for the log and the tests
+            scaler: null,               // me.scale handle: the loader owns panel scaling
             follow: true,               // mirrors the scroller, for the LATEST chip and the tests
             scroller: null,             // ACEUIModLoader.scroll handle (wheel, thumb, follow)
             rows: toArray(root.querySelectorAll("." + CLASS.row)).map(function (row) {
@@ -384,7 +378,8 @@ const DevConsole = (function () {
             }),
             filters: filters,
             filterEls: filterEls,
-            open: true,
+            // there is no "open" any more: an attached console is a console that is switched
+            // on, and closing it switches it off through the drawer (see setOpen)
             dirty: true,                // something to render on the next frame
             history: [],
             historyIndex: 0,
@@ -396,8 +391,6 @@ const DevConsole = (function () {
             completePartial: "",        // the text the next completion replaces
             completeSource: "",         // the prompt text we last produced, to spot edits
             unsubscribe: null,
-            unsubscribeSettings: null,
-            unbindToggle: null,
             bag: null,                  // every listener this console added, for detach
             ui: null                    // me.panel handle: the panel and its frame loop
         };
@@ -483,10 +476,10 @@ const DevConsole = (function () {
 
     /** One animation frame: settle the position, then redraw if anything changed. */
     const tick = function (state, now) {
-        if (!state.open || !state.dirty || ACEUIModLoader.hudHidden()) { return; }
+        if (!state.dirty || ACEUIModLoader.hudHidden()) { return; }
 
         state.dirty = false;
-        render(state);
+        ACEUIModLoader.section("render rows", function () { render(state); });
     };
 
     // ---- state changes -----------------------------------------------------------------
@@ -519,21 +512,20 @@ const DevConsole = (function () {
         return input.available();
     };
 
+    /**
+     * Closing is switching the app off -- `me.show` is the call the drawer's own switch
+     * makes -- rather than hiding the root and leaving the drawer saying the console is on.
+     * The drawer is where anyone goes to get an app back, so that is the state it has to see.
+     */
     const setOpen = function (state, open) {
-        state.open = open;
-        setClass(state.root, CLASS.closed, !open);
-        me.remember("open", open);
-
-        if (open) {
-            state.dirty = true;
-
-            return;
+        if (!open) {
+            // closing while typing must not leave the game unable to read its own controls
+            state.input.blur();
+            state.search.blur();
+            captureKeyboard(false);
         }
 
-        // closing while typing must not leave the game unable to read its own controls
-        state.input.blur();
-        state.search.blur();
-        captureKeyboard(false);
+        return me.show(open);
     };
 
     const setFilter = function (state, id, on) {
@@ -550,18 +542,12 @@ const DevConsole = (function () {
     };
 
     /** Scale the whole panel: the root's font-size in rem, everything inside is em. Persisted. */
+    /**
+     * Scale the whole panel: one font-size in rem on the root, everything inside in em.
+     * The mechanics are `me.scale`'s -- DOOM, this and the profiler had each written them.
+     */
     const setScale = function (state, scale) {
-        const value = Number(clamp(scale, SCALE_MIN, SCALE_MAX).toFixed(SCALE_DIGITS));
-
-        state.scale = value;
-        state.root.style.fontSize = value + "rem";
-
-        ACEUIModLoader.settings.set(me.name, "scale", value);
-
-        // the panel's size changed, so the thumb's cached geometry is stale
-        if (state.scroller) { state.scroller.invalidate(); }
-
-        state.dirty = true;
+        return state.scaler.set(scale);
     };
 
     // ---- scrolling ------------------------------------------------------------------
@@ -1172,9 +1158,9 @@ const DevConsole = (function () {
 
         if (name === ACTION_FOLLOW) { setFollow(state, true); }
 
-        if (name === ACTION_SMALLER) { setScale(state, state.scale - SCALE_STEP); }
+        if (name === ACTION_SMALLER) { state.scaler.nudge(-1); }
 
-        if (name === ACTION_LARGER) { setScale(state, state.scale + SCALE_STEP); }
+        if (name === ACTION_LARGER) { state.scaler.nudge(1); }
     };
 
     // ---- lifecycle ---------------------------------------------------------------
@@ -1185,8 +1171,6 @@ const DevConsole = (function () {
      */
     const attach = function (root) {
         const state = create(root);
-        const storedOpen = me.recall("open", null);
-        const storedScale = ACEUIModLoader.settings.get(me.name, "scale");
 
         const grab = function () { captureKeyboard(true); };
         const release = function () { captureKeyboard(false); };
@@ -1213,22 +1197,24 @@ const DevConsole = (function () {
         state.bag.on(state.input, "blur", release);
         state.bag.on(state.search, "focus", grab);
         state.bag.on(state.search, "blur", release);
-        state.unbindToggle = keys.bind(toggleKey, function (e) {
-            setOpen(state, !state.open);
-            e.preventDefault();
+        state.scaler = me.scale(root, {
+            min: SCALE_MIN,
+            max: SCALE_MAX,
+            step: SCALE_STEP,
+            onScale: function (value) {
+                state.scale = value;
+
+                // the panel's size changed, so the thumb's cached geometry is stale
+                if (state.scroller) { state.scroller.invalidate(); }
+
+                state.dirty = true;
+            }
         });
 
-        state.open = storedOpen === null ? true : Boolean(storedOpen);
-        setClass(root, CLASS.closed, !state.open);
-        setScale(state, typeof storedScale === "number" ? storedScale : SCALE_DEFAULT);
-
-        state.unsubscribeSettings = ACEUIModLoader.settings.onChange(me.name, function (key, value) {
-            if (key === "scale" && value !== state.scale) { setScale(state, value); }
-        });
 
         state.ui = me.panel(root, function (now) { tick(state, now); });
         state.unsubscribe = lines.subscribe(function () { state.dirty = true; });
-        log("console attached, " + lines.entries().length + " buffered line(s), " + (state.open ? "open" : "closed")
+        log("console attached, " + lines.entries().length + " buffered line(s)"
             + ", scale " + state.scale + ", toggle key " + TOGGLE_CODE);
 
         return state;
@@ -1243,14 +1229,9 @@ const DevConsole = (function () {
             state.unsubscribe = null;
         }
 
-        if (state.unsubscribeSettings) {
-            state.unsubscribeSettings();
-            state.unsubscribeSettings = null;
-        }
-
-        if (state.unbindToggle) {
-            state.unbindToggle();
-            state.unbindToggle = null;
+        if (state.scaler) {
+            state.scaler.stop();
+            state.scaler = null;
         }
 
         // kept, not nulled: anything still in flight finds a scroller that does nothing
@@ -1291,6 +1272,7 @@ const DevConsole = (function () {
         evaluate: evaluate,
         captureKeyboard: captureKeyboard,
         setOpen: setOpen,
+        toggleKey: toggleKey,
         setFilter: setFilter,
         setFollow: setFollow,
         setQuery: setQuery,
@@ -1304,3 +1286,10 @@ const DevConsole = (function () {
 
 /* Attach to #devconsole: the loader creates it in game, the preview page carries it. */
 ACEUIModLoader.mod("devconsole").mount(DevConsole.attach, DevConsole.detach);
+
+/*
+ * The show/hide key, held by the loader rather than by the panel: a console that has been
+ * closed is switched off, so it is not running to hold a key binding of its own -- and being
+ * closed is exactly when you want the key to work.
+ */
+ACEUIModLoader.mod("devconsole").toggle(DevConsole.toggleKey);
