@@ -291,6 +291,56 @@ ACEUIModLoader.loader = (function () {
         return state.mods.filter(function (entry) { return entry.name === name; })[0] || null;
     };
 
+    /** The drawer owns the on/off switches; without it every mod is on. */
+    const enabled = function (name) {
+        return !ACEUIModLoader.drawer || ACEUIModLoader.drawer.isVisible(name);
+    };
+
+    /**
+     * Start a mod that is loaded but not running. Returns false when there is nothing to
+     * start -- no entry, no attach recorded, or it is running already.
+     */
+    const activate = function (name) {
+        const entry = findEntry(name);
+        const root = document.getElementById(name);
+
+        if (!entry || typeof entry.attach !== "function" || !root) { return false; }
+
+        if (root.hasAttribute(MOUNTED_ATTR)) { return false; }
+
+        root.setAttribute(MOUNTED_ATTR, "");
+        entry.instance = entry.attach(root);
+        log("mod " + name + " started");
+
+        return true;
+    };
+
+    /**
+     * Stop a running mod through its own detach, so its listeners, loops and sounds go
+     * with it. Returns false when the mod never gave us a detach -- the drawer then falls
+     * back to hiding it, which is all it can do.
+     */
+    const deactivate = function (name) {
+        const entry = findEntry(name);
+        const root = document.getElementById(name);
+
+        if (!entry || typeof entry.detach !== "function" || !entry.instance) { return false; }
+
+        try {
+            entry.detach(entry.instance);
+        } catch (e) {
+            log("mod " + name + " detach threw: " + (e && e.message ? e.message : e));
+        }
+
+        entry.instance = null;
+
+        if (root) { root.removeAttribute(MOUNTED_ATTR); }
+
+        log("mod " + name + " stopped");
+
+        return true;
+    };
+
     /**
      * Everything a mod's script needs to know about itself, derived from the folder name
      * and mod.json: `ACEUIModLoader.mod()` while its scripts run, `ACEUIModLoader.mod("x")` any
@@ -301,14 +351,32 @@ ACEUIModLoader.loader = (function () {
         const title = info.title || name;
         const key = function (suffix) { return KEY_PREFIX + name + "." + suffix; };
         /** Call `attach(root)` with `#<name>` once the DOM has it (now, or on DOMContentLoaded); once per root. */
-        const mount = function (attach) {
+        /**
+         * `mount(attach, detach)`. Passing detach is what lets the app drawer really turn
+         * a mod off: hiding its root leaves its key handlers, frame loop and sounds
+         * running (DOOM still answered Insert while "disabled"). With both halves the
+         * loader can stop and restart a mod, and a mod switched off is never attached in
+         * the first place.
+         */
+        const mount = function (attach, detach) {
             const boot = function () {
                 const root = document.getElementById(name);
 
                 if (!root || root.hasAttribute(MOUNTED_ATTR)) { return; }
 
+                if (entry) {
+                    entry.attach = attach;
+                    entry.detach = detach || null;
+                }
+
+                // switched off in the drawer: loaded, but deliberately not started
+                if (!enabled(name)) { return; }
+
                 root.setAttribute(MOUNTED_ATTR, "");
-                attach(root);
+
+                const instance = attach(root);
+
+                if (entry) { entry.instance = instance; }
             };
 
             if (document.readyState === "loading") {
@@ -470,6 +538,9 @@ ACEUIModLoader.loader = (function () {
         withoutMarkers: withoutMarkers,
         isFileName: isFileName,
         ready: ready,
+        enabled: enabled,
+        activate: activate,
+        deactivate: deactivate,
         addStylesheet: addStylesheet,
         addScript: addScript
     };

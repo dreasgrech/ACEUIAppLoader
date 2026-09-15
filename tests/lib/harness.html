@@ -496,6 +496,55 @@ document.addEventListener("DOMContentLoaded", function () {
             eq(d.isVisible("racy"), false, "the newer choice wins over what was on disk");
         });
 
+        t("drawer: switching a mod off stops it, not just hides it", function () {
+            const d = ACEUIModLoader.drawer;
+            /* Hiding the root left the mod's key handlers, frame loop and sounds running:
+               DOOM still answered Insert and played music while "disabled". */
+            const root = document.createElement("div");
+            root.id = "lively";
+            document.getElementById("center").appendChild(root);
+
+            let attached = 0, detached = 0;
+            const entry = { name: "lively", info: { title: "Lively" }, status: "loaded" };
+            ACEUIModLoader.loader.mods.push(entry);
+            entry.attach = function () { attached += 1; return { live: true }; };
+            entry.detach = function () { detached += 1; };
+            entry.instance = entry.attach(root);
+            root.setAttribute("data-mounted", "");
+            eq(attached, 1, "running to begin with");
+
+            d.setVisible("lively", false);
+            eq(detached, 1, "its own detach was called");
+            eq(entry.instance, null, "and the instance released");
+            eq(root.style.display, "none", "the root is hidden too");
+            eq(root.hasAttribute("data-mounted"), false, "no longer marked mounted");
+
+            d.setVisible("lively", true);
+            eq(attached, 2, "switching back on restarts it");
+            ok(entry.instance, "with a fresh instance");
+            eq(root.style.display, "", "and visible again");
+
+            root.parentNode.removeChild(root);
+            ACEUIModLoader.loader.mods.splice(ACEUIModLoader.loader.mods.indexOf(entry), 1);
+        });
+
+        t("drawer: a mod that gave the loader no detach is still only hidden", function () {
+            const d = ACEUIModLoader.drawer;
+            const root = document.createElement("div");
+            root.id = "stubborn";
+            document.getElementById("center").appendChild(root);
+
+            const entry = { name: "stubborn", info: {}, status: "loaded", instance: {} };
+            ACEUIModLoader.loader.mods.push(entry);
+
+            eq(ACEUIModLoader.loader.deactivate("stubborn"), false, "nothing to stop it with");
+            d.setVisible("stubborn", false);
+            eq(root.style.display, "none", "so hiding is all the drawer can do");
+
+            root.parentNode.removeChild(root);
+            ACEUIModLoader.loader.mods.splice(ACEUIModLoader.loader.mods.indexOf(entry), 1);
+        });
+
         t("drawer: a mod's options pane is built lazily, only when it is first opened", function () {
             const d = ACEUIModLoader.drawer;
             let built = 0;

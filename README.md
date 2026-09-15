@@ -2,7 +2,7 @@
 
 The single package that lets several UI mods coexist in Assetto Corsa EVO, the
 shared library those mods are built on, and the tools that build it and install
-mods for it. Version 0.5.2.
+mods for it. Version 0.6.0.
 
 Why a loader is needed at all, and why it has this shape, is in
 [`docs/design.md`](docs/design.md); the game mechanics it relies on are
@@ -28,6 +28,18 @@ over the copy from disk. The game saves that store when the HUD closes, so quitt
 Escape is what commits it.
 
 A mod can add its own options pane, which the drawer opens from the gear on its row:
+
+A mod should hand `mount` both halves of its lifecycle, so the drawer can really turn it
+off rather than merely hide it:
+
+```js
+ACEUIModLoader.mod("telemetry").mount(ACEUITelemetry.attach, ACEUITelemetry.detach);
+```
+
+Hiding the root is not enough on its own: a hidden mod keeps its key handlers, its
+frame loop and its sounds. With a detach the loader stops the mod through it, and a mod
+switched off at startup is never attached at all. A mod that supplies no detach is only
+hidden, which is all the drawer can do for it.
 
 ```js
 ACEUIModLoader.drawer.registerOptions("telemetry", function (pane) {

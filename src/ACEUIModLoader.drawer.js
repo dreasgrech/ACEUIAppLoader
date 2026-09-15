@@ -132,12 +132,25 @@ ACEUIModLoader.drawer = (function () {
         persist.save(HUD_ID, STORE_KEY, state.visible);
     };
 
-    /** Show or hide a mod's root element. Restoring uses "" so the mod's own CSS wins again. */
+    /**
+     * Switch a mod on or off for real.
+     *
+     * Hiding the root is not enough: a hidden mod keeps its key handlers, its frame loop
+     * and its sounds (DOOM still answered Insert and played music while "disabled"). So
+     * the loader is asked to stop it through its own detach, and to start it again on
+     * the way back. The root is hidden as well, which is the whole story for a mod that
+     * never gave the loader a detach.
+     */
     const applyVisibility = function (name) {
         const root = rootOf(name);
         const on = isVisible(name);
+        const loader = ACEUIModLoader.loader;
 
         if (root) { root.style.display = on ? "" : "none"; }
+
+        if (loader) {
+            if (on) { loader.activate(name); } else { loader.deactivate(name); }
+        }
 
         return on;
     };
