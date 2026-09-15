@@ -1,0 +1,51 @@
+/*
+ * ACE UI Profiler -- stylesheet. Linked by the ACEUIModLoader after the stock CSS, so
+ * --font-family-main is the game's. Stock HUD widget look: black 75 % panel,
+ * solid #1c1e1f header, #bd0000 accents. No var() fallbacks (Cohtml).
+ */
+
+.ace-profiler {
+    position: absolute;
+    left: 2rem;
+    top: 5rem;
+    width: 12em;
+    display: flex;
+    flex-direction: column;
+    background: rgba(0, 0, 0, 0.75);
+    border: 2px solid transparent;
+    color: rgba(255, 255, 255, 0.8);
+    font-family: var(--font-family-main);
+    font-size: 1rem;
+    cursor: pointer;
+}
+
+.ace-profiler.dragging {
+    border-color: #fff;
+}
+
+body.hide-hud .ace-profiler {
+    visibility: hidden;
+}
+
+.ace-profiler .pr-header {
+    height: 2.2em;
+    padding: 0 1em;
+    display: flex;
+    align-items: center;
+    background: #1c1e1f;
+    color: #fff;
+    font-size: 0.75em;
+    font-weight: 600;
+    letter-spacing: 0.05em;
+}
+
+.ace-profiler .pr-body {
+    padding: 0.5em 1em;
+    font-size: 1.4em;
+    font-weight: 600;
+    text-align: center;
+}
+
+.ace-profiler .pr-value {
+    color: #fff;
+}

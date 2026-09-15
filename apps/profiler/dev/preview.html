@@ -1,0 +1,21 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<title>ACE UI Profiler preview</title>
+<!-- The mod outside the game: the library from the sibling loader checkout, then the real files. Open directly in Edge or Chrome. -->
+<script src="../../ACEUIModLoader/tests/lib/lib.js"></script>
+<link rel="stylesheet" type="text/css" href="../profiler/profiler.css">
+<style>
+    :root { --font-family-main: "Bahnschrift", "Segoe UI", Arial, sans-serif; font-size: 16px; }
+    html, body { margin: 0; height: 100%; background: #101214; color: #ddd; font-family: var(--font-family-main); }
+    .absolutecenter { position: relative; width: 1600px; height: 900px; margin: auto; overflow: hidden;
+                      background: radial-gradient(ellipse at 50% 60%, #4a5560 0%, #1b1e22 70%); }
+</style>
+<script>window.ModelCurrentCar = { has_focused_car: true, gas_percent: 0.42 };</script>
+<script src="../profiler/profiler.js"></script>
+</head>
+<body>
+<div class="absolutecenter"><div id="profiler"></div></div>
+</body>
+</html>

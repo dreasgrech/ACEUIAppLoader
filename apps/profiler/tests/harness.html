@@ -1,0 +1,56 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<title>ACE UI Profiler tests</title>
+<style>
+  body { margin: 0; background: #222; color: #ddd; font: 12px monospace; }
+  .absolutecenter { position: relative; width: 1600px; height: 900px; overflow: hidden; }
+  #results { white-space: pre; }
+</style>
+<!-- shared test doubles (fake frame clock, in-memory localStorage, console capture) and the library, from the loader repo -->
+<script src="../../ACEUIModLoader/tests/lib/doubles.js"></script>
+<script src="../../ACEUIModLoader/tests/lib/lib.js"></script>
+<link rel="stylesheet" type="text/css" href="../profiler/profiler.css">
+<script>window.ModelCurrentCar = { has_focused_car: true, gas_percent: 0.5 };</script>
+<script src="../profiler/profiler.js"></script>
+</head>
+<body>
+<div class="absolutecenter" id="center"></div>
+<script>
+(function () {
+    const H = window.__harness;
+    const t = H.t, eq = H.eq, ok = H.ok;
+    let frame = 1000;
+    const nextFrame = function () { frame += 16; window.__clock.step(frame); };
+
+    const root = document.createElement("div");
+    root.id = "profiler";
+    document.getElementById("center").appendChild(root);
+    const state = ACEUIProfiler.attach(root);
+
+    t("attach builds the markup once, hidden until placed, and logs with the mod's prefix", function () {
+        ok(root.classList.contains("ace-profiler"), "root class");
+        ok(root.querySelector(".pr-header"), "header"); eq(root.querySelector(".pr-header").textContent, "profiler", "title falls back to the name outside the game");
+        eq(root.style.visibility, "hidden", "hidden until positioned"); ok(state.loop.running, "loop running");
+        ok(window.__log.some(function (l) { return l.indexOf("[profiler] attached") === 0; }), "prefixed log");
+    });
+
+    t("a frame draws the value once and skips unchanged frames", function () {
+        nextFrame(); eq(root.querySelector(".pr-value").textContent, "50%");
+        root.querySelector(".pr-value").textContent = "sentinel"; nextFrame();
+        eq(root.querySelector(".pr-value").textContent, "sentinel", "unchanged value not rewritten");
+        window.ModelCurrentCar.gas_percent = 0.75; nextFrame(); eq(root.querySelector(".pr-value").textContent, "75%");
+    });
+
+    t("detach stops the loop and releases the panel", function () {
+        const cancelled = window.__clock.cancelled;
+        ACEUIProfiler.detach(state);
+        eq(window.__clock.cancelled, cancelled + 1); eq(state.loop.running, false);
+    });
+
+    H.finish();
+}());
+</script>
+</body>
+</html>
