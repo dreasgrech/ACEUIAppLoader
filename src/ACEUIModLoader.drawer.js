@@ -57,6 +57,14 @@ ACEUIModLoader.drawer = (function () {
     const HUD_POLL_MS = 50;
     const HUD_WAIT_MS = 8000;
 
+    /**
+     * The developer switch, in a store of its own so it cannot be confused with an app
+     * called "developer". Off by default: the profiler, the dev console and the
+     * capabilities probe ship with the loader, and a player has no use for any of them.
+     */
+    const DEV_STORE_KEY = "acedrawer.developer";
+    const DEV_HUD_ID = "hud_acedrawer_dev";
+
     /** Geometry. The hot zone is a thin strip the pointer has to reach to open the drawer. */
     const HOT_WIDTH = "10px";
     const PANEL_WIDTH = "15rem";
@@ -82,6 +90,7 @@ ACEUIModLoader.drawer = (function () {
      */
     const OPTIONS_GLYPH = "OPTIONS";
     const EMPTY_TEXT = "no mods loaded on this page";
+    const DEV_TEXT = "DEVELOPER APPS";
 
     const state = {
         built: false,
@@ -90,8 +99,11 @@ ACEUIModLoader.drawer = (function () {
         list: null,
         count: null,
         hot: null,
-        apps: [],               // { name, title, status, row, box, label, gear }
+        apps: [],               // { name, title, status, developer, holder, row, box, label, gear }
         visible: {},            // name -> bool, persisted
+        dev: {},                // name -> is it a developer tool, from the rows we built
+        developer: false,       // show the apps that call themselves developer tools
+        devRow: null,           // { box, label }, the switch at the foot of the panel
         openers: {},            // name -> what to open when its OPTIONS button is clicked
         touched: false,         // the user flipped a switch: newer than anything on disk
         closeTimer: 0
@@ -107,8 +119,11 @@ ACEUIModLoader.drawer = (function () {
      */
     const loadStored = function () {
         const stored = persist.readHud(HUD_ID) || persist.readLocal(STORE_KEY);
+        const dev = persist.readHud(DEV_HUD_ID) || persist.readLocal(DEV_STORE_KEY);
 
         if (stored && !state.touched) { state.visible = stored; }
+
+        if (dev && !state.touched) { state.developer = Boolean(dev.on); }
     };
 
     loadStored();
@@ -131,13 +146,40 @@ ACEUIModLoader.drawer = (function () {
         return document.getElementById(name);
     };
 
+    /**
+     * Whether this mod calls itself a developer tool. The rows know once the drawer is
+     * built, but the question is asked before that too -- the loader calls applyStored the
+     * moment it creates a mod's root, and the drawer is not built until every mod has
+     * loaded -- so the loader's own copy of the manifest answers until then.
+     */
+    const isDeveloper = function (name) {
+        const loader = ACEUIModLoader.loader;
+
+        if (Object.prototype.hasOwnProperty.call(state.dev, name)) { return state.dev[name]; }
+
+        return Boolean(loader && loader.isDeveloper(name));
+    };
+
+    /**
+     * Is this app on? A developer app is also off while the developer switch is, and that
+     * gate belongs here rather than in the code that flips switches: everything goes
+     * through this one function -- applyVisibility, applyStored, refreshAll, and the
+     * loader's own `enabled`, which decides whether a mod is even started. So a developer
+     * app cannot be started, shown, or brought back by its hotkey while the switch is off,
+     * and its own switch is left exactly as the user last set it, ready for when it is on
+     * again. That default is "on": flipping the developer switch should show the tools
+     * working, not three rows that each need switching on as well.
+     */
     const isVisible = function (name) {
+        if (!state.developer && isDeveloper(name)) { return false; }
+
         return state.visible[name] !== false;
     };
 
     /** Write to both stores: localStorage for the instant reload, the HUD store for disk. */
     const store = function () {
         persist.save(HUD_ID, STORE_KEY, state.visible);
+        persist.save(DEV_HUD_ID, DEV_STORE_KEY, { on: state.developer });
     };
 
     /**
@@ -185,6 +227,11 @@ ACEUIModLoader.drawer = (function () {
         app.label.style.color = on ? THEME.ink : THEME.inkOff;
     };
 
+    /**
+     * Flip one app's switch. Returns whether it is actually on afterwards, which is not
+     * always what was asked for: a developer app stays off while the developer switch is,
+     * and `mod().show(true)` says so in the log rather than leaving a panel unreachable.
+     */
     const setVisible = function (name, on) {
         state.visible[name] = Boolean(on);
         state.touched = true;
@@ -194,6 +241,59 @@ ACEUIModLoader.drawer = (function () {
         state.apps.forEach(function (app) {
             if (app.name === name) { paintSwitch(app); }
         });
+
+        return isVisible(name);
+    };
+
+    /** Whether the drawer is listing the developer tools at all. */
+    const developerShown = function () {
+        return state.developer;
+    };
+
+    /**
+     * Show or hide the developer tools. This is a master switch, not a filter: an app it
+     * hides is stopped as well, because an app drawn over the HUD with no row to reach it
+     * is exactly the state the show/hide lifecycle exists to prevent. Their own switches
+     * are untouched, so they come back as they were.
+     */
+    const setDeveloper = function (on) {
+        state.developer = Boolean(on);
+        state.touched = true;
+        store();
+        refreshRows();
+        refreshAll();
+
+        return state.developer;
+    };
+
+    const toggleDeveloper = function () {
+        return setDeveloper(!state.developer);
+    };
+
+    /** Rows on the screen: the developer ones are listed only while the switch is on. */
+    const listedApps = function () {
+        return state.apps.filter(function (app) { return state.developer || !app.developer; });
+    };
+
+    /**
+     * Put the list in step with the developer switch: which rows are there, and the count
+     * in the header, which says what is listed rather than what is loaded -- a count that
+     * disagreed with the rows under it would just look like a bug.
+     */
+    const refreshRows = function () {
+        state.apps.forEach(function (app) {
+            app.holder.style.display = !app.developer || state.developer ? "" : "none";
+        });
+
+        if (state.count) { text(state.count, listedApps().length + " loaded"); }
+
+        if (state.devRow) {
+            css(state.devRow.box, {
+                background: state.developer ? THEME.on : "transparent",
+                borderColor: state.developer ? THEME.on : THEME.inkOff
+            });
+            state.devRow.label.style.color = state.developer ? THEME.ink : THEME.inkOff;
+        }
     };
 
     /** Re-apply every switch: after adopting the HUD store, mods may need hiding. */
@@ -291,7 +391,7 @@ ACEUIModLoader.drawer = (function () {
 
     // ---- building ------------------------------------------------------------------
 
-    const buildRow = function (app) {
+    const buildRow = function (app, onToggle) {
         const row = div({
             display: "flex",
             flexDirection: "row",
@@ -332,7 +432,7 @@ ACEUIModLoader.drawer = (function () {
         row.addEventListener("mouseleave", function () { row.style.background = "transparent"; });
         row.addEventListener("click", function (e) {
             if (e.target !== gear) {
-                toggleApp(app.name);
+                onToggle();
             } else if (state.openers[app.name]) {
                 ACEUIModLoader.safely("[drawer] " + app.name + " options", state.openers[app.name]);
             }
@@ -362,16 +462,34 @@ ACEUIModLoader.drawer = (function () {
         const app = {
             name: entry.name,
             title: info.title || entry.name,
-            status: entry.status
+            status: entry.status,
+            developer: Boolean(info.developer)
         };
         const holder = div({ borderBottom: THEME.border });
 
-        holder.appendChild(buildRow(app));
+        holder.appendChild(buildRow(app, function () { toggleApp(app.name); }));
 
         if (entry.status !== "loaded") { holder.appendChild(buildStatus(app)); }
 
+        app.holder = holder;
         state.apps.push(app);
+        state.dev[app.name] = app.developer;
         paintSwitch(app);
+
+        return holder;
+    };
+
+    /**
+     * The switch at the foot of the panel. It is the same row as an app's, one section
+     * down: the tools it lists are not apps a player chose to install, so they are not in
+     * the list with them.
+     */
+    const buildDeveloperRow = function () {
+        const app = { name: "", title: DEV_TEXT };
+        const holder = div({ flex: "0 0 auto", borderTop: THEME.border, background: THEME.headerBg });
+
+        holder.appendChild(buildRow(app, toggleDeveloper));
+        state.devRow = { box: app.box, label: app.label };
 
         return holder;
     };
@@ -380,6 +498,7 @@ ACEUIModLoader.drawer = (function () {
         const selector = ACEUIModLoader.loader ? ACEUIModLoader.loader.CONTAINER_SELECTOR : "";
         const container = (selector && document.querySelector(selector)) || document.body;
         const stored = persist.readHud(HUD_ID) || persist.readLocal(STORE_KEY);
+        const storedDev = persist.readHud(DEV_HUD_ID) || persist.readLocal(DEV_STORE_KEY);
         const panel = div({
             position: "fixed",
             top: PANEL_TOP,
@@ -426,8 +545,12 @@ ACEUIModLoader.drawer = (function () {
 
         cancelClose();
         state.apps = [];
+        state.dev = {};
+        state.devRow = null;
 
         if (stored && !state.touched) { state.visible = stored; }
+
+        if (storedDev && !state.touched) { state.developer = Boolean(storedDev.on); }
 
         header.appendChild(css(text(document.createElement("span"), TITLE_TEXT), {
             color: "#fff", fontSize: "0.75rem", fontWeight: "700", letterSpacing: "0.08em"
@@ -447,7 +570,7 @@ ACEUIModLoader.drawer = (function () {
             }));
         }
 
-        text(count, mods.length + " loaded");
+        panel.appendChild(buildDeveloperRow());
 
         // the pointer reaching the right edge opens it; leaving the panel closes it again
         hot.addEventListener("mouseenter", function () {
@@ -464,6 +587,7 @@ ACEUIModLoader.drawer = (function () {
         state.count = count;
         state.hot = hot;
         state.built = true;
+        refreshRows();
 
         return panel;
     };
@@ -495,8 +619,14 @@ ACEUIModLoader.drawer = (function () {
         adoptHudStore: adoptHudStore,
         refreshAll: refreshAll,
         HUD_ID: HUD_ID,
+        DEV_HUD_ID: DEV_HUD_ID,
+        DEV_STORE_KEY: DEV_STORE_KEY,
         setVisible: setVisible,
         toggleApp: toggleApp,
+        isDeveloper: isDeveloper,
+        developerShown: developerShown,
+        setDeveloper: setDeveloper,
+        toggleDeveloper: toggleDeveloper,
         registerOpener: registerOpener
     };
 }());

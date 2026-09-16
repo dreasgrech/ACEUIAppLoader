@@ -1140,6 +1140,31 @@ const CapabilitiesProbe = (function () {
         }
     };
 
+    /**
+     * What another mod can ask the probe, rather than probing again for itself:
+     *
+     *     const probe = ACEUIModLoader.apps.get("capabilities");
+     *     if (probe && probe.status("WebSocket") === "yes") { ... }
+     *
+     * It is offered while the probe is attached and withdrawn when it is not, because the
+     * answers live in that run's results -- there are none to give when it is switched off.
+     */
+    const surface = function (state) {
+        return {
+            checks: function () {
+                return CHECKS.map(function (c) { return c.name; });
+            },
+            results: function () {
+                return state.results.slice();
+            },
+            status: function (name) {
+                const found = state.results.filter(function (r) { return r && r.name === name; })[0];
+
+                return found ? found.status : null;
+            }
+        };
+    };
+
     const attach = function (root) {
         const state = create(root);
 
@@ -1160,12 +1185,14 @@ const CapabilitiesProbe = (function () {
         state.ui = me.panel(root, function () { tick(state); });
 
         runAll(state);
+        ACEUIModLoader.apps.register(me.name, surface(state));
         log("attached, " + CHECKS.length + " checks, lib=" + ACEUIModLoader.VERSION);
 
         return state;
     };
 
     const detach = function (state) {
+        ACEUIModLoader.apps.unregister(me.name);
         state.ui.stop();
 
         // kept, not nulled: the probe's own checks finish after a detach and still
@@ -1183,6 +1210,7 @@ const CapabilitiesProbe = (function () {
         CATEGORIES: CATEGORIES,
         CHECKS: CHECKS,
         create: create,
+        surface: surface,
         runAll: runAll,
         attach: attach,
         detach: detach

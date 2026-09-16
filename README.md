@@ -2,7 +2,7 @@
 
 The single package that lets several UI mods coexist in Assetto Corsa EVO, the
 shared library those mods are built on, and the tools that build it and install
-mods for it. Version 0.18.0.
+mods for it. Version 0.19.0.
 
 Why a loader is needed at all, and why it has this shape, is in
 [`docs/design.md`](docs/design.md); the game mechanics it relies on are
@@ -229,6 +229,16 @@ row, saying why, rather than vanishing silently.
 The drawer is part of the loader rather than a mod, because the loader is the only thing
 that knows what is installed.
 
+At the foot of the panel is a **DEVELOPER APPS** switch, off by default. A mod whose
+`mod.json` says `"developer": true` -- the profiler, the dev console and the capabilities
+probe, which ship with the loader -- is listed only while that switch is on. It is a
+master switch rather than a filter: an app it hides is stopped as well, and cannot be
+brought back by its own hotkey or by `mod().show(true)` while it is off (both say so in
+the log). An app on the screen with no row to switch it off again is exactly what the
+show/hide lifecycle exists to prevent. Each app's own switch is left untouched, so they
+come back as they were -- and since an app is on unless switched off, turning developer
+apps on shows them working rather than three rows that each need switching on as well.
+
 Switches are written to **both** stores: `localStorage` so a switched-off app is hidden
 instantly on the Escape/resume reload, and the stock **HUD layout container**, which is
 the only one the game writes to disk and therefore the only one that survives a game
@@ -288,9 +298,24 @@ else: its folder and one **empty** marker file. No manifest, no script, no
 registration step. Mod folders live under a loose-file search path of the game,
 so nothing is packaged or padded; only the loader is a package.
 
+The loader also ships apps of its own -- the developer tools in `apps/` -- inside
+that same package, under `uiresources\ACEUIModLoaderApps\<name>\`, listed by
+`ACEUIModLoaderApps/apps.json` which the build writes. They need no marker and no
+install step, and they load even on the path where the preset list never answers.
+Those files are *new* paths, which always resolve whatever the merged package
+layout turns out to be; `cohtml.js` remains the only override.
+
+The two roots are deliberately not the same one. **Loose files never beat packed
+files**, so a bundled app sitting at the installed mods' path could never be
+overridden and `install_mod.py` would silently stop working on it. Kept apart, the
+opposite holds and is the point: an installed mod of the same name **wins** over
+the bundled copy (the loader logs which one it took), so working on a bundled app
+is still install, reload, look.
+
 ```
 Saved Games\ACE\
-  mods\ACEUIModLoader.kspkg                        <- built here (69 MB, mostly the fixed-size table)
+  mods\ACEUIModLoader.kspkg                        <- built here (69 MB, mostly the fixed-size table),
+                                                      with the bundled developer apps inside it
   mods\uiresources\ACEUIModLoaderMods\pedalgraph\  <- one folder per mod: mod.json + its files
   mods\uiresources\ACEUIModLoaderMods\devconsole\
   Video\ACEUIModLoaderMods-pedalgraph.settingspreset   <- 0-byte markers; the game lists this folder
@@ -318,7 +343,9 @@ The mod's name is its folder's (and its marker's). Optional keys: `title` (the
 log prefix, default the name), `pages` (default `["hud.html"]`, `"*"` = every
 page), `files` (other plain file names the mod fetches itself, e.g. a `.wasm`;
 copied by the install tool, never injected), `root: false` (no root element),
-`name` (must equal the folder if given).
+`developer: true` (a tool rather than something a player installed for fun: the
+app drawer keeps it behind its "developer apps" switch), `name` (must equal the
+folder if given).
 Scripts run in order as classic scripts; the loader waits for each before adding
 the next.
 
@@ -333,7 +360,8 @@ the mod being loaded, and `ACEUIModLoader.mod("<name>")` does so at any time:
 | `root` | the `#<name>` element |
 | `log`, `prefix` | a logger writing `[Title] ...` |
 | `hudId`, `storageKey`, `key(suffix)` | `hud_<name>`, `ace<name>.pos`, `ace<name>.<suffix>`: the HUD layout id and storage keys for `ACEUIModLoader.panel` / `.persist` |
-| `base`, `loaded` | the mod folder's URL; whether this loader instance loaded it |
+| `base`, `loaded` | the mod folder's URL -- whichever root it came from, bundled or installed; whether this loader instance loaded it |
+| `developer` | whether its `mod.json` calls it a developer tool |
 | `panel(root, onFrame)` | the whole widget lifecycle: a draggable panel that remembers its position plus the frame loop that drives it. Returns a handle with `panel`, `loop` and `stop()` (safe to call twice) |
 | `scale(root, {min, max, step, onScale})` | panel scale: one `font-size` in rem on the root, everything inside in em. Applies it, clamps it, follows the mod's own `scale` setting when it declared one (so a -/+ button and the settings window move the same value) and remembers it either way. Returns `{ value, set, nudge, bounds, stop }` |
 | `scaleSpec({label, value, min, max, step})` | the settings spec for that scale, to drop into the mod's own `define` call |
@@ -394,7 +422,8 @@ in this order because each builds on the previous:
 | `src/ACEUIModLoader.persist.js` | `ACEUIModLoader.persist` | three stores: the stock HUD layout store (`HUD.elementModified` / `HUD.StoredData`, saved by the game on HUD close), `localStorage`, and the engine's own key/value container under a top-level key of the mod's choosing: `readHud`, `writeHud`, `hudAvailable`, `readLocal`, `writeLocal`, `removeLocal`, `save(hudId, key, data)`, `whenHudReady(cb, {pollMs, waitMs, onTimeout})`, `storeLoaded`, `readStore`, `writeStore`, `removeStore` |
 | `src/ACEUIModLoader.panel.js` | `ACEUIModLoader.panel` | `attach(root, {hudId, storageKey, log, onSaved})`: drag inside the HUD container, clamped; position persisted as screen fractions; hidden until the stored position is applied (immediate `localStorage`, then the HUD store has the last word in `update(panel, now)`); `data-nodrag` on descendants that must not start a drag; `detach` |
 | `src/ACEUIModLoader.loop.js` | `ACEUIModLoader.loop` | `start(onFrame)` / `stop(handle)`; `sampler(hz, maxGapMs)` + `advance(sampler, now, onSample)` for fixed-rate sampling independent of frame rate, returning the 0..1 fraction towards the next sample |
-| `src/ACEUIModLoader.loader.js` | `ACEUIModLoader.loader` | mod discovery through the game's video preset list, the `engine.on` wrapper that hides markers from the stock presets menu, root creation, mod injection, `mod(name)`; aliases `ACEUIModLoader.mod`, `.ready(cb)`, `.mods`, `.addScript`, `.addStylesheet`, `.ROOT` |
+| `src/ACEUIModLoader.apps.js` | `ACEUIModLoader.apps` | what one app offers another: `register(name, api)`, `unregister`, `get(name)` (null when that app is not there), `has`, `names()`. A table rather than a global each, because the names collide -- `ACEUIModLoader.console` is this library's console hook, so the dev console could never have had it. An app is registered only while it is loaded and switched on, so `has` is the only honest way to ask |
+| `src/ACEUIModLoader.loader.js` | `ACEUIModLoader.loader` | mod discovery through the game's video preset list plus the apps bundled in the package, the `engine.on` wrapper that hides markers from the stock presets menu, root creation, mod injection, `mod(name)`, `isDeveloper(name)`; aliases `ACEUIModLoader.mod`, `.ready(cb)`, `.mods`, `.addScript`, `.addStylesheet`, `.ROOT` |
 
 A mod is one folder: `mod.json`, one script and one stylesheet. The script is an
 IIFE module that reads its identity from `ACEUIModLoader.mod("<name>")`, uses
@@ -427,13 +456,31 @@ python tools/install_mod.py <repo>/<name>  # copy a mod folder in place and writ
 python tools/install_mod.py --list
 python tools/install_mod.py --remove <name>
 python tools/check_ingame_log.py           # after a launch: did the loader run, which mods loaded, crashes?
-python tools/new_mod.py <name> [<parent dir>] [--title "Nice Name"]   # start a new mod repo
+python tools/new_mod.py <name> [<parent dir>] [--title "Nice Name"] [--developer]   # start a new mod repo
+python tools/run_tests.py                  # this repo's suite plus every bundled app's
+python tools/absorb_app.py <mod repo>      # move a mod repo into apps/, history and all
 ```
 
+The package carries the bundled apps in `apps/` as well as the library, so it is
+also how those are installed and updated; `--no-apps` builds the library alone.
 Deleting `ACEUIModLoader.kspkg` from the mods folder restores the stock game;
 the loose mod folders are then simply never read. Library changes need a
 rebuild and reinstall of the package (the padding depends only on the file
-paths, so it stays the same).
+paths, so adding or removing a bundled app changes it and a rebuild is the
+answer either way).
+
+A bundled app cannot be uninstalled, only switched off -- which is the right
+trade for a developer tool and the wrong one for anything a player would want
+gone, so nothing player-facing is bundled. To work on one, install it loose with
+`install_mod.py apps/<name>/<name>`: the installed copy wins over the bundled one
+until it is removed again.
+
+Padding depends on the package's whole hash set, so adding or removing a bundled
+app moves it: the loader gaining its first bundled app needed 106 padding entries
+where none had been needed before, past the quick search's 64. `pack_kspkg.py`
+therefore searches a much wider space when the quick pass finds nothing, which
+costs about a minute and is the difference between a package that works and one
+the game silently ignores.
 
 A mod that must override a packed game file (ACEDOOM's `gui_events.table`)
 ships its own package. The game re-sorts its shared file table after every
@@ -449,6 +496,7 @@ winning too. Adding a package can still need the others rebuilt; the
 |---|---|
 | `VERSION` | loader/library version, mirrored by `const VERSION` in `ACEUIModLoader.core.js` (test-enforced) |
 | `src/ACEUIModLoaderMods.*.js` | the library, see above; `LIB_ORDER` in `tools/build_loader.py` is the load order |
+| `apps/<name>/` | a developer app that ships inside the package, as its own repo was: `<name>/` (the shipped folder: `mod.json` + its files), `tests/`, `dev/`, `README.md` |
 | `tools/build_loader.py` | assembles `build/uiresources/js/cohtml.js` (stock + library), packs to `dist/`, `--install` |
 | `tools/install_mod.py` | validates a mod folder against its `mod.json`, copies it, writes the empty marker in `Saved Games\ACE\Video\` |
 | `tools/pack_kspkg.py` | generic `.kspkg` writer with override padding, verify, `--install` |
@@ -456,8 +504,11 @@ winning too. Adding a package can still need the others rebuilt; the
 | `tools/headless.py` | runs an HTML test harness in a headless Edge/Chrome and parses its report; shared with the mod repos |
 | `tools/modkit.py` | the shared mod test kit (`ModTests` base class), see above |
 | `tools/new_mod.py` | writes a new mod repo: folder with `mod.json` + script + stylesheet, harness, preview, kit test file, README |
+| `tools/run_tests.py` | this repo's suite plus each `apps/*/tests`, one subprocess each (three files named `test_mod.py` collide under `unittest discover`) |
+| `tools/absorb_app.py` | the one-off git surgery that moves a mod repo into `apps/<name>/` with its history: `filter-repo --to-subdirectory-filter` then a merge. Prints the commands by default, runs them with `--run`, never pushes |
 | `tests/lib/doubles.js`, `tests/lib/lib.js` | test doubles and the library loader for browser pages, used by this repo's harness and every mod's |
 | `tests/lib/ACEUIModLoaderMods/alpha/` | harness fixture: a mod the fake engine lists, to prove injection, root creation and `mod()` |
+| `tests/lib/ACEUIModLoaderApps/` | harness fixture: a bundled developer app plus an `apps.json` that also names `alpha`, to prove a bundled app loads with no marker and that an installed copy of the same name wins |
 | `tools/_repos.py` | locates the sibling `ACEGameInternals`, the game and the mods folder (`ACE_*_DIR` overrides) |
 | `docs/design.md` | the investigation and decisions behind the loader and the library |
 | `tests/test_pack_kspkg.py` | package format tests |
@@ -475,7 +526,9 @@ browser tests need Edge or Chrome (`ACE_BROWSER=<path>` overrides) and are
 skipped without one; the runner leaves no browser process behind.
 
 ```
-python -m unittest discover -s tests -v
+python tools/run_tests.py                  # this repo and every app under apps/
+python tools/run_tests.py lib              # this repo alone
+python -m unittest discover -s tests -v    # the same, directly
 ```
 
 ## Roadmap

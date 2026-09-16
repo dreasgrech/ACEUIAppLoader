@@ -9,8 +9,8 @@
   #results { white-space: pre; }
 </style>
 <!-- shared test doubles (fake frame clock, in-memory localStorage, console capture) and the library, from the loader repo -->
-<script src="../../ACEUIModLoader/tests/lib/doubles.js"></script>
-<script src="../../ACEUIModLoader/tests/lib/lib.js"></script>
+<script src="../../../tests/lib/doubles.js"></script>
+<script src="../../../tests/lib/lib.js"></script>
 <link rel="stylesheet" type="text/css" href="../capabilities/capabilities.css">
 <script>window.ModelCurrentCar = { has_focused_car: true, gas_percent: 0.5 };</script>
 <script src="../capabilities/capabilities.js"></script>
@@ -50,6 +50,17 @@
         ok(state.rows[rowIndex("engine audio bridge")].dot.className.indexOf("cp-no") >= 0, "engine bridge absent outside the game");
     });
 
+    t("while attached it answers other apps, and stops answering when it is not", function () {
+        const probe = ACEUIModLoader.apps.get("capabilities");
+        ok(probe, "registered while attached");
+        eq(probe.checks().length, CapabilitiesProbe.CHECKS.length, "it can say what it probes");
+        eq(probe.status("Promise"), "yes", "and what it found");
+        eq(probe.status("not a check"), null, "a question it has no answer to is null, not a guess");
+        eq(probe.results().length, CapabilitiesProbe.CHECKS.length);
+        probe.results().pop();
+        eq(ACEUIModLoader.apps.get("capabilities").results().length, CapabilitiesProbe.CHECKS.length, "a copy, not the live list");
+    });
+
     t("re-run re-probes, log dumps the report, detach stops the loop", function () {
         root.querySelector("[data-act=\"rerun\"]").click();
         ok(root.querySelector(".cp-summary").textContent.indexOf("yes") >= 0, "summary still populated after re-run");
@@ -59,6 +70,8 @@
         CapabilitiesProbe.detach(state);
         eq(window.__clock.cancelled, cancelled + 1, "raf cancelled");
         eq(state.ui.loop.running, false, "loop stopped");
+        eq(ACEUIModLoader.apps.get("capabilities"), null, "and it no longer answers: the results went with it");
+        eq(ACEUIModLoader.apps.has("capabilities"), false);
     });
 
     H.finish();

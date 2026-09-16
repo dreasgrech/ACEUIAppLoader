@@ -1,11 +1,14 @@
 """
 modkit.py - the shared test kit for ACEUIModLoader mods.
 
-A mod repo needs one test file:
+A mod repo needs one test file. tools/new_mod.py writes it; the part worth knowing is
+that it finds this kit by walking up from the mod's own root, because the loader is
+either beside the mod (its own repo) or above it (a bundled app in the loader's apps/):
 
     import os, sys
     ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-    sys.path.insert(0, os.path.join(os.environ.get("ACE_LOADER_DIR") or os.path.join(os.path.dirname(ROOT), "ACEUIModLoader"), "tools"))
+    ... walk up for <dir>/tools/modkit.py or <dir>/ACEUIModLoader/tools/modkit.py ...
+    sys.path.insert(0, os.path.join(LOADER, "tools"))
     from modkit import ModTests
 
     class Tests(ModTests):
@@ -36,7 +39,7 @@ import unittest
 import headless
 
 MOD_FILE = "mod.json"
-KNOWN_KEYS = {"name", "version", "title", "pages", "scripts", "styles", "files", "root"}
+KNOWN_KEYS = {"name", "version", "title", "pages", "scripts", "styles", "files", "root", "developer"}
 STOCK_FILES = ("hud.html", "cohtml.js", "components.js")
 LEGACY = ("VERSION", os.path.join("tools", "install.py"))
 LIBRARY_OWNED = ("requestAnimationFrame", "cancelAnimationFrame", "localStorage", "window.HUD", "getBoundingClientRect", "JSON.stringify")

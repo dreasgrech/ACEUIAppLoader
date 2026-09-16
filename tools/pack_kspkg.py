@@ -67,6 +67,13 @@ def _internals_tools():
 sys.path.insert(0, _internals_tools())
 import lookup_sim  # noqa: E402  (replays the game's lookup to make overrides win)
 
+# How hard to search for a padding layout: the quick pass is lookup_sim's own default,
+# the wide one is the fallback (see plan_padding).
+QUICK_PAD = 64
+QUICK_SALT = 8
+WIDE_PAD = 160
+WIDE_SALT = 40
+
 KEY = 0x9F9721A97D1135C1
 KEY_BYTES = KEY.to_bytes(8, "little")
 HEADER_SIZE = 0x100000
@@ -179,7 +186,16 @@ def plan_padding(files, dirs, game_dir=None, mods_dir=None, package_name="mod"):
             lines.append(f"installed alongside: {name} overrides the same file(s); treated as the package being replaced")
             continue
         others.append((name, hashes, file_list))
+    # Two passes: the quick search first, and a much wider one only if it comes up empty.
+    # Which layouts win depends on the package's whole hash set, so a package that gains
+    # files -- the loader gaining its bundled apps did exactly this -- can need a padding
+    # count the quick search never reaches. The wide pass costs a minute or so and is far
+    # better than shipping a package the game ignores.
     pad, win = lookup_sim.find_padding(base, mod_paths, overrides, path_hash, others=others, mod_name=package_name)
+    if pad is None:
+        lines.append(f"no layout in the quick search ({QUICK_PAD} x {QUICK_SALT + 1}); searching wider")
+        pad, win = lookup_sim.find_padding(base, mod_paths, overrides, path_hash, others=others,
+                                           mod_name=package_name, max_pad=WIDE_PAD, max_salt=WIDE_SALT)
     for name, hashes, file_list in others:
         theirs = [h for h in file_list if h in base_set]
         lines.append(f"installed alongside: {name} ({len(hashes)} entries, {len(theirs)} file override(s) of base files)")

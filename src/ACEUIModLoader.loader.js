@@ -20,11 +20,23 @@
  * There is no other source of mod names: without an engine (a plain browser) or
  * without an answer within PRESET_TIMEOUT_MS the loader logs why and loads nothing.
  *
- * Per mod, `ACEUIModLoaderMods/<name>/mod.json` holds what cannot be inferred:
+ * Bundled apps. The loader also ships apps of its own -- its developer tools -- inside
+ * its own package under `ACEUIModLoaderApps/<name>/`, listed by
+ * `ACEUIModLoaderApps/apps.json` (written by tools/build_loader.py). They need no marker
+ * and no install, so they are there even on the path where the preset list never answers.
+ * The two roots must stay apart, because **loose files never beat packed files**: a
+ * bundled app sitting at the loose path could never be overridden, and iterating on it
+ * with tools/install_mod.py would silently do nothing. Apart, the opposite holds and is
+ * useful -- an installed mod of the same name WINS over the bundled copy, which is how a
+ * bundled app is worked on.
+ *
+ * Per mod, `<root>/<name>/mod.json` holds what cannot be inferred:
  *     { "version": "0.4.0", "styles": ["pedalgraph.css"], "scripts": ["pedalgraph.js"] }
  * Optional: "pages" (default ["hud.html"], "*" = every page), "title" (log prefix,
- * default the name), "root": false (do not create a root element). The name is
- * the folder's; a "name" key must match it if present.
+ * default the name), "root": false (do not create a root element), "developer": true
+ * (a tool rather than something a player wants: the app drawer keeps it behind its
+ * "developer apps" switch). The name is the folder's; a "name" key must match it if
+ * present.
  *
  * Before a mod's scripts run the loader creates its root, `<div id="<name>"
  * data-mod="<name>">`, inside the HUD's positioning container (or <body> on
@@ -43,8 +55,12 @@
  */
 ACEUIModLoader.loader = (function () {
 
-    /** Folder, relative to the page, that holds one folder per mod. */
+    /** Folder, relative to the page, that holds one folder per installed (loose) mod. */
     const ROOT = "ACEUIModLoaderMods/";
+    /** The same, for the apps bundled in the loader's own package; see the header. */
+    const APPS_ROOT = "ACEUIModLoaderApps/";
+    /** What lists them, since a page cannot list a folder: [{ name, version }]. */
+    const APPS_FILE = "apps.json";
     const MOD_FILE = "mod.json";
     /** Fallback when a mod.json lists no pages: only the HUD. */
     const DEFAULT_PAGES = ["hud.html"];
@@ -86,7 +102,7 @@ ACEUIModLoader.loader = (function () {
     const log = ACEUIModLoader.log;
 
     const state = {
-        mods: [],           // { name, info, status }
+        mods: [],           // { name, info, status, base, builtin }
         current: null,      // the entry whose scripts are running right now
         source: "",         // "presets" (the game answered) | "none" (no engine or no answer)
         filtering: false,   // engine.on wrapped, stock handlers never see markers
@@ -176,6 +192,22 @@ ACEUIModLoader.loader = (function () {
     };
 
     /**
+     * The apps bundled in the loader's own package, from the index the build writes.
+     * `onFound([{ name, version }])` always runs: no index at all -- an older package, or
+     * any page that is not served from one -- simply means no bundled apps.
+     */
+    const bundled = function (onFound) {
+        fetchText(APPS_ROOT + APPS_FILE, function (text) {
+            const info = text === null ? null : parseJson(text, APPS_ROOT + APPS_FILE);
+            const apps = info ? listOf(info.apps) : [];
+
+            onFound(apps.filter(function (app) {
+                return Boolean(app) && typeof app.name === "string" && app.name.length > 0;
+            }));
+        });
+    };
+
+    /**
      * Find the installed mod names by asking the game for the video preset list.
      * onFound(names, source) is called exactly once; source is "presets" or "none".
      */
@@ -189,8 +221,11 @@ ACEUIModLoader.loader = (function () {
             if (handle && typeof handle.clear === "function") { handle.clear(); }
             onFound(names, source);
         };
+        // Only about the installed mods: the apps bundled in the package are found without
+        // the game's help, so "no answer" no longer means nothing runs. Whether anything
+        // does is decided once both sources are in, in start().
         const nothing = function (reason) {
-            log(reason + "; nothing to load");
+            log(reason + "; no installed mods");
             finish([], "none");
         };
         const onAnswer = function (response) {
@@ -301,6 +336,16 @@ ACEUIModLoader.loader = (function () {
     /** The drawer owns the on/off switches; without it every mod is on. */
     const enabled = function (name) {
         return !ACEUIModLoader.drawer || ACEUIModLoader.drawer.isVisible(name);
+    };
+
+    /**
+     * Whether a mod calls itself a developer tool. The app drawer keeps those behind its
+     * own switch, so this is what tells it which rows those are.
+     */
+    const isDeveloper = function (name) {
+        const entry = findEntry(name);
+
+        return Boolean(entry && entry.info && entry.info.developer);
     };
 
     /**
@@ -545,9 +590,16 @@ ACEUIModLoader.loader = (function () {
 
             if (!drawer) { return true; }
 
-            drawer.setVisible(name, Boolean(on));
+            const now = drawer.setVisible(name, Boolean(on));
 
-            return Boolean(on);
+            // a developer app cannot be shown while the drawer's developer switch is off:
+            // it would be on the screen with no row to switch it off again, which is the
+            // unreachable panel this whole lifecycle exists to prevent
+            if (on && !now) {
+                log("not shown: developer apps are switched off in the app drawer");
+            }
+
+            return now;
         };
 
         /** Whether this app is on. Without a drawer -- a preview page -- everything is on. */
@@ -620,7 +672,10 @@ ACEUIModLoader.loader = (function () {
             shown: shown,
             toggle: toggleKey,
             version: info.version || DEV_VERSION,
-            base: entry ? ROOT + name + "/" : "",
+            developer: Boolean(info.developer),
+            // whichever root this one came from: a bundled app's files are not where an
+            // installed mod's are, and a mod that loads a file of its own needs the right one
+            base: entry ? entry.base : "",
             loaded: Boolean(entry),
             root: document.getElementById(name),
             prefix: "[" + title + "]",
@@ -644,9 +699,9 @@ ACEUIModLoader.loader = (function () {
         return describe(wanted, findEntry(wanted));
     };
 
-    const loadMod = function (name, onDone) {
-        const base = ROOT + name + "/";
-        const entry = { name: name, info: null, status: "pending" };
+    const loadMod = function (name, root, onDone) {
+        const base = root + name + "/";
+        const entry = { name: name, info: null, status: "pending", base: base, builtin: root === APPS_ROOT };
 
         state.mods.push(entry);
         fetchText(base + MOD_FILE, function (text) {
@@ -701,15 +756,42 @@ ACEUIModLoader.loader = (function () {
         });
     };
 
-    const loadMods = function (names, index) {
-        if (index >= names.length) {
+    /** `wanted` is [{ name, root }]: bundled apps first, then the installed mods. */
+    const loadMods = function (wanted, index) {
+        if (index >= wanted.length) {
             state.readyCallbacks.forEach(function (cb) { cb(state.mods); });
             state.readyCallbacks = [];
 
             return;
         }
 
-        loadMod(names[index], function () { loadMods(names, index + 1); });
+        loadMod(wanted[index].name, wanted[index].root, function () { loadMods(wanted, index + 1); });
+    };
+
+    /**
+     * What to load, from the two sources: the apps bundled in the package and the mods
+     * installed loosely. An installed mod of the same name replaces the bundled app
+     * rather than joining it -- same name, same root element, and only one can have it --
+     * and that is the supported way to work on a bundled app: install it loose, reload,
+     * and the loose copy is what runs. Bundled apps come first so the rest of the page
+     * has the developer tools before anything else starts.
+     */
+    const merge = function (apps, names) {
+        const loose = names.map(function (name) { return { name: name, root: ROOT }; });
+        const kept = apps.filter(function (app) {
+            const overridden = names.indexOf(app.name) >= 0;
+
+            if (overridden) {
+                log(app.name + ": installed copy overrides the bundled "
+                    + (app.version || DEV_VERSION));
+            }
+
+            return !overridden;
+        });
+
+        return kept.map(function (app) {
+            return { name: app.name, root: APPS_ROOT };
+        }).concat(loose);
     };
 
     const start = function () {
@@ -720,14 +802,42 @@ ACEUIModLoader.loader = (function () {
             log("could not wrap engine.on; markers will show in the video presets menu");
         }
 
+        // Both sources are asked at once and loading waits for the pair. Asking in turn
+        // would put a file read in front of the preset list, which is an engine round trip
+        // with a 1.5 s timeout behind it and the slower of the two by far; and the bundled
+        // apps are in our own package, so they arrive whatever the engine does or does not
+        // answer.
+        let apps = null;
+        let installed = null;
+        const begin = function () {
+            if (apps === null || installed === null) { return; }
+
+            const wanted = merge(apps, installed);
+
+            if (!wanted.length) { log("nothing to load"); }
+
+            loadMods(wanted, 0);
+        };
+
+        bundled(function (list) {
+            apps = list;
+
+            if (list.length) {
+                log("bundled: " + list.length + " app(s)");
+            }
+
+            begin();
+        });
+
         discover(function (names, source) {
             state.source = source;
+            installed = names;
 
             if (source !== "none") {
                 log(source + ": " + names.length + " mod(s)");
             }
 
-            loadMods(names, 0);
+            begin();
         });
     };
 
@@ -754,6 +864,8 @@ ACEUIModLoader.loader = (function () {
 
     return {
         ROOT: ROOT,
+        APPS_ROOT: APPS_ROOT,
+        APPS_FILE: APPS_FILE,
         MOD_FILE: MOD_FILE,
         DEFAULT_PAGES: DEFAULT_PAGES,
         PRESET_REQUEST: PRESET_REQUEST,
@@ -773,8 +885,10 @@ ACEUIModLoader.loader = (function () {
         markerNames: markerNames,
         withoutMarkers: withoutMarkers,
         isFileName: isFileName,
+        merge: merge,
         ready: ready,
         enabled: enabled,
+        isDeveloper: isDeveloper,
         activate: activate,
         deactivate: deactivate,
         addStylesheet: addStylesheet,

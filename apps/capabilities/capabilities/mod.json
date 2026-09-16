@@ -1,6 +1,7 @@
 {
-  "version": "0.2.2",
+  "version": "0.3.0",
   "title": "ACE UI Capabilities Probe",
+  "developer": true,
   "styles": [
     "capabilities.css"
   ],

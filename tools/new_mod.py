@@ -2,7 +2,7 @@
 """
 new_mod.py - start a UI mod for the ACEUIModLoader with everything in place.
 
-    python tools/new_mod.py <name> [<parent dir>] [--title "Nice Name"]
+    python tools/new_mod.py <name> [<parent dir>] [--title "Nice Name"] [--developer]
 
 creates <parent dir>/ACE<Title>/ (default parent: next to this repo) holding
 
@@ -13,6 +13,9 @@ creates <parent dir>/ACE<Title>/ (default parent: next to this repo) holding
     tests/harness.html       browser cases run headlessly by the kit
     dev/preview.html         the mod outside the game
     README.md, .gitignore
+
+--developer marks it a developer tool in its mod.json, which keeps it behind the app
+drawer's "developer apps" switch -- for a profiler or a probe rather than a HUD widget.
 
 Nothing here repeats the version or the name in a second place: the script reads
 both from `ACEUIModLoader.mod("<name>")`, and the loader creates `#<name>` before the
@@ -28,11 +31,14 @@ NAME_RE = re.compile(r"^[a-z][a-z0-9_-]*$")
 
 MOD_JSON = """{
   "version": "0.1.0",
-  "title": "__TITLE__",
+  "title": "__TITLE__",__DEVELOPER__
   "styles": ["__NAME__.css"],
   "scripts": ["__NAME__.js"]
 }
 """
+
+DEVELOPER_KEY = """
+  "developer": true,"""
 
 SCRIPT = """/**
  * __TITLE__ -- a UI mod for Assetto Corsa EVO, built on the ACEUIModLoader library.
@@ -188,7 +194,18 @@ import sys
 import unittest
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-LOADER = os.environ.get("ACE_LOADER_DIR") or os.path.join(os.path.dirname(ROOT), "ACEUIModLoader")
+
+# The loader is either beside this repo or above it -- a bundled app lives in the loader's
+# own apps/<name>/ -- so walk up looking for it. ACE_LOADER_DIR overrides both.
+LOADER = os.environ.get("ACE_LOADER_DIR")
+HERE = ROOT
+while not LOADER:
+    for candidate in (HERE, os.path.join(HERE, "ACEUIModLoader")):
+        if os.path.isfile(os.path.join(candidate, "tools", "modkit.py")):
+            LOADER = candidate
+    if not LOADER and HERE == os.path.dirname(HERE):
+        raise SystemExit("ACEUIModLoader not found: clone it next to this repo or set ACE_LOADER_DIR")
+    HERE = os.path.dirname(HERE)
 sys.path.insert(0, os.path.join(LOADER, "tools"))
 
 from modkit import ModTests  # noqa: E402
@@ -340,7 +357,7 @@ def abbreviation(name):
     return "".join(p[0] for p in parts if p) if len(parts) > 1 else name[:2]
 
 
-def create(name, parent, title=None):
+def create(name, parent, title=None, developer=False):
     if not NAME_RE.match(name):
         raise SystemExit("name: lower-case letters, digits, _ and - only, starting with a letter")
     title = title or name.capitalize()
@@ -349,7 +366,8 @@ def create(name, parent, title=None):
     if os.path.exists(repo):
         raise SystemExit(f"{repo} already exists")
     lib = "../../ACEUIModLoader/tests/lib"
-    values = dict(NAME=name, TITLE=title, GLOBAL=global_name, ABBR=abbreviation(name), LIB=lib, REPO="ACE" + global_name)
+    values = dict(NAME=name, TITLE=title, GLOBAL=global_name, ABBR=abbreviation(name), LIB=lib,
+                  REPO="ACE" + global_name, DEVELOPER=DEVELOPER_KEY if developer else "")
     files = {
         os.path.join(name, "mod.json"): MOD_JSON,
         os.path.join(name, f"{name}.js"): SCRIPT,
@@ -378,4 +396,4 @@ if __name__ == "__main__":
         print(__doc__)
         sys.exit(1)
     parent = args[1] if len(args) > 1 else os.path.dirname(_repos.REPO)
-    print("created", create(args[0], parent, title))
+    print("created", create(args[0], parent, title, "--developer" in sys.argv))

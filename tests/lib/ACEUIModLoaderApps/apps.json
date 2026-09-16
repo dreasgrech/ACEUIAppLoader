@@ -1,0 +1,6 @@
+{
+  "apps": [
+    { "name": "gadget", "version": "0.1.0" },
+    { "name": "alpha", "version": "9.9.9" }
+  ]
+}

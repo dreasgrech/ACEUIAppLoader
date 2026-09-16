@@ -1,7 +1,7 @@
 # ACEUICapabilitiesProbe
 
 **ACE UI Capabilities Probe**: a capability probe for the Assetto Corsa EVO Gameface HUD, loaded
-by the [ACEUIModLoader](../ACEUIModLoader) and built on its library.
+by the [ACEUIModLoader](../..), inside whose package it ships, and built on its library.
 
 It exists to answer one question before we build anything ambitious on the HUD:
 **what can JavaScript actually do inside the game's Cohtml/V8?** The game runs V8

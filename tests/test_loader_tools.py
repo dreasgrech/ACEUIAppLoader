@@ -2,6 +2,7 @@
 import json
 import os
 import re
+import shutil
 import sys
 import tempfile
 import unittest
@@ -20,6 +21,12 @@ SRC = os.path.join(ROOT, "src")
 def read(path):
     with open(path, encoding="utf-8") as f:
         return f.read()
+
+
+def write(path, text):
+    os.makedirs(os.path.dirname(path), exist_ok=True)
+    with open(path, "w", encoding="utf-8") as f:
+        f.write(text)
 
 
 def strip_js(src):
@@ -141,6 +148,11 @@ class LibrarySourceTests(unittest.TestCase):
     def test_loader_contract(self):
         js = self.files["ACEUIModLoader.loader.js"]
         self.assertIn('const ROOT = "ACEUIModLoaderMods/";', js)
+        # the two roots must differ: loose files never beat packed files, so a bundled app
+        # sitting at the installed path could never be overridden to work on it
+        self.assertIn('const APPS_ROOT = "ACEUIModLoaderApps/";', js)
+        self.assertIn('const APPS_FILE = "apps.json";', js)
+        self.assertNotEqual('ACEUIModLoaderApps/', 'ACEUIModLoaderMods/')
         self.assertNotIn("manifest", js.lower(), "the game's preset list is the only source of mod names")
         self.assertIn('const MOD_FILE = "mod.json";', js)
         self.assertIn('const DEFAULT_PAGES = ["hud.html"];', js)
@@ -150,13 +162,13 @@ class LibrarySourceTests(unittest.TestCase):
         self.assertIn('const MARKER_EXT = ".settingspreset";', js)
         self.assertIn('engine.trigger("OnUICommand", PRESET_REQUEST, { __Type: PRESET_REQUEST, version: 0 });', js)
         for line in ('"loader " + ACEUIModLoader.VERSION + " on /"', 'source + ": " + names.length + " mod(s)"', '" loaded"',
-                     '" FAILED"', '"; nothing to load"', '"no engine on this page"', '"could not wrap engine.on'):
+                     '" FAILED"', '"; no installed mods"', '"nothing to load"', '"no engine on this page"', '"could not wrap engine.on'):
             self.assertIn(line, js, line)
         self.assertIn("loadScripts(base, files, index + 1, onDone)", js, "scripts load sequentially")
         self.assertIn("styles.concat(scripts).every(isFileName)", js, "never request anything that could be a folder")
         for name in ("PRESET_REQUEST", "PRESET_RESPONSE", "MARKER_PREFIX", "MARKER_EXT", "PRESET_TIMEOUT_MS", "source",
                      "filtering", "isMarker", "markerNames", "withoutMarkers", "isFileName", "CONTAINER_SELECTOR",
-                     "MOD_ATTR", "DEV_VERSION", "mod"):
+                     "MOD_ATTR", "DEV_VERSION", "mod", "APPS_ROOT", "APPS_FILE", "merge", "isDeveloper"):
             self.assertRegex(js, rf"\n\s+{name}: [A-Za-z_.]+,?\n", f"loader.{name} not exported")
         for alias in ("ROOT", "mods", "mod", "ready", "addStylesheet", "addScript"):
             self.assertIn(f"ACEUIModLoader.{alias} = ACEUIModLoader.loader.{alias};", js)
@@ -176,6 +188,15 @@ class LibrarySourceTests(unittest.TestCase):
         self.assertIn('<script src="doubles.js"></script>', harness)
         self.assertIn('<script src="lib.js"></script>', harness)
         self.assertNotIn("ACEUIModLoader.core.js", harness, "the harness must not list library files itself")
+
+    def test_manifest_keys_match_between_the_install_tool_and_the_test_kit(self):
+        """Both read a mod.json, and a key one accepts and the other rejects is a mod that
+        installs but fails its own tests (or the reverse)."""
+        sys.path.insert(0, os.path.join(ROOT, "tools"))
+        import modkit  # noqa: E402
+
+        self.assertEqual(sorted(install_mod.KNOWN_KEYS), sorted(modkit.KNOWN_KEYS))
+        self.assertIn("developer", install_mod.KNOWN_KEYS, "the app drawer's developer switch reads it")
 
     def test_marker_naming_matches_between_loader_and_install_tool(self):
         js = self.files["ACEUIModLoader.loader.js"]
@@ -268,6 +289,50 @@ class InstallModTests(unittest.TestCase):
 
 
 @unittest.skipUnless(os.path.exists(os.path.join(_repos.game_dir(), "content.kspkg")), "game not installed")
+class BundledAppsTests(unittest.TestCase):
+    """The apps that ship inside the package: manifest-listed files only, plus the index."""
+
+    def setUp(self):
+        self.tmp = tempfile.mkdtemp()
+        self.apps = os.path.join(self.tmp, "apps")
+        mod = os.path.join(self.apps, "gizmo", "gizmo")
+        os.makedirs(mod)
+        write(os.path.join(mod, "mod.json"),
+              json.dumps({"version": "1.2.3", "title": "Gizmo", "developer": True,
+                          "scripts": ["gizmo.js"], "styles": ["gizmo.css"]}))
+        for name in ("gizmo.js", "gizmo.css"):
+            write(os.path.join(mod, name), "/* x */")
+        # things a repo has and a package must not: tests, dev pages, a README
+        os.makedirs(os.path.join(self.apps, "gizmo", "tests"))
+        write(os.path.join(self.apps, "gizmo", "tests", "harness.html"), "<html></html>")
+        write(os.path.join(self.apps, "gizmo", "README.md"), "# gizmo")
+        write(os.path.join(mod, "notes.txt"), "not listed")
+
+    def tearDown(self):
+        shutil.rmtree(self.tmp, ignore_errors=True)
+
+    def test_only_the_listed_files_are_bundled_and_the_index_describes_them(self):
+        build = os.path.join(self.tmp, "build")
+        index = build_loader.copy_apps(build, self.apps)
+        root = os.path.join(build, *build_loader.APPS_PATH.split("/"))
+
+        self.assertEqual(sorted(os.listdir(os.path.join(root, "gizmo"))),
+                         ["gizmo.css", "gizmo.js", "mod.json"], "the repo's tests, README and strays stay out")
+        self.assertEqual(index, [{"name": "gizmo", "version": "1.2.3", "title": "Gizmo", "developer": True}])
+        with open(os.path.join(root, build_loader.APPS_INDEX), encoding="utf-8") as f:
+            self.assertEqual(json.load(f)["apps"], index, "what the loader reads is what was copied")
+
+    def test_a_bundled_app_is_held_to_the_same_manifest_rules_as_an_installed_one(self):
+        write(os.path.join(self.apps, "gizmo", "gizmo", "mod.json"),
+              json.dumps({"version": "1.2.3", "scripts": ["missing.js"]}))
+        with self.assertRaises(SystemExit):
+            build_loader.copy_apps(os.path.join(self.tmp, "build"), self.apps)
+
+    def test_no_apps_folder_is_not_an_error(self):
+        build = os.path.join(self.tmp, "build")
+        self.assertEqual(build_loader.copy_apps(build, os.path.join(self.tmp, "nothing")), [])
+
+
 class BuildLoaderTests(unittest.TestCase):
     def test_assemble_is_stock_plus_library_in_order_and_override_wins(self):
         import kspkg
@@ -290,8 +355,22 @@ class BuildLoaderTests(unittest.TestCase):
             entries = kspkg.read_entries(out)
             w = lookup_sim.winners(base, [e.hash for e in entries.values()])
             self.assertEqual(w[pk.path_hash(build_loader.HOST_PATH)], "mod", "cohtml.js override would lose")
-            self.assertEqual([p for p in entries if not p.startswith("uiresources\\pad") and "\\" in p and p.endswith(".js")],
-                             ["uiresources\\js\\cohtml.js"], "the package must contain exactly one file")
+            # one override and nothing else: everything the package adds beyond cohtml.js
+            # is a bundled app, at a path of its own that no stock file can collide with
+            shipped = sorted(p for p in entries
+                             if not p.startswith("uiresources\\pad") and not entries[p].flags & kspkg.FLAG_DIR)
+            # the table stores lower-case paths (kspkg.normalize)
+            apps_prefix = (build_loader.APPS_PATH.replace("/", "\\") + "\\").lower()
+            self.assertIn("uiresources\\js\\cohtml.js", shipped)
+            self.assertEqual([p for p in shipped if p != "uiresources\\js\\cohtml.js" and not p.startswith(apps_prefix)],
+                             [], "the only override is cohtml.js; the rest are the bundled apps")
+
+            expected = {(apps_prefix + build_loader.APPS_INDEX).lower()}
+            for _, info in build_loader.bundled_apps():
+                for rel in ["mod.json"] + info.get("scripts", []) + info.get("styles", []) + info.get("files", []):
+                    expected.add((apps_prefix + info["name"] + "\\" + rel).lower())
+            self.assertEqual({p for p in shipped if p.startswith(apps_prefix)}, expected,
+                             "the package carries every listed file of every bundled app, and nothing else")
 
 
 if __name__ == "__main__":

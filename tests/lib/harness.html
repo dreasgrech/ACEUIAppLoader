@@ -1089,6 +1089,8 @@ document.addEventListener("DOMContentLoaded", function () {
     t("loader: constants, aliases, and it announced itself", function () {
         const L = ACEUIModLoader.loader;
         eq(L.ROOT, "ACEUIModLoaderMods/"); eq(ACEUIModLoader.ROOT, "ACEUIModLoaderMods/"); eq(L.MOD_FILE, "mod.json");
+        eq(L.APPS_ROOT, "ACEUIModLoaderApps/", "bundled apps live apart from installed ones: loose files never beat packed ones");
+        eq(L.APPS_FILE, "apps.json");
         eq(L.DEFAULT_PAGES.join(","), "hud.html");
         eq(L.PRESET_REQUEST, "SettingsRequestVideoPresetList"); eq(L.PRESET_RESPONSE, "SettingsResponseVideoPresetList");
         eq(L.MARKER_PREFIX, "ACEUIModLoaderMods-"); eq(L.MARKER_EXT, ".settingspreset");
@@ -1105,6 +1107,19 @@ document.addEventListener("DOMContentLoaded", function () {
         eq(L.withoutMarkers(null), null);
         ["a.js", "pedal-graph.css", "mod.json"].forEach(function (f) { ok(L.isFileName(f), f); });
         ["sub/a.js", "sub\\a.js", "a", "", ".", "..", ".hidden", "a.", 5, null].forEach(function (f) { ok(!L.isFileName(f), JSON.stringify(f)); });
+    });
+
+    t("loader: an installed mod replaces the bundled app of the same name", function () {
+        const merge = ACEUIModLoader.loader.merge;
+        const shape = function (list) {
+            return list.map(function (w) { return w.name + "@" + w.root; }).join(" ");
+        };
+        eq(shape(merge([{ name: "a", version: "1.0.0" }], ["b"])), "a@ACEUIModLoaderApps/ b@ACEUIModLoaderMods/",
+            "bundled first, then installed");
+        eq(shape(merge([{ name: "a", version: "1.0.0" }], ["a"])), "a@ACEUIModLoaderMods/",
+            "the same name is one app, and the installed copy is the one that runs");
+        eq(shape(merge([], ["a"])), "a@ACEUIModLoaderMods/");
+        eq(shape(merge([{ name: "a", version: "1.0.0" }], [])), "a@ACEUIModLoaderApps/");
     });
 
     t("loader: it asked the game for the video preset list", function () {
@@ -1139,9 +1154,11 @@ document.addEventListener("DOMContentLoaded", function () {
         t("loader: discovered the mods from the game's answer, not a manifest", function () {
             const mods = ACEUIModLoader.loader.mods;
             eq(ACEUIModLoader.loader.source(), "presets");
-            eq(mods.map(function (m) { return m.name; }).join(","), "alpha,beta", "markers only, prefix stripped, sorted");
-            eq(mods[0].status, "loaded", "alpha has a folder with mod.json in the harness");
-            eq(mods[1].status, "missing", "beta has none");
+            eq(mods.map(function (m) { return m.name; }).join(","), "gadget,alpha,beta",
+                "the bundled app, then the markers with the prefix stripped, sorted");
+            eq(mods[0].status, "loaded", "gadget is bundled in the package");
+            eq(mods[1].status, "loaded", "alpha has a folder with mod.json in the harness");
+            eq(mods[2].status, "missing", "beta has none");
             ok(window.__log.indexOf("[ACEUIModLoader] presets: 2 mod(s)") >= 0, "discovery line");
             ok(window.__log.indexOf("[ACEUIModLoader] mod alpha 1.2.3: loading 1 script(s), 0 stylesheet(s)") >= 0, "version from mod.json");
             ok(!window.__log.some(function (l) { return l.indexOf("nothing to load") >= 0; }), "no give-up line");
@@ -1162,6 +1179,39 @@ document.addEventListener("DOMContentLoaded", function () {
             const dev = ACEUIModLoader.mod("zzz");
             eq(dev.version, ACEUIModLoader.loader.DEV_VERSION); eq(dev.loaded, false); eq(dev.base, ""); eq(dev.name, "zzz"); eq(dev.hudId, "hud_zzz");
             eq(ACEUIModLoader.mod("beta").version, "dev", "listed but not loaded reads as dev");
+        });
+
+        t("loader: an app bundled in the package loads with no marker, and an installed copy of the same name wins", function () {
+            const g = window.__gadget;
+            const entry = ACEUIModLoader.loader.mods.filter(function (m) { return m.name === "gadget"; })[0];
+            ok(g, "gadget.js ran");
+            eq(g.base, "ACEUIModLoaderApps/gadget/", "loaded from the bundled root, not the installed one");
+            eq(g.version, "0.1.0"); eq(g.developer, true, "its mod.json calls it a developer tool");
+            eq(entry.builtin, true); eq(entry.status, "loaded");
+            ok(window.__log.indexOf("[ACEUIModLoader] bundled: 2 app(s)") >= 0, "the index line");
+            ok(window.__log.indexOf("[ACEUIModLoader] alpha: installed copy overrides the bundled 9.9.9") >= 0, "and it said which copy won");
+            eq(window.__alpha.base, "ACEUIModLoaderMods/alpha/", "alpha really is the installed one");
+            eq(ACEUIModLoader.loader.isDeveloper("gadget"), true); eq(ACEUIModLoader.loader.isDeveloper("alpha"), false);
+            eq(ACEUIModLoader.apps.get("gadget").answer, 42, "it offered its surface to the other apps");
+            ok(ACEUIModLoader.apps.has("gadget")); eq(ACEUIModLoader.apps.get("nope"), null, "asking for a stranger is not an error");
+            ok(ACEUIModLoader.apps.names().indexOf("gadget") >= 0);
+        });
+
+        t("drawer: a developer app is loaded but not started, and its hotkey cannot put it on screen", function () {
+            const drawer = ACEUIModLoader.drawer;
+            eq(drawer.developerShown(), false, "the developer switch is off until someone asks for it");
+            eq(window.__gadget.attached, 0, "loaded, but never started");
+            eq(drawer.isVisible("gadget"), false);
+            eq(ACEUIModLoader.mod("gadget").show(true), false, "which is what the hotkey and a close button go through");
+            ok(window.__log.some(function (l) { return l.indexOf("[Gadget] not shown: developer apps are switched off") === 0; }), "and it says why");
+            eq(window.__gadget.attached, 0, "still not started");
+            eq(drawer.setDeveloper(true), true);
+            eq(drawer.isVisible("gadget"), true, "the switch shows it, with its own switch untouched");
+            eq(window.__gadget.attached, 1, "and starts it");
+            eq(drawer.setDeveloper(false), false);
+            eq(window.__gadget.detached, 1, "and hiding them stops them again, rather than leaving them running unreachable");
+            eq(document.getElementById("gadget").style.display, "none");
+            eq(ACEUIModLoader.persist.readLocal(drawer.DEV_STORE_KEY).on, false, "the choice is remembered");
         });
 
         t("loader: mod(name).mount(attach) attaches once to #name when the DOM has it, and is a no-op otherwise", function () {
@@ -1392,7 +1442,7 @@ document.addEventListener("DOMContentLoaded", function () {
                 ok(seen, "stock handler ran");
                 eq(seen.filenames.join(","), "MyLowSettings");
                 eq(seen.response, "OK");
-                eq(ACEUIModLoader.loader.mods.length, 2, "the loader's own handler was cleared after discovery");
+                eq(ACEUIModLoader.loader.mods.length, 3, "the loader's own handler was cleared after discovery: gadget, alpha and beta, not a second round");
                 handle.clear();
                 eq((window.__engine.handlers["SettingsResponseVideoPresetList"] || []).length, 0, "clear() still works through the wrapper");
             });

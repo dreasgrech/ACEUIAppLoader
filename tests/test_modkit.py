@@ -1,5 +1,6 @@
 """new_mod.py must produce a mod that passes the shared test kit (modkit.py) out of the box,
 and the kit must catch the boilerplate it exists to remove."""
+import json
 import os
 import shutil
 import sys
@@ -75,6 +76,13 @@ class NewModTests(unittest.TestCase):
         failed = {str(t).split(" ")[0] for t, _ in result.failures}
         self.assertIn("test_no_legacy_boilerplate", failed)
         self.assertIn("test_nothing_ships_that_is_not_listed", failed, "mod.js is not listed in mod.json")
+
+    def test_developer_flag_is_scaffolded_and_accepted(self):
+        repo = new_mod.create("fuelcalc", self.parent, "Fuel Calc", developer=True)
+        with open(os.path.join(repo, "fuelcalc", "mod.json"), encoding="utf-8") as f:
+            info = json.load(f)
+        self.assertIs(info["developer"], True)
+        self.assertEqual(sorted(set(info) - modkit.KNOWN_KEYS), [], "the kit accepts it")
 
     def test_bad_names_are_rejected(self):
         with self.assertRaises(SystemExit):

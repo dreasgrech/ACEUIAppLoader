@@ -33,7 +33,9 @@ MARKER_DIR = "Video"
 MARKER_PREFIX = "ACEUIModLoaderMods-"
 MARKER_EXT = ".settingspreset"
 MOD_FILE = "mod.json"
-KNOWN_KEYS = {"name", "version", "title", "pages", "scripts", "styles", "files", "root"}
+# "developer": a tool rather than something a player installed for fun; the app drawer
+# keeps those behind its own switch. Must match modkit.KNOWN_KEYS (a test checks).
+KNOWN_KEYS = {"name", "version", "title", "pages", "scripts", "styles", "files", "root", "developer"}
 LEGACY_MANIFEST = "manifest.json"
 NAME_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9_.-]*$")
 IGNORE = shutil.ignore_patterns("__pycache__", "*.swp", "*~", ".*")
