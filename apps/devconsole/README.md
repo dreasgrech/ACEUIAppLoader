@@ -15,9 +15,10 @@ lines (it hooks `console.*` before the stock bundle runs, so the stock HUD's
 messages are in the buffer), `ACEUIModLoader.panel` handles drag and position
 persistence, `ACEUIModLoader.loop` the frame loop, `ACEUIModLoader.persist` the open state
 and filters. Everything learned about the game and its UI engine is in
-`ACEGameInternals` (`docs/`). Clone all three side by side: the preview page
-and the tests load the library and the shared test fixtures from
-`../ACEUIModLoader/`.
+`ACEGameInternals` (`docs/`), checked out beside the loader. The console ships
+inside the loader's own package as one of its developer apps, so it lives in
+`apps/devconsole/` and its preview page and tests load the library and the shared
+fixtures from the repo it sits in.
 
 ## Typing does not drive the car
 
@@ -238,7 +239,7 @@ dragging, the text filter, scaling, the toggle key, hidden HUD, drag exclusions
 and lifecycle. A second class keeps the console's own contract (fixed row pool,
 legacy `keyCode` handling, the Cohtml wheel sign, the prompt never echoing into
 the game log). The harness includes the shared test doubles and library loader
-from `ACEUIModLoader/tests/lib/`. Skipped without a browser (`ACE_BROWSER=<path>`
+from the loader's `tests/lib/`. Skipped without a browser (`ACE_BROWSER=<path>`
 overrides); the runner leaves no browser process behind.
 
 ## Verifying in game

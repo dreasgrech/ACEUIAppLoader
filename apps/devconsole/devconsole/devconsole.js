@@ -1169,6 +1169,24 @@ const DevConsole = (function () {
      * Build the console inside `root`, make it a persistent draggable panel, follow
      * the shared line buffer and start the frame loop. Returns the state `detach` needs.
      */
+    /**
+     * What the console offers the other apps. One thing, because one thing is all it has
+     * that they cannot do themselves: run a line in the page and show the result, prompt
+     * and all, in the console's own buffer. Reading the log is `ACEUIModLoader.console`
+     * (that is where the lines come from), and printing to it is `console.log`.
+     *
+     *     const dc = ACEUIModLoader.apps.get("devconsole");
+     *     if (dc) { dc.evaluate("ACEUIModLoader.mods.length"); }
+     *
+     * Offered while the console is attached, withdrawn when it is not: there is no panel
+     * to show the answer in otherwise.
+     */
+    const surface = function (state) {
+        return {
+            evaluate: function (code) { return evaluate(state, code); }
+        };
+    };
+
     const attach = function (root) {
         const state = create(root);
 
@@ -1214,6 +1232,7 @@ const DevConsole = (function () {
 
         state.ui = me.panel(root, function (now) { tick(state, now); });
         state.unsubscribe = lines.subscribe(function () { state.dirty = true; });
+        ACEUIModLoader.apps.register(me.name, surface(state));
         log("console attached, " + lines.entries().length + " buffered line(s)"
             + ", scale " + state.scale + ", toggle key " + TOGGLE_CODE);
 
@@ -1222,6 +1241,7 @@ const DevConsole = (function () {
 
     /** Stop the loop, stop following the buffer and release the listeners. The DOM is left in place. */
     const detach = function (state) {
+        ACEUIModLoader.apps.unregister(me.name);
         state.ui.stop();
 
         if (state.unsubscribe) {
@@ -1269,6 +1289,7 @@ const DevConsole = (function () {
         resetCompletion: resetCompletion,
         create: create,
         render: render,
+        surface: surface,
         evaluate: evaluate,
         captureKeyboard: captureKeyboard,
         setOpen: setOpen,

@@ -10,12 +10,12 @@
   #results { white-space: pre; }
 </style>
 <!-- shared test doubles (fake frame clock, in-memory localStorage, console capture) from the loader repo -->
-<script src="../../../ACEUIModLoader/tests/lib/doubles.js"></script>
+<script src="../../../../tests/lib/doubles.js"></script>
 <script>
 window.ModelCurrentCar = { has_focused_car: true, speed: 123.4, gas_percent: 0.5 };
 </script>
 <!-- the ACEUIModLoader library from the sibling checkout, in load order (in game it is part of cohtml.js) -->
-<script src="../../../ACEUIModLoader/tests/lib/lib.js"></script>
+<script src="../../../../tests/lib/lib.js"></script>
 <link rel="stylesheet" type="text/css" href="../../devconsole/devconsole.css">
 <script>
 // lines logged before the console attaches must show up once it does
@@ -541,11 +541,32 @@ console.warn("early warning");
         nextFrame();
         t("the snippet ran once and its completion was reported", function () {
             eq(window.__snippet, 1, "snippet executed");
-            eq(texts(root).pop(), "run: hello.js done"); eq(lastRow(root).getAttribute("data-level"), "result");
+
+            // by text rather than by position: the loader logs its own lines into this
+            // console too, and one of them can arrive after the snippet's
+            const rows = visibleRows(root).filter(function (r) {
+                return r.querySelector(".dc-text").textContent === "run: hello.js done";
+            });
+
+            eq(rows.length, 1, "completion reported once");
+            eq(rows[0].getAttribute("data-level"), "result");
             DevConsole.detach(state);
         });
         H.finish();
     };
+
+    t("while attached it offers the other apps the one thing only it can do", function () {
+        const dc = ACEUIModLoader.apps.get("devconsole");
+
+        ok(dc, "registered while attached");
+        dc.evaluate("40 + 2");
+        nextFrame();
+
+        const rows = texts(root);
+
+        ok(rows.indexOf("42") >= 0, "the answer went into the console, where it can be read");
+        ok(rows.some(function (line) { return line.indexOf("40 + 2") >= 0; }), "and the line that asked for it");
+    });
 
     finishAfterSnippet(100);
 }());
