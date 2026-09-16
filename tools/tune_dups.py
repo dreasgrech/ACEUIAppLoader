@@ -48,7 +48,7 @@ DEFAULT_CANDIDATES = (1, 16, 32, 64, 96, 128)
 DEFAULT_SCENARIOS = 24
 
 
-def population(base, installed, count, seed=20260916):
+def population(installed, count, seed=20260916):
     """
     Package sets to score against: synthetic car mods, sized and named like the real ones
     (both of the ones we have hold only new paths, 369 and 776 entries), with whatever is
@@ -132,17 +132,30 @@ def tune(build_dir, targets, candidates, scenarios, game_dir=None, mods_dir=None
     # and then the count would be scored against a package the build will not write.
     # A release is measured for a stock install: an empty folder to plan padding against,
     # and a population with none of THIS machine's packages in it.
-    mods_dir = tempfile.mkdtemp(prefix="ace-release-") if release else (mods_dir or pk.default_mods_dir())
+    # `scratch` is the only thing this function is ever allowed to delete. In a non-release
+    # run `mods_dir` is the player's real mods folder, so it must never be handed to rmtree.
+    scratch = tempfile.mkdtemp(prefix="ace-release-") if release else None
+    mods_dir = scratch or mods_dir or pk.default_mods_dir()
     installed = [] if release else [(name, hashes) for name, hashes, _
                                     in pk.installed_packages(mods_dir, package_name)]
+    try:
+        return _tune(build_dir, targets, candidates, scenarios, game_dir, mods_dir, release,
+                     base, base_pkg, files, dirs, package_name, installed)
+    finally:
+        if scratch:
+            shutil.rmtree(scratch, ignore_errors=True)
+
+
+def _tune(build_dir, targets, candidates, scenarios, game_dir, mods_dir, release,
+          base, base_pkg, files, dirs, package_name, installed):
     # Three populations. Selection needs a big enough sample to be stable -- picking the
     # argmax of a single 60-set population chose a count that scored 90% on fresh data when
     # another candidate scored 98% -- so two populations are pooled to choose with, and a
     # third is never looked at until the winner is decided. That last number is the estimate
     # to trust, because nothing was selected on it.
-    select_a = population(base, installed, scenarios, seed=20260916)
-    select_b = population(base, installed, scenarios, seed=1618033)
-    holdout = population(base, installed, scenarios, seed=27182818)
+    select_a = population(installed, scenarios, seed=20260916)
+    select_b = population(installed, scenarios, seed=1618033)
+    holdout = population(installed, scenarios, seed=27182818)
     print(f"base {os.path.basename(base_pkg)} ({len(base)} entries), "
           f"{len(files)} files, {len(targets)} override target(s), "
           f"{scenarios} package set(s) per population, {len(installed)} installed alongside")
@@ -171,8 +184,6 @@ def tune(build_dir, targets, candidates, scenarios, game_dir=None, mods_dir=None
     if dups == 1:
         print("  (no duplicate count beat a plain build here)")
     confirm_against_a_real_build(build_dir, targets, dups, hashes, game_dir, mods_dir)
-    if release:
-        shutil.rmtree(mods_dir, ignore_errors=True)
     return {"dups": dups, "targets": targets, "scenarios": scenarios, "release": release,
             "selection": chosen, "selection_sets": 2 * scenarios, "unseen": held,
             "fingerprint": pk.paths_fingerprint([rel for rel, _ in files] + list(dirs), targets)}

@@ -349,12 +349,19 @@ class BuildLoaderTests(unittest.TestCase):
             self.assertIn(b"const ACEUIModLoader = (function () {", data)
             self.assertIn(b"ACEUIModLoader.loader = (function () {", data)
             out = os.path.join(tmp, "loader.kspkg")
-            written = pk.pack(build, out)
+            # Pack for a stock install. The padding is planned against whatever packages the
+            # mods folder holds, and `winners` below models base + ours and nothing else --
+            # so without this the assertion depends on what the developer happens to have
+            # installed, and plans for one world while checking another.
+            stock_mods = os.path.join(tmp, "empty-mods")
+            os.makedirs(stock_mods)
+            written = pk.pack(build, out, mods_dir=stock_mods)
             pk.verify(out, written)
             base = lookup_sim.read_base_hashes(os.path.join(_repos.game_dir(), "content.kspkg"))
             entries = kspkg.read_entries(out)
             w = lookup_sim.winners(base, [e.hash for e in entries.values()])
-            self.assertEqual(w[pk.path_hash(build_loader.HOST_PATH)], "mod", "cohtml.js override would lose")
+            for target in build_loader.TARGETS:
+                self.assertEqual(w[pk.path_hash(target)], "mod", f"{target} override would lose")
             # Two overrides and nothing else: cohtml.js and our copy of the HUD page, which
             # are the two independent ways the library can reach the page. Everything else
             # the package adds is a bundled app, at a path no stock file can collide with.
@@ -403,9 +410,16 @@ class SecondEntryPointTests(unittest.TestCase):
         import kspkg
         stock = kspkg.extract(os.path.join(_repos.game_dir(), "content.kspkg"),
                               build_loader.PAGE_PATH).decode("utf-8")
-        self.assertEqual(self.page.replace("\n    " + build_loader.PAGE_TAG, "", 1), stock,
+        eol = "\r\n" if "\r\n" in stock else "\n"
+        self.assertEqual(self.page.replace(eol + "    " + build_loader.PAGE_TAG, "", 1), stock,
                          "nothing but our script tag may differ from Kunos' page")
         self.assertEqual(self.page.count(build_loader.PAGE_TAG), 1)
+
+    def test_the_added_line_uses_the_page_s_own_line_ending(self):
+        # The stock page is entirely CRLF; a lone LF would be the one byte in it that is
+        # not Kunos', and it would not show up in a comparison that normalises newlines.
+        crlf, lf = self.page.count("\r\n"), self.page.count("\n")
+        self.assertEqual(crlf, lf, "the page mixes line endings: %d CRLF of %d LF" % (crlf, lf))
 
     def test_our_script_runs_after_cohtml_and_before_the_stock_bundle(self):
         # The console hook has to be in place before Kunos' bundle runs, which is why the
@@ -441,7 +455,7 @@ class SecondEntryPointTests(unittest.TestCase):
         shutil.copyfile(os.path.join(ROOT, "tests", "lib", "bootstrap.html"), harness)
         shutil.copyfile(os.path.join(self.build, *build_loader.BOOT_PATH.split("/")),
                         os.path.join(self.tmp, "loader.js"))
-        headless.check_harness(self, harness, 5)
+        headless.check_harness(self, harness, 6)
 
 
 if __name__ == "__main__":

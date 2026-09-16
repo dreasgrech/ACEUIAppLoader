@@ -22,8 +22,15 @@
     };
 </script>
 
-<!-- the real build artefact, loaded exactly as our copy of hud.html loads it -->
+<!-- The real build artefact, loaded exactly as our copy of hud.html loads it -- and then
+     loaded again, because both ways into the page can win their ties at once. The stamp
+     between the two loads is how a failed guard would be caught: every module would run
+     again and window.ACEUIModLoader would be a different object, without the stamp. -->
 <script src="loader.js"></script>
+<script>
+    window.__first = window.ACEUIModLoader;
+    if (window.ACEUIModLoader) { window.ACEUIModLoader.__stamp = "first"; }
+</script>
 <script src="loader.js"></script>
 
 <script>
@@ -39,9 +46,15 @@
         const missing = want.filter(function (n) { return !window.ACEUIModLoader[n]; });
         if (missing.length) { throw new Error("missing: " + missing.join(", ")); }
     });
-    t("loading it a second time is a no-op, not a second library", function () {
-        // The page above loads it twice on purpose: both ways in can win at once.
-        if (window.ACEUIModLoader.__loadedTwice) { throw new Error("guard did not hold"); }
+    t("a second load leaves the first library in place", function () {
+        if (window.ACEUIModLoader !== window.__first) {
+            throw new Error("the second load replaced the namespace: the guard did not hold");
+        }
+    });
+    t("a second load does not re-run the modules", function () {
+        if (window.ACEUIModLoader.__stamp !== "first") {
+            throw new Error("the stamp is gone, so the modules ran again");
+        }
     });
     t("the bare identifier resolves through the window property", function () {
         /* jshint evil:true */

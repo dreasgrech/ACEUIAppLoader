@@ -167,7 +167,10 @@ def assemble_page(build_dir, base_pkg, sources):
     if PAGE_ANCHOR not in stock:
         raise SystemExit(f"stock {PAGE_PATH} no longer contains {PAGE_ANCHOR!r}; "
                          f"the page changed in this game version -- re-check before building")
-    page = stock.replace(PAGE_ANCHOR, PAGE_ANCHOR + "\n    " + PAGE_TAG, 1)
+    # Match the page's own line ending: the stock file is entirely CRLF, and a lone LF in
+    # the middle of it would be the one byte that is not Kunos'.
+    eol = "\r\n" if "\r\n" in stock else "\n"
+    page = stock.replace(PAGE_ANCHOR, PAGE_ANCHOR + eol + "    " + PAGE_TAG, 1)
     target = os.path.join(build_dir, *PAGE_PATH.split("/"))
     os.makedirs(os.path.dirname(target), exist_ok=True)
     with open(target, "w", encoding="utf-8", newline="") as f:
@@ -274,8 +277,10 @@ if __name__ == "__main__":
     build = assemble(with_apps="--no-apps" not in flags, with_host=with_host)
     os.makedirs(os.path.dirname(OUT), exist_ok=True)
     asked = next((a.split("=", 1)[1] for a in flags if a.startswith("--dups=")), "1")
-    dups = recorded_dups(build, TARGETS, release=release) if asked == "auto" else int(asked)
+    # The overrides this build actually carries, which is also what a recorded measurement
+    # has to have been taken for -- a --no-host build has only the page.
     wanted = list(TARGETS) if with_host else [PAGE_PATH]
+    dups = recorded_dups(build, wanted, release=release) if asked == "auto" else int(asked)
     targets = wanted if dups > 1 else []
     mods_dir = release_mods_dir(temporary) if release else None
     if release:
