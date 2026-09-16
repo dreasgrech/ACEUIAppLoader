@@ -1,6 +1,7 @@
 {
-  "version": "0.9.0",
+  "version": "0.10.0",
   "title": "ACE UI Profiler",
+  "developer": true,
   "styles": ["profiler.css"],
   "scripts": ["sampler.js", "profiler.js"]
 }

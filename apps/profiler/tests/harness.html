@@ -8,8 +8,8 @@
   .absolutecenter { position: relative; width: 1600px; height: 900px; overflow: hidden; }
   #results { white-space: pre; }
 </style>
-<script src="../../ACEUIModLoader/tests/lib/doubles.js"></script>
-<script src="../../ACEUIModLoader/tests/lib/lib.js"></script>
+<script src="../../../tests/lib/doubles.js"></script>
+<script src="../../../tests/lib/lib.js"></script>
 <link rel="stylesheet" type="text/css" href="../profiler/profiler.css">
 <script>
 (function () {
@@ -473,10 +473,19 @@
         eq(state.scaler.value(), was, "and back down again");
     });
 
+    t("the other apps can reach the panel by name while it is attached", function () {
+        const handle = ACEUIModLoader.apps.get("profiler");
+
+        eq(handle, ACEUIProfiler.panel(), "the registered surface is the panel's own handle");
+        eq(handle.record(true), true, "so a mod can start a recording without knowing our global");
+        handle.record(false);
+    });
+
     t("detach stops the loop and leaves the page uninstrumented", function () {
         const cancelled = clock.cancelled;
 
         P.detach(state);
+        eq(ACEUIModLoader.apps.get("profiler"), null, "and it stops answering: the handle was this panel's");
         eq(clock.cancelled, cancelled + 1, "the frame was cancelled");
         eq(state.ui.loop.running, false, "loop stopped");
         eq(S.wrapped(), false, "and nothing of ours is left wrapped around the page");

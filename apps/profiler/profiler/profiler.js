@@ -1262,6 +1262,12 @@ const ACEUIProfiler = (function () {
 
         state.ui = me.panel(root, function (now) { tick(state, now); });
         live = handleFor(state);
+
+        // the same handle ACEUIProfiler.panel() hands back, offered to the other apps by
+        // name: a mod that wants to start a recording or read the last window off does not
+        // have to know the profiler's global exists. Withdrawn in detach, because the
+        // handle is this panel's -- and a stopped profiler has nothing to report.
+        ACEUIModLoader.apps.register(me.name, live);
         log("panel attached, clock " + S.CLOCK.name + " (" + S.CLOCK.resolutionMs + " ms steps)");
 
         return state;
@@ -1299,6 +1305,7 @@ const ACEUIProfiler = (function () {
     };
 
     const detach = function (state) {
+        ACEUIModLoader.apps.unregister(me.name);
         state.ui.stop();
 
         if (state.unsubscribeSettings) {

@@ -431,7 +431,8 @@ IIFE module that reads its identity from `ACEUIModLoader.mod("<name>")`, uses
 attaches to `#<name>` when the page has it (the loader in game, the preview and
 harness pages outside it). `python tools/new_mod.py <name> --title "Nice Name"`
 writes exactly that, plus a harness, a preview and a one-class test file that
-runs the shared kit. `ACEPedalGraph` and `ACEDevConsole` are the two reference mods.
+runs the shared kit. `ACEPedalGraph` is the reference mod, and `apps/devconsole`
+and `apps/profiler` are the same shape one level in.
 
 ## The mod test kit (`tools/modkit.py`)
 

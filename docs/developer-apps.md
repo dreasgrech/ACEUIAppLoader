@@ -1,5 +1,11 @@
 # Developer apps in the loader -- investigation
 
+**Decided and done, 2026-09-16, in loader 0.19.0.** All three were absorbed with their
+history (`tools/absorb_app.py`) and now ship inside the package: `apps/capabilities` 0.3.0,
+`apps/devconsole` 0.11.0, `apps/profiler` 0.10.0. Their repos are archived rather than
+deleted. What follows is the investigation as written before any of it, with 6b recording
+what changed while building it.
+
 Written 2026-09-16, before changing anything. Question: ship the dev console, the
 capabilities probe and the profiler *with* the loader -- installed as ordinary apps but
 flagged as developer tools, hidden behind a switch at the bottom of the app drawer, and

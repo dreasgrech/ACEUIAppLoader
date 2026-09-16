@@ -147,16 +147,22 @@ discovered through its marker file (see the loader's README).
 
 ## Install
 
-With the loader package installed (`python tools/build_loader.py --install` in
-the loader repo, checked out next to this one):
+It ships inside the loader's package, so building and installing the loader
+installs it:
 
 ```
-python ..\ACEUIModLoader\tools\install_mod.py devconsole
-python ..\ACEUIModLoader\tools\install_mod.py --remove devconsole
+python tools/run_tests.py                    # this app's suite is part of the run
+python tools/build_loader.py --install
 ```
 
-Edits need only a re-run of the install and a HUD reload in game (Escape,
-resume).
+To work on it, install it loose as well: the installed copy wins over the bundled
+one until it is removed again, and then a re-run of the install plus a HUD reload
+in game (Escape, resume) is the whole edit loop.
+
+```
+python tools/install_mod.py apps/devconsole/devconsole
+python tools/install_mod.py --remove devconsole
+```
 
 ## Using it
 

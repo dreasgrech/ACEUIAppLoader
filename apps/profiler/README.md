@@ -2,7 +2,7 @@
 
 A profiler for Assetto Corsa EVO's UI, in the shape of the Unity profiler: a graph of the
 last frames on top, a table of what cost what underneath. It profiles the mods loaded by
-the [ACEUIModLoader](../ACEUIModLoader) **and the game's own stock HUD**, which turns out
+the [ACEUIModLoader](../..), inside whose package it ships, **and the game's own stock HUD**, which turns out
 to be possible for three reasons, all measured rather than assumed
 (`ACEUIModLoader/dev/snippets/profileprobe.js`, run in game 2026-09-15).
 
@@ -146,14 +146,22 @@ and it can change without notice.
 
 ## Install
 
-With the loader package installed (`python tools/build_loader.py --install` in the loader
-repo):
+It ships inside the loader's package, so building and installing the loader
+installs it:
 
 ```
-python ..\ACEUIModLoader\tools\install_mod.py profiler
+python tools/run_tests.py                    # this app's suite is part of the run
+python tools/build_loader.py --install
 ```
 
-Escape and resume in the car reloads the HUD and picks up changes.
+To work on it, install it loose as well: the installed copy wins over the bundled
+one until it is removed again, and then a re-run of the install plus a HUD reload
+in game (Escape, resume) is the whole edit loop.
+
+```
+python tools/install_mod.py apps/profiler/profiler
+python tools/install_mod.py --remove profiler
+```
 
 ## Tests
 

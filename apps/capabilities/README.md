@@ -82,14 +82,22 @@ so the probe can never wedge the HUD.
 
 ## Install
 
-With the loader package installed (`python tools/build_loader.py --install` in the
-loader repo):
+It ships inside the loader's package, so building and installing the loader
+installs it:
 
 ```
-python ..\ACEUIModLoader\tools\install_mod.py capabilities
+python tools/run_tests.py                    # this app's suite is part of the run
+python tools/build_loader.py --install
 ```
 
-Escape and resume in the car reloads the HUD and picks up changes.
+To work on it, install it loose as well: the installed copy wins over the bundled
+one until it is removed again, and then a re-run of the install plus a HUD reload
+in game (Escape, resume) is the whole edit loop.
+
+```
+python tools/install_mod.py apps/capabilities/capabilities
+python tools/install_mod.py --remove capabilities
+```
 
 ## Tests
 
