@@ -69,8 +69,15 @@ def population(installed, count, seed=20260916):
     return sets
 
 
-def score(base, our_hashes, target_hashes, sets, package_name):
-    """How many of the package sets leave at least one override resolving to us."""
+def score(base, our_hashes, target_hashes, sets, package_name, require="any"):
+    """
+    How many of the package sets leave our overrides resolving to us.
+
+    `require` is what counts as a win, and it is a property of the package, not a taste.
+    The loader has two independent ways into the page, so "any" is the truth for it. A
+    package whose overrides all have to land -- ACEDOOM needs its bank AND its table -- must
+    be measured with "all", or the count is chosen against a success it does not have.
+    """
     wins = 0
     per = [0] * len(target_hashes)
     for others in sets:
@@ -83,7 +90,7 @@ def score(base, our_hashes, target_hashes, sets, package_name):
             won = at < len(vector) and vector[at][0] == h and vector[at][1] == package_name
             per[i] += 1 if won else 0
             got.append(won)
-        if any(got):
+        if all(got) if require == "all" else any(got):
             wins += 1
     return wins, per
 
@@ -119,14 +126,17 @@ def candidate_hashes(mod_paths, targets, dups, pad_paths):
     return hashes
 
 
-def tune(build_dir, targets, candidates, scenarios, game_dir=None, mods_dir=None, release=False):
+def tune(build_dir, targets, candidates, scenarios, game_dir=None, mods_dir=None, release=False,
+         require="any", package_name=None):
     base_pkg = lookup_sim.find_base_package(game_dir)
     if not base_pkg:
         raise SystemExit("content.kspkg not found; tuning needs the installed game (set ACE_GAME_DIR)")
     base = lookup_sim.read_base_hashes(base_pkg)
     files, dirs = pk.collect(build_dir)
     targets = [pk.normalize(t) for t in targets]
-    package_name = os.path.basename(build_loader.OUT)
+    # The name decides load order, and load order decides who wins, so a measurement taken
+    # under the wrong name is a measurement of a different package. ACEDOOM has its own.
+    package_name = package_name or os.path.basename(build_loader.OUT)
     # Resolve this exactly as pack() does, and use the same value for the padding search:
     # planning against a different set of installed packages produces a different layout,
     # and then the count would be scored against a package the build will not write.
@@ -140,14 +150,14 @@ def tune(build_dir, targets, candidates, scenarios, game_dir=None, mods_dir=None
                                     in pk.installed_packages(mods_dir, package_name)]
     try:
         return _tune(build_dir, targets, candidates, scenarios, game_dir, mods_dir, release,
-                     base, base_pkg, files, dirs, package_name, installed)
+                     base, base_pkg, files, dirs, package_name, installed, require)
     finally:
         if scratch:
             shutil.rmtree(scratch, ignore_errors=True)
 
 
 def _tune(build_dir, targets, candidates, scenarios, game_dir, mods_dir, release,
-          base, base_pkg, files, dirs, package_name, installed):
+          base, base_pkg, files, dirs, package_name, installed, require="any"):
     # Three populations. Selection needs a big enough sample to be stable -- picking the
     # argmax of a single 60-set population chose a count that scored 90% on fresh data when
     # another candidate scored 98% -- so two populations are pooled to choose with, and a
@@ -169,8 +179,8 @@ def _tune(build_dir, targets, candidates, scenarios, game_dir, mods_dir, release
                                        dups=dups, dup_targets=targets)
         paths = [rel for rel, _ in files] + list(dirs) + extra_dirs
         hashes = candidate_hashes(paths, targets, dups, pad_paths)
-        a, per = score(base, hashes, target_hashes, select_a, package_name)
-        b, _ = score(base, hashes, target_hashes, select_b, package_name)
+        a, per = score(base, hashes, target_hashes, select_a, package_name, require)
+        b, _ = score(base, hashes, target_hashes, select_b, package_name, require)
         results.append((a + b, dups, len(pad_paths), hashes))
         print("  %4d record(s): %3d/%-3d selection sets %6.1f%%   padding %-3d  (%.0fs)"
               % (dups, a + b, 2 * scenarios, 100.0 * (a + b) / (2 * scenarios),
@@ -178,13 +188,14 @@ def _tune(build_dir, targets, candidates, scenarios, game_dir, mods_dir, release
 
     results.sort(key=lambda r: (-r[0], r[1]))
     chosen, dups, pads, hashes = results[0]
-    held, _ = score(base, hashes, target_hashes, holdout, package_name)
+    held, _ = score(base, hashes, target_hashes, holdout, package_name, require)
     print(f"\nchosen on {2 * scenarios} selection sets: {dups} record(s) per override "
           f"-> {held}/{scenarios} ({100.0 * held / scenarios:.1f}%) on the held-out population")
     if dups == 1:
         print("  (no duplicate count beat a plain build here)")
     confirm_against_a_real_build(build_dir, targets, dups, hashes, game_dir, mods_dir)
     return {"dups": dups, "targets": targets, "scenarios": scenarios, "release": release,
+            "require": require,
             "selection": chosen, "selection_sets": 2 * scenarios, "unseen": held,
             "game": build_loader.game_version(game_dir),
             "fingerprint": pk.paths_fingerprint([rel for rel, _ in files] + list(dirs), targets)}
