@@ -21,7 +21,11 @@ build_loader.py - build the ACEUIModLoader package.
 5. --install copies it to the game's mods folder.
 
 Usage:
-  python tools/build_loader.py [--install] [--no-verify] [--no-apps]
+  python tools/build_loader.py [--install] [--no-verify] [--no-apps] [--dups=N]
+
+  --dups=N  write N table records for the cohtml.js override instead of one, so the
+            game's merged vector holds N of ours against the base package's single
+            record. See pack_kspkg.py for why this matters and why N must be measured.
 """
 import json
 import os
@@ -160,11 +164,13 @@ def assemble(build_dir=BUILD_DIR, game_dir=None, with_apps=True):
 
 if __name__ == "__main__":
     flags = set(sys.argv[1:])
+    dups = int(next((a.split("=", 1)[1] for a in flags if a.startswith("--dups=")), 1))
     build = assemble(with_apps="--no-apps" not in flags)
     os.makedirs(os.path.dirname(OUT), exist_ok=True)
-    written = pk.pack(build, OUT)
+    targets = [HOST_PATH] if dups > 1 else []
+    written = pk.pack(build, OUT, dups=dups, dup_targets=targets)
     if "--no-verify" not in flags:
-        pk.verify(OUT, written)
+        pk.verify(OUT, written, dups=dups, dup_targets=targets)
     if "--install" in flags:
         dest = os.path.join(_repos.mods_dir(), os.path.basename(OUT))
         os.makedirs(os.path.dirname(dest), exist_ok=True)

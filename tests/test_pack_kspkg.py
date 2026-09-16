@@ -212,6 +212,140 @@ class PackTests(unittest.TestCase):
             self.assertEqual(f.read(), first)
 
 
+class DuplicateRecordTests(unittest.TestCase):
+    """
+    Extra table records for an overridden file (pack --dups/--dup).
+
+    The game takes the lookup hash straight from the entry's 0xE8 field and keeps only
+    {hash, size, offset, flags, package index} in memory -- no path -- so a decoy that
+    wins a lookup reads exactly the same bytes as the real record.
+    """
+    TARGET = "uiresources\\hud.html"
+    DUPS = 8
+
+    def setUp(self):
+        self.tmp = tempfile.TemporaryDirectory()
+        self.src = os.path.join(self.tmp.name, "src")
+        os.makedirs(os.path.join(self.src, "uiresources", "js"))
+        for rel, data in (("uiresources/hud.html", b"<html>hud</html>"),
+                          ("uiresources/js/cohtml.js", b"// stock + library\n" * 50)):
+            with open(os.path.join(self.src, rel), "wb") as f:
+                f.write(data)
+        self.out = os.path.join(self.tmp.name, "out", "test.kspkg")
+        self.written = pk.pack(self.src, self.out, pad=False, dups=self.DUPS, dup_targets=[self.TARGET])
+        _, _, self.entries = read_table(self.out)
+
+    def tearDown(self):
+        self.tmp.cleanup()
+
+    def carrying_target_hash(self):
+        return [e for e in self.entries if e["hash"] == pk.path_hash(self.TARGET)]
+
+    def test_target_gets_exactly_dups_records(self):
+        self.assertEqual(len(self.carrying_target_hash()), self.DUPS)
+
+    def test_every_record_points_at_the_same_blob(self):
+        seen = {(e["size"], e["offset"], e["flags"]) for e in self.carrying_target_hash()}
+        self.assertEqual(len(seen), 1, "decoys must be indistinguishable from the real record")
+
+    def test_only_one_of_them_carries_the_real_path(self):
+        paths = [e["path"] for e in self.carrying_target_hash()]
+        self.assertEqual(paths.count(self.TARGET), 1)
+        self.assertEqual(len(set(paths)), self.DUPS, "decoy paths must be unique")
+
+    def test_the_real_file_appears_once_in_the_directory_listing(self):
+        named = [e for e in self.entries if e["path"] == self.TARGET]
+        self.assertEqual(len(named), 1, "the startup preload walks these names")
+
+    def test_decoys_keep_out_of_every_preloaded_folder(self):
+        # uiresources/js, /branding, /images, /fonts and content/cars/common_assets/displays
+        # are walked at startup; a decoy there would be read once per record.
+        preloaded = ("uiresources\\js", "uiresources\\branding", "uiresources\\images",
+                     "uiresources\\fonts", "content\\cars\\common_assets\\displays")
+        for e in self.carrying_target_hash():
+            if e["path"] != self.TARGET:
+                self.assertTrue(e["path"].startswith(pk.DECOY_PARENT + "\\"), e["path"])
+                self.assertFalse(e["path"].startswith(preloaded), e["path"])
+
+    def test_table_stays_sorted_with_equal_hashes_adjacent(self):
+        hashes = [e["hash"] for e in self.entries]
+        self.assertEqual(hashes, sorted(hashes))
+
+    def test_verify_accepts_the_package(self):
+        pk.verify(self.out, self.written, dups=self.DUPS, dup_targets=[self.TARGET])
+
+    def test_verify_rejects_a_decoy_that_points_somewhere_else(self):
+        decoy = next(e for e in self.carrying_target_hash() if e["path"] != self.TARGET)
+        with open(self.out, "r+b") as f:
+            f.seek(0, 2)
+            table_at = f.tell() - pk.TABLE_SIZE
+            f.seek(table_at + decoy["index"] * pk.ENTRY_SIZE)
+            entry = bytearray(f.read(pk.ENTRY_SIZE))
+            pk.xor_buffer(entry)
+            struct.pack_into("<q", entry, 0xF0, decoy["size"] + 1)
+            pk.xor_buffer(entry)
+            f.seek(table_at + decoy["index"] * pk.ENTRY_SIZE)
+            f.write(entry)
+        with self.assertRaises(SystemExit):
+            pk.verify(self.out, self.written, dups=self.DUPS, dup_targets=[self.TARGET])
+
+    def test_duplicating_a_file_that_is_not_packaged_is_an_error(self):
+        with self.assertRaises(SystemExit):
+            pk.pack(self.src, self.out, pad=False, dups=4, dup_targets=["uiresources/nope.html"])
+
+    def test_dups_without_a_target_is_an_error(self):
+        with self.assertRaises(SystemExit):
+            pk.pack(self.src, self.out, pad=False, dups=4, dup_targets=[])
+
+    def test_default_build_has_no_duplicates(self):
+        out = os.path.join(self.tmp.name, "out", "plain.kspkg")
+        pk.pack(self.src, out, pad=False)
+        _, _, entries = read_table(out)
+        hashes = [e["hash"] for e in entries]
+        self.assertEqual(len(hashes), len(set(hashes)))
+
+
+class PaddingSearchTests(unittest.TestCase):
+    """
+    The padding search must simulate the package that is actually written.
+
+    Regression: duplicate records were added after plan_padding had already chosen a
+    layout, so the search predicted a package with 65 entries while 128 were written.
+    It reported another installed package's override as still winning; in game that
+    override had lost.
+    """
+    TARGET = "uiresources\\js\\cohtml.js"
+
+    def setUp(self):
+        self.calls = {}
+        self.real = (pk.lookup_sim.find_base_package, pk.lookup_sim.read_base_hashes,
+                     pk.lookup_sim.find_padding, pk.installed_packages)
+
+        def find_padding(base, mod_paths, overrides, hash_fn, **kw):
+            self.calls["mod_paths"] = list(mod_paths)
+            return [], {hash_fn(p): kw.get("mod_name", "mod") for p in overrides}
+
+        pk.lookup_sim.find_base_package = lambda game_dir=None: "fake-content.kspkg"
+        pk.lookup_sim.read_base_hashes = lambda path: [pk.path_hash(self.TARGET)]
+        pk.lookup_sim.find_padding = find_padding
+        pk.installed_packages = lambda mods_dir, exclude: []
+
+    def tearDown(self):
+        (pk.lookup_sim.find_base_package, pk.lookup_sim.read_base_hashes,
+         pk.lookup_sim.find_padding, pk.installed_packages) = self.real
+
+    def plan(self, **kw):
+        pk.plan_padding([(self.TARGET, "ignored")], [], game_dir="x", mods_dir=None, **kw)
+        return self.calls["mod_paths"]
+
+    def test_duplicate_records_are_part_of_the_searched_hash_set(self):
+        paths = self.plan(dups=8, dup_targets=[self.TARGET])
+        self.assertEqual(paths.count(self.TARGET), 8, "the search must see every record")
+
+    def test_a_plain_build_searches_one_record_per_file(self):
+        self.assertEqual(self.plan().count(self.TARGET), 1)
+
+
 @unittest.skipUnless(os.environ.get("ACE_SDK_SAMPLE"), "set ACE_SDK_SAMPLE=1 to check against the SDK sample package")
 class SdkSampleCompatTests(unittest.TestCase):
     """Cross-checks our reader/hash against Kunos' own ks_modded_car.kspkg (531 MB)."""

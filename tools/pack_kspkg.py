@@ -42,6 +42,17 @@ Usage:
   --mods-dir   the installed mod packages to keep working (default: Saved Games\\ACE\\mods);
                every other *.kspkg there joins the simulated lookup, and their overrides
                must still win with this package added
+  --dups=N     write N table records for each --dup file instead of one (default 1)
+  --dup=<path> a packaged file to duplicate, relative to <source_dir>, repeatable
+
+Padding decides where ONE record of an override lands; duplicates decide how many
+records it has. The base package is added first, so its record starts at a lower index
+than ours, and the partition that settles equal hashes moves lower-indexed equals to the
+front -- which is what lower_bound returns. That bias is why a single override wins only
+about half the time once another package is installed. N records give N chances at the
+front of the equal run. N is not a dial: measured against a simulated population, 32, 64
+and 96 behave well while 48 and 256 are markedly worse, so a value must be measured
+rather than assumed.
 
 Every file below <source_dir> is stored with its path relative to <source_dir>,
 so <source_dir>/uiresources/hud.html becomes "uiresources\\hud.html" in the package.
@@ -84,6 +95,13 @@ PATH_FIELD = 0xE0
 BLOB_ALIGN = 0x100000
 FLAG_DIR = 0x1
 FLAG_XOR = 0x100
+
+# Extra table records for an overridden file, so the game's merged vector holds several of
+# ours against the base package's one (see `decoy_path`). They live under this folder, which
+# must stay out of every folder the game preloads at startup (uiresources/js, /branding,
+# /images, /fonts, content/cars/common_assets/displays) -- the preload walks the directory
+# listing, and a decoy there would make it read the same blob once per record.
+DECOY_PARENT = "uiresources\\dup"
 
 # files that must never end up in a package
 IGNORED_NAMES = {".gitkeep", ".gitignore", "desktop.ini", "thumbs.db", ".ds_store"}
@@ -139,6 +157,27 @@ def make_entry(path: str, flags: int, size: int, offset: int) -> bytes:
             + struct.pack("<qq", size, offset))
 
 
+def decoy_path(rel: str, index: int) -> str:
+    """A unique path for an extra record of `rel`, under DECOY_PARENT."""
+    stem = rel.rsplit("\\", 1)[-1].split(".", 1)[0][:8]
+    return f"{DECOY_PARENT}\\{stem}{index:04d}"
+
+
+def make_decoy(rel: str, index: int, flags: int, size: int, offset: int) -> bytes:
+    """
+    An extra table record for `rel`: its hash, its blob, but a path of its own.
+
+    The game reads the lookup hash straight out of the entry's 0xE8 field and never
+    recomputes it from the path (AddPackage, 0x1427aed30), and the 32-byte record it
+    keeps in memory holds only {hash, size, offset, flags, package index} -- no path at
+    all. So a decoy that wins a lookup is indistinguishable from the real record, while
+    the path it carries keeps it out of the directory listing for the real file.
+    """
+    entry = bytearray(make_entry(decoy_path(rel, index), flags, size, offset))
+    struct.pack_into("<Q", entry, 0xE8, path_hash(rel))
+    return bytes(entry)
+
+
 def default_mods_dir():
     return os.path.join(os.path.expanduser("~"), "Saved Games", "ACE", "mods")
 
@@ -159,12 +198,18 @@ def installed_packages(mods_dir, exclude_name):
     return found
 
 
-def plan_padding(files, dirs, game_dir=None, mods_dir=None, package_name="mod"):
+def plan_padding(files, dirs, game_dir=None, mods_dir=None, package_name="mod", dups=1, dup_targets=()):
     """
     Decide which dummy directory entries to add so that every file that also
     exists in the game's base package resolves to OUR copy (see lookup_sim), with
     every other installed package's overrides still winning too.
     Returns (pad_paths, report_lines). Raises SystemExit if no layout wins.
+
+    `dups`/`dup_targets` must describe the duplicate records the package will actually
+    carry: they are part of its hash set, so a layout searched without them predicts a
+    package that is never built. Repeating a path in `mod_paths` is how the extra records
+    reach the simulation -- each one hashes to the same value, which is exactly what the
+    decoy records put in the game's vector.
     """
     base_pkg = lookup_sim.find_base_package(game_dir)
     if not base_pkg:
@@ -173,6 +218,8 @@ def plan_padding(files, dirs, game_dir=None, mods_dir=None, package_name="mod"):
     base = lookup_sim.read_base_hashes(base_pkg)
     base_set = set(base)
     mod_paths = [rel for rel, _ in files] + list(dirs)
+    for target in dup_targets:
+        mod_paths += [target] * (dups - 1)
     overrides = [rel for rel, _ in files if path_hash(rel) in base_set]
     if not overrides:
         return [], ["no base-package files are overridden; no padding needed"]
@@ -215,16 +262,27 @@ def plan_padding(files, dirs, game_dir=None, mods_dir=None, package_name="mod"):
     return pad, lines
 
 
-def pack(source_dir: str, out_path: str, encrypt: bool = False, pad: bool = True, game_dir=None, mods_dir=None) -> list:
+def pack(source_dir: str, out_path: str, encrypt: bool = False, pad: bool = True, game_dir=None, mods_dir=None,
+         dups: int = 1, dup_targets=()) -> list:
     files, dirs = collect(source_dir)
     if not files:
         raise SystemExit(f"no files found under {source_dir}")
+
+    dup_targets = {normalize(t) for t in dup_targets}
+    if dups > 1:
+        missing = dup_targets - {rel for rel, _ in files}
+        if missing:
+            raise SystemExit(f"--dup names a file that is not in the package: {', '.join(sorted(missing))}")
+        if not dup_targets:
+            raise SystemExit("--dups needs at least one --dup=<path> to duplicate")
+        dirs = sorted(set(dirs) | {DECOY_PARENT})
 
     pad_paths = []
     if pad:
         if mods_dir is None:
             mods_dir = default_mods_dir()
-        pad_paths, report = plan_padding(files, dirs, game_dir, mods_dir, os.path.basename(out_path))
+        pad_paths, report = plan_padding(files, dirs, game_dir, mods_dir, os.path.basename(out_path),
+                                         dups=dups, dup_targets=dup_targets)
         for line in report:
             print("  " + line)
 
@@ -245,7 +303,12 @@ def pack(source_dir: str, out_path: str, encrypt: bool = False, pad: bool = True
             out.write(data)
             entries.append((path_hash(rel), make_entry(rel, flags, len(data), offset)))
             written.append((rel, full, offset, len(data), flags))
-            print(f"  {rel}  ({len(data)} bytes @ 0x{offset:X})")
+            extra = ""
+            if rel in dup_targets:
+                for i in range(dups - 1):
+                    entries.append((path_hash(rel), make_decoy(rel, i, flags, len(data), offset)))
+                extra = f"  + {dups - 1} decoy record(s)"
+            print(f"  {rel}  ({len(data)} bytes @ 0x{offset:X}){extra}")
             offset += len(data)
 
         pad = (-offset) % BLOB_ALIGN
@@ -254,9 +317,15 @@ def pack(source_dir: str, out_path: str, encrypt: bool = False, pad: bool = True
         if len(entries) >= MAX_ENTRIES:
             raise SystemExit(f"too many entries for the file table ({len(entries)} >= {MAX_ENTRIES})")
         entries.sort(key=lambda e: e[0])
-        hashes = [h for h, _ in entries]
-        if len(set(hashes)) != len(hashes):
-            raise SystemExit("hash collision between entries")
+        # Every hash must appear once, except a declared duplicate target, which must appear
+        # exactly `dups` times. An accidental collision is still a build failure.
+        expected = {path_hash(t): dups for t in dup_targets} if dups > 1 else {}
+        counts = {}
+        for h, _ in entries:
+            counts[h] = counts.get(h, 0) + 1
+        for h, n in sorted(counts.items()):
+            if n != expected.get(h, 1):
+                raise SystemExit(f"hash collision between entries: {h:#x} appears {n} time(s)")
 
         # Only the used prefix of the table needs real XOR work; the zero-padded
         # remainder XORs to the repeated key, which we can emit directly.
@@ -271,8 +340,10 @@ def pack(source_dir: str, out_path: str, encrypt: bool = False, pad: bool = True
     return written
 
 
-def verify(out_path: str, written: list) -> None:
+def verify(out_path: str, written: list, dups: int = 1, dup_targets=()) -> None:
     """Re-read the package the way the game would and compare against the sources."""
+    dup_hashes = {path_hash(normalize(t)): normalize(t) for t in dup_targets} if dups > 1 else {}
+    decoys = {}
     with open(out_path, "rb") as f:
         f.seek(0, 2)
         size = f.tell()
@@ -289,13 +360,20 @@ def verify(out_path: str, written: list) -> None:
             h = struct.unpack_from("<Q", e, 0xE8)[0]
             if h == 0:
                 break
-            if h <= prev:
-                raise SystemExit("verify: table is not strictly sorted by hash")
+            if h < prev or (h == prev and h not in dup_hashes):
+                raise SystemExit("verify: table is not sorted by hash")
             prev = h
             plen = struct.unpack_from("<h", e, 0xE6)[0]
             path = bytes(e[:plen]).decode("ascii")
             if path_hash(path) != h:
-                raise SystemExit(f"verify: hash mismatch for {path}")
+                # The only entry allowed to carry someone else's hash is a decoy: an extra
+                # record for a declared duplicate target (see make_decoy).
+                if h not in dup_hashes or not path.startswith(DECOY_PARENT + "\\"):
+                    raise SystemExit(f"verify: hash mismatch for {path}")
+                dflags, = struct.unpack_from("<H", e, 0xE4)
+                dsize, doff = struct.unpack_from("<qq", e, 0xF0)
+                decoys.setdefault(h, []).append((path, dflags, dsize, doff))
+                continue
             flags, = struct.unpack_from("<H", e, 0xE4)
             fsize, foff = struct.unpack_from("<qq", e, 0xF0)
             entries[path] = (flags, fsize, foff)
@@ -313,7 +391,23 @@ def verify(out_path: str, written: list) -> None:
             with open(full, "rb") as src:
                 if bytes(data) != src.read():
                     raise SystemExit(f"verify: blob content mismatch for {rel}")
-    print(f"verified {len(written)} files, {len(entries)} table entries OK")
+
+        # Each decoy must be the real record in everything the game keeps in memory: same
+        # hash (checked above), same flags, size and offset. Only its path differs.
+        for h, rel in sorted(dup_hashes.items()):
+            found = decoys.get(h, [])
+            if len(found) != dups - 1:
+                raise SystemExit(f"verify: {rel} has {len(found)} decoy(s), expected {dups - 1}")
+            if rel not in entries:
+                raise SystemExit(f"verify: duplicate target {rel} missing from table")
+            for path, dflags, dsize, doff in found:
+                if (dflags, dsize, doff) != entries[rel]:
+                    raise SystemExit(f"verify: decoy {path} does not match {rel}")
+        seen = {path for records in decoys.values() for path, _, _, _ in records}
+        if len(seen) != sum(len(r) for r in decoys.values()):
+            raise SystemExit("verify: two decoys share a path")
+    extra = f", {len(seen)} decoy records" if dup_hashes else ""
+    print(f"verified {len(written)} files, {len(entries)} table entries{extra} OK")
 
 
 def install(out_path: str) -> None:
@@ -347,13 +441,17 @@ if __name__ == "__main__":
     args = [a for a in sys.argv[1:] if not a.startswith("--")]
     game_dir = next((a.split("=", 1)[1] for a in flags if a.startswith("--game-dir=")), None)
     mods_dir = next((a.split("=", 1)[1] for a in flags if a.startswith("--mods-dir=")), None)
-    unknown = {a for a in flags if not a.startswith("--game-dir=") and not a.startswith("--mods-dir=")} - {"--encrypt", "--install", "--no-verify", "--no-pad"}
+    dups = int(next((a.split("=", 1)[1] for a in flags if a.startswith("--dups=")), 1))
+    dup_targets = [a.split("=", 1)[1] for a in flags if a.startswith("--dup=")]
+    valued = ("--game-dir=", "--mods-dir=", "--dups=", "--dup=")
+    unknown = {a for a in flags if not a.startswith(valued)} - {"--encrypt", "--install", "--no-verify", "--no-pad"}
     if len(args) != 2 or unknown:
         print(__doc__)
         sys.exit(1)
     print(f"mod version {read_version(args[0])} (from VERSION next to {args[0]})")
-    written = pack(args[0], args[1], encrypt="--encrypt" in flags, pad="--no-pad" not in flags, game_dir=game_dir, mods_dir=mods_dir)
+    written = pack(args[0], args[1], encrypt="--encrypt" in flags, pad="--no-pad" not in flags, game_dir=game_dir,
+                   mods_dir=mods_dir, dups=dups, dup_targets=dup_targets)
     if "--no-verify" not in flags:
-        verify(args[1], written)
+        verify(args[1], written, dups=dups, dup_targets=dup_targets)
     if "--install" in flags:
         install(args[1])
