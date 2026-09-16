@@ -23,6 +23,8 @@ build_loader.py - build the ACEUIModLoader package.
 Usage:
   python tools/build_loader.py [--install] [--no-verify] [--no-apps] [--dups=N]
 
+  --release  plan the padding for a STOCK install instead of this machine's mods
+             folder -- what a package other people will install has to be built for
   --no-host  leave out the cohtml.js override, so the HUD page is the only way in
   --dups=N  write N table records for the cohtml.js override instead of one, so the
             game's merged vector holds N of ours against the base package's single
@@ -32,6 +34,7 @@ import json
 import os
 import shutil
 import sys
+import tempfile
 
 import _repos
 import install_mod
@@ -221,7 +224,22 @@ def assemble(build_dir=BUILD_DIR, game_dir=None, with_apps=True, with_host=True)
     return build_dir
 
 
-def recorded_dups(build_dir, targets):
+def release_mods_dir(stack):
+    """
+    An empty folder to plan the padding against, for a package other people will install.
+
+    A normal build plans against THIS machine's mods folder, so the layout it picks is the
+    one that keeps the packages you happen to have installed working. A stranger has a
+    different set -- usually none -- and a package tuned for your folder is tuned for a
+    world they are not in. A release is therefore planned for a stock install: content.kspkg
+    and our file, nothing else.
+    """
+    empty = tempfile.mkdtemp(prefix="ace-release-")
+    stack.append(empty)
+    return empty
+
+
+def recorded_dups(build_dir, targets, release=False):
     """
     The duplicate count tools/tune_dups.py measured for THIS file set.
 
@@ -229,32 +247,49 @@ def recorded_dups(build_dir, targets):
     depends on the whole hash set -- so a mismatched fingerprint is a build failure
     rather than a silent fallback to an arbitrary number.
     """
+    mode = "release" if release else "machine"
+    retune = f"run python tools/tune_dups.py{' --release' if release else ''} --write"
     if not os.path.exists(DUPS_FILE):
-        raise SystemExit(f"--dups=auto needs {DUPS_FILE}: run python tools/tune_dups.py --write")
+        raise SystemExit(f"--dups=auto needs {DUPS_FILE}: {retune}")
     with open(DUPS_FILE, encoding="utf-8") as f:
-        recorded = json.load(f)
+        recorded = json.load(f).get(mode)
+    if not recorded:
+        raise SystemExit(f"{DUPS_FILE} has no '{mode}' measurement: {retune}")
     files, dirs = pk.collect(build_dir)
     want = pk.paths_fingerprint([rel for rel, _ in files] + list(dirs), targets)
     if recorded.get("fingerprint") != want:
-        raise SystemExit(f"{DUPS_FILE} was measured for a different package "
-                         f"({recorded.get('fingerprint')} != {want}); re-run tools/tune_dups.py --write")
-    print(f"duplicates: {recorded['dups']} per override "
-          f"({recorded.get('unseen', '?')}/{recorded['scenarios']} unseen package sets when measured)")
+        raise SystemExit(f"{DUPS_FILE} [{mode}] was measured for a different package "
+                         f"({recorded.get('fingerprint')} != {want}); {retune}")
+    print(f"duplicates: {recorded['dups']} per override, measured for "
+          f"{'a stock install' if release else 'this machine'} "
+          f"({recorded.get('unseen', '?')}/{recorded['scenarios']} unseen package sets)")
     return int(recorded["dups"])
 
 
 if __name__ == "__main__":
     flags = set(sys.argv[1:])
     with_host = "--no-host" not in flags
+    release = "--release" in flags
+    temporary = []
     build = assemble(with_apps="--no-apps" not in flags, with_host=with_host)
     os.makedirs(os.path.dirname(OUT), exist_ok=True)
     asked = next((a.split("=", 1)[1] for a in flags if a.startswith("--dups=")), "1")
-    dups = recorded_dups(build, TARGETS) if asked == "auto" else int(asked)
+    dups = recorded_dups(build, TARGETS, release=release) if asked == "auto" else int(asked)
     wanted = list(TARGETS) if with_host else [PAGE_PATH]
     targets = wanted if dups > 1 else []
-    written = pk.pack(build, OUT, dups=dups, dup_targets=targets)
-    if "--no-verify" not in flags:
-        pk.verify(OUT, written, dups=dups, dup_targets=targets)
+    mods_dir = release_mods_dir(temporary) if release else None
+    if release:
+        print("release build: padding planned for a stock install, not this machine's mods folder")
+    try:
+        written = pk.pack(build, OUT, dups=dups, dup_targets=targets, mods_dir=mods_dir)
+        if "--no-verify" not in flags:
+            pk.verify(OUT, written, dups=dups, dup_targets=targets)
+    finally:
+        for path in temporary:
+            shutil.rmtree(path, ignore_errors=True)
+    if release and "--install" in flags:
+        print("NOTE: installing a release build here; it is padded for a stock install, so any "
+              "other package you have may stop overriding. Rebuild without --release afterwards.")
     if "--install" in flags:
         dest = os.path.join(_repos.mods_dir(), os.path.basename(OUT))
         os.makedirs(os.path.dirname(dest), exist_ok=True)

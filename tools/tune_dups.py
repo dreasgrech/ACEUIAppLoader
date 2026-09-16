@@ -25,11 +25,13 @@ Usage:
   --scenarios   package sets to score each candidate against (default 24)
   --candidates  duplicate counts to try (default 1,16,32,64,96,128)
   --write       write dups.json; without it this only reports
+  --release     measure for a STOCK install: empty mods folder, no local packages
 """
 import io
 import json
 import os
 import random
+import shutil
 import sys
 import tempfile
 import time
@@ -117,7 +119,7 @@ def candidate_hashes(mod_paths, targets, dups, pad_paths):
     return hashes
 
 
-def tune(build_dir, targets, candidates, scenarios, game_dir=None, mods_dir=None):
+def tune(build_dir, targets, candidates, scenarios, game_dir=None, mods_dir=None, release=False):
     base_pkg = lookup_sim.find_base_package(game_dir)
     if not base_pkg:
         raise SystemExit("content.kspkg not found; tuning needs the installed game (set ACE_GAME_DIR)")
@@ -128,8 +130,11 @@ def tune(build_dir, targets, candidates, scenarios, game_dir=None, mods_dir=None
     # Resolve this exactly as pack() does, and use the same value for the padding search:
     # planning against a different set of installed packages produces a different layout,
     # and then the count would be scored against a package the build will not write.
-    mods_dir = mods_dir or pk.default_mods_dir()
-    installed = [(name, hashes) for name, hashes, _ in pk.installed_packages(mods_dir, package_name)]
+    # A release is measured for a stock install: an empty folder to plan padding against,
+    # and a population with none of THIS machine's packages in it.
+    mods_dir = tempfile.mkdtemp(prefix="ace-release-") if release else (mods_dir or pk.default_mods_dir())
+    installed = [] if release else [(name, hashes) for name, hashes, _
+                                    in pk.installed_packages(mods_dir, package_name)]
     # Three populations. Selection needs a big enough sample to be stable -- picking the
     # argmax of a single 60-set population chose a count that scored 90% on fresh data when
     # another candidate scored 98% -- so two populations are pooled to choose with, and a
@@ -166,7 +171,9 @@ def tune(build_dir, targets, candidates, scenarios, game_dir=None, mods_dir=None
     if dups == 1:
         print("  (no duplicate count beat a plain build here)")
     confirm_against_a_real_build(build_dir, targets, dups, hashes, game_dir, mods_dir)
-    return {"dups": dups, "targets": targets, "scenarios": scenarios,
+    if release:
+        shutil.rmtree(mods_dir, ignore_errors=True)
+    return {"dups": dups, "targets": targets, "scenarios": scenarios, "release": release,
             "selection": chosen, "selection_sets": 2 * scenarios, "unseen": held,
             "fingerprint": pk.paths_fingerprint([rel for rel, _ in files] + list(dirs), targets)}
 
@@ -178,12 +185,24 @@ if __name__ == "__main__":
     raw = next((a.split("=", 1)[1] for a in flags if a.startswith("--candidates=")), None)
     candidates = tuple(int(x) for x in raw.split(",")) if raw else DEFAULT_CANDIDATES
     build = build_loader.assemble()
-    chosen = tune(build, list(build_loader.TARGETS), candidates, scenarios)
+    chosen = tune(build, list(build_loader.TARGETS), candidates, scenarios,
+                  release="--release" in flags)
+    mode = "release" if "--release" in flags else "machine"
     if "--write" in flags:
+        # Both modes live in one file under their own key: a release is measured for a stock
+        # install and a local build for this machine's mods folder, and switching between them
+        # should not mean re-measuring the other.
+        recorded = {}
+        if os.path.exists(OUT_FILE):
+            with open(OUT_FILE, encoding="utf-8") as f:
+                recorded = json.load(f)
+            if "fingerprint" in recorded:      # the single-mode file this replaced
+                recorded = {"release" if recorded.get("release") else "machine": recorded}
+        recorded[mode] = chosen
         with open(OUT_FILE, "w", encoding="utf-8", newline="\n") as f:
-            json.dump(chosen, f, indent=2)
+            json.dump(recorded, f, indent=2, sort_keys=True)
             f.write("\n")
-        print(f"wrote {OUT_FILE}")
+        print(f"wrote {OUT_FILE} [{mode}]")
     else:
-        print(json.dumps(chosen, indent=2))
+        print(json.dumps({mode: chosen}, indent=2))
         print("(re-run with --write to record this for build_loader.py --dups=auto)")

@@ -1,12 +1,28 @@
 {
-  "dups": 32,
-  "targets": [
-    "uiresources\\js\\cohtml.js",
-    "uiresources\\hud.html"
-  ],
-  "scenarios": 60,
-  "selection": 120,
-  "selection_sets": 120,
-  "unseen": 60,
-  "fingerprint": "7cfb9349b92705fe"
+  "machine": {
+    "dups": 32,
+    "fingerprint": "7cfb9349b92705fe",
+    "release": false,
+    "scenarios": 60,
+    "selection": 120,
+    "selection_sets": 120,
+    "targets": [
+      "uiresources\\js\\cohtml.js",
+      "uiresources\\hud.html"
+    ],
+    "unseen": 60
+  },
+  "release": {
+    "dups": 32,
+    "fingerprint": "7cfb9349b92705fe",
+    "release": true,
+    "scenarios": 60,
+    "selection": 120,
+    "selection_sets": 120,
+    "targets": [
+      "uiresources\\js\\cohtml.js",
+      "uiresources\\hud.html"
+    ],
+    "unseen": 60
+  }
 }
