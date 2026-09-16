@@ -2,7 +2,7 @@
 
 **A wider validation of the override.** The duplicate-record counts are chosen against sixty package sets nothing was selected on, which puts the failure rate under a few percent rather than at zero. A few thousand sets would turn that into a number worth printing, and scoring against real published car mods rather than synthetic ones would make the population representative instead of merely plausible. See [`how-it-works.md`](how-it-works.md).
 
-**Repadding.** `pack_kspkg.py` searches against the packages installed at build time, but there is no command that rebuilds every installed package in one go. Needed when someone has several package mods and one of them moves.
+**Repadding.** `pack_kspkg.py` searches against the packages installed at build time, but there is no command that rebuilds every installed package in one go. Needed when someone has several package mods and one of them moves. `post_update.py` now *detects* this -- it replays the lookup over every package in the mods folder and names any that lost its override -- but fixing one still means running that package's own repo's build tool, because each repo owns its own.
 
 **Carrying the console buffer across the HUD reload.** The console hook runs on every page, so capture on menu pages already works; what is missing is keeping the buffer across the reload that Escape and resume cause.
 

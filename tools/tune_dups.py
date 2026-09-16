@@ -186,7 +186,32 @@ def _tune(build_dir, targets, candidates, scenarios, game_dir, mods_dir, release
     confirm_against_a_real_build(build_dir, targets, dups, hashes, game_dir, mods_dir)
     return {"dups": dups, "targets": targets, "scenarios": scenarios, "release": release,
             "selection": chosen, "selection_sets": 2 * scenarios, "unseen": held,
+            "game": build_loader.game_version(game_dir),
             "fingerprint": pk.paths_fingerprint([rel for rel, _ in files] + list(dirs), targets)}
+
+
+def record(chosen, mode, out_file=None):
+    """
+    Put one mode's measurement in dups.json, leaving the other mode's alone.
+
+    Both modes live in one file under their own key: a release is measured for a stock
+    install and a local build for this machine's mods folder, and switching between them
+    should not mean re-measuring the other.
+    """
+    # Resolved here rather than in the signature: a default binds the module global once,
+    # at import, so a caller that redirects OUT_FILE would still write the real file.
+    out_file = out_file or OUT_FILE
+    recorded = {}
+    if os.path.exists(out_file):
+        with open(out_file, encoding="utf-8") as f:
+            recorded = json.load(f)
+        if "fingerprint" in recorded:      # the single-mode file this replaced
+            recorded = {"release" if recorded.get("release") else "machine": recorded}
+    recorded[mode] = chosen
+    with open(out_file, "w", encoding="utf-8", newline="\n") as f:
+        json.dump(recorded, f, indent=2, sort_keys=True)
+        f.write("\n")
+    return out_file
 
 
 if __name__ == "__main__":
@@ -200,20 +225,7 @@ if __name__ == "__main__":
                   release="--release" in flags)
     mode = "release" if "--release" in flags else "machine"
     if "--write" in flags:
-        # Both modes live in one file under their own key: a release is measured for a stock
-        # install and a local build for this machine's mods folder, and switching between them
-        # should not mean re-measuring the other.
-        recorded = {}
-        if os.path.exists(OUT_FILE):
-            with open(OUT_FILE, encoding="utf-8") as f:
-                recorded = json.load(f)
-            if "fingerprint" in recorded:      # the single-mode file this replaced
-                recorded = {"release" if recorded.get("release") else "machine": recorded}
-        recorded[mode] = chosen
-        with open(OUT_FILE, "w", encoding="utf-8", newline="\n") as f:
-            json.dump(recorded, f, indent=2, sort_keys=True)
-            f.write("\n")
-        print(f"wrote {OUT_FILE} [{mode}]")
+        print(f"wrote {record(chosen, mode)} [{mode}]")
     else:
         print(json.dumps({mode: chosen}, indent=2))
         print("(re-run with --write to record this for build_loader.py --dups=auto)")

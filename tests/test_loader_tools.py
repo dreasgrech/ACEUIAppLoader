@@ -13,6 +13,8 @@ sys.path.insert(0, TOOLS)
 
 import install_mod  # noqa: E402
 import build_loader  # noqa: E402
+import post_update  # noqa: E402
+import tune_dups  # noqa: E402
 import _repos  # noqa: E402
 
 SRC = os.path.join(ROOT, "src")
@@ -517,6 +519,79 @@ class SecondEntryPointTests(unittest.TestCase):
         shutil.copyfile(os.path.join(self.build, *build_loader.BOOT_PATH.split("/")),
                         os.path.join(self.tmp, "loader.js"))
         headless.check_harness(self, harness, 6)
+
+
+
+class PostUpdateTests(unittest.TestCase):
+    """tools/post_update.py: the one command that puts the package back in step after a
+    game patch. What is worth testing without a game installed is the bookkeeping -- which
+    flags exist, and reading and writing dups.json -- because that is what decides whether
+    the expensive part runs at all."""
+
+    def setUp(self):
+        self.tmp = tempfile.mkdtemp(prefix="ace-postupdate-")
+        self.book = os.path.join(self.tmp, "dups.json")
+        # These tests write measurements, and the real file holds the ones this machine's
+        # package was built against. An early draft monkeypatched the module global, which
+        # a default argument had already bound at import, and overwrote it for real.
+        self.real = read(build_loader.DUPS_FILE)
+
+    def tearDown(self):
+        shutil.rmtree(self.tmp, ignore_errors=True)
+        self.assertEqual(read(build_loader.DUPS_FILE), self.real,
+                         "a test wrote to the repo's real dups.json")
+
+    def test_every_flag_it_accepts_is_documented(self):
+        """A flag the code knows and the docstring does not is a flag nobody will use, and
+        one the docstring promises and the code rejects is worse: post_update prints the
+        docstring as its usage message."""
+        documented = set(re.findall(r"^  (--[a-z-]+) ", post_update.__doc__, re.M))
+        self.assertEqual(documented, post_update.KNOWN_FLAGS)
+
+    def test_a_typo_is_refused_rather_than_ignored(self):
+        with self.assertRaises(SystemExit) as caught:
+            post_update.main(["--instal"])
+        self.assertIn("--instal", str(caught.exception))
+
+    def test_asking_to_tune_and_not_to_tune_is_refused(self):
+        with self.assertRaises(SystemExit):
+            post_update.main(["--tune", "--no-tune"])
+
+    def test_no_measurement_reads_as_no_measurement(self):
+        self.assertEqual(post_update.recorded("machine", self.book), {})
+
+    def test_recording_one_mode_leaves_the_other_alone(self):
+        tune_dups.record({"dups": 32, "fingerprint": "aaa"}, "machine", self.book)
+        tune_dups.record({"dups": 64, "fingerprint": "bbb"}, "release", self.book)
+        self.assertEqual(post_update.recorded("machine", self.book)["dups"], 32)
+        self.assertEqual(post_update.recorded("release", self.book)["dups"], 64)
+
+    def test_the_single_mode_file_this_replaced_is_still_read(self):
+        """dups.json used to hold one measurement at the top level. A file written by an
+        older checkout must not read as 'no measurement', which would silently re-measure,
+        and recording the other mode must migrate it rather than drop it."""
+        write(self.book, json.dumps({"dups": 32, "fingerprint": "aaa", "release": False}))
+        self.assertEqual(post_update.recorded("machine", self.book)["dups"], 32)
+        self.assertEqual(post_update.recorded("release", self.book), {})
+        tune_dups.record({"dups": 64, "fingerprint": "bbb"}, "release", self.book)
+        self.assertEqual(post_update.recorded("machine", self.book)["dups"], 32)
+        self.assertEqual(post_update.recorded("release", self.book)["dups"], 64)
+
+    def test_a_measurement_taken_before_the_game_was_recorded_is_not_called_stale(self):
+        """`game` is newer than the first measurements. Missing means unknown, and unknown
+        is not a reason to spend the minutes -- only a game that is known and different."""
+        tune_dups.record({"dups": 32, "fingerprint": "aaa"}, "machine", self.book)
+        self.assertFalse(bool(post_update.recorded("machine", self.book).get("game")))
+
+    def test_a_packages_overrides_are_counted_as_files_not_as_records(self):
+        """A package with duplicate records repeats the override's hash once per record.
+        Counting records reported ACEDOOM's one bank as 32 overrides, which would have read
+        as 31 of 32 surviving -- a pass -- on the day the real one lost."""
+        base = {10, 11, 12}
+        bank_with_32_records = [10] * 32 + [99]
+        self.assertEqual(post_update.overridden_base_files(bank_with_32_records, base), [10])
+        self.assertEqual(post_update.overridden_base_files([99, 98], base), [])
+        self.assertEqual(post_update.overridden_base_files([12, 10, 10], base), [10, 12])
 
 
 if __name__ == "__main__":

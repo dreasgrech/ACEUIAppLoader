@@ -83,3 +83,17 @@ Those app files are *new* paths, which always resolve. Only the two entry points
 Nothing that helps or hinders, which is worth knowing before looking for a better way in. The mod scan opens `content.kspkg`, lists `mods\*.kspkg` in the filesystem's order (the game does no sorting of its own), adds each through the identical `AddPackage`, and then registers `mods\` as a loose search directory. Records are appended with no deduplication and no validation that a record's hash matches its path.
 
 There is no manifest, no load order file, no enable/disable list, no dependency system and no version check. That is the entirety of it — and it is exactly why car mods scale without limit: they only ever add new paths, so nothing ever collides. Every part of this project follows that model except the two entry points, which cannot, because to run on a page you have to be referenced by it.
+
+## When the game updates
+
+A patch breaks this in two ways, neither of which says anything. The package carries copies of two of Kunos' files -- `cohtml.js` and `hud.html` -- which the patch has moved on from; and which record the lookup finds is decided against `content.kspkg`'s whole hash set, which the patch has changed, so the padding and the record counts were measured for a game that no longer exists. The symptom of either is the same: nothing appears.
+
+What the build does about it:
+
+- **It refuses a stock page it does not recognise.** `hud.html` is Kunos' file plus one script tag; if the rest of it has changed, `assemble_page` stops rather than shipping the previous version's copy of their page over their new one.
+- **It stamps the game build it was made for.** `ACEUIModLoader.builtFor` goes into the package, and at start-up the loader compares it with `ModelUIState.game_version` and logs a line when they differ, so a log from a player on a newer build says so.
+- **It refuses a measurement taken for a different file set.** `dups.json` records the count behind a fingerprint of the package's paths and the game build it was measured on.
+
+`tools/post_update.py` is the recovery: it rebuilds (re-reading the stock files), re-measures when the fingerprint or the game build has moved, reinstalls, and then replays the lookup over the packages actually in the mods folder to say whether both ways in still resolve to ours.
+
+**What a patch cannot break.** Everything here rests on the sort being *unstable* -- not on our replay of MSVC's introsort being right. Score the same package assuming nothing at all about the algorithm, only that a run of equal hashes ends up in some arbitrary order, and 32 records across two entry points still wins 99.908% of the time; the replay is what makes the estimate precise, not what makes the construction work. The one change that would be fatal is a *stable* sort, and that would take every override mod in the game with it.

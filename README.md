@@ -81,9 +81,12 @@ python tools/build_loader.py --dups=auto --release   # build for someone else's 
 python tools/tune_dups.py --write                    # re-measure after the package gains a file
 python tools/install_mod.py <repo>/<name>            # install a loose mod and write its marker
 python tools/check_ingame_log.py                     # after a launch: what loaded, what failed
+python tools/post_update.py --install                # after the game has been patched
 ```
 
 **`--release` matters more than it looks.** A normal build plans its override against *your* mods folder, so it is tuned to keep the packages you happen to have installed working. Somebody else has a different set, usually none. A package other people will install has to be built for a stock install, which is what that flag does.
+
+**After a game patch, run `post_update.py`.** A patch moves the stock files the package carries and changes the hash set the override is measured against, so the package quietly stops being the one the game picks and the symptom is that nothing appears. That tool rebuilds, re-measures when something it depends on has moved, reinstalls, and then replays the lookup over the packages actually in your mods folder to say whether both ways in still resolve to it.
 
 **`--dups=auto` reads a measurement, not a constant.** How many table records the overrides carry is chosen by `tune_dups.py` and recorded in `dups.json` behind a fingerprint of the package's file set; the build refuses to use a measurement taken for a different set. Why any of that is necessary is [`docs/how-it-works.md`](docs/how-it-works.md).
 
@@ -112,6 +115,7 @@ tools/
   modkit.py                the shared test kit every mod's suite subclasses
   headless.py              runs an HTML harness in a headless browser and reads its report
   check_ingame_log.py      reads the newest game log and says what the loader did
+  post_update.py           rebuild, re-measure, reinstall and re-check after a game patch
   run_tests.py             this repo's suite plus each app's, one subprocess each
   absorb_app.py            one-off git surgery: move a mod repo into apps/ with its history
 tests/
