@@ -1,18 +1,10 @@
-# ACEUICapabilitiesProbe
+# Capabilities Probe
 
-**ACE UI Capabilities Probe**: a capability probe for the Assetto Corsa EVO Gameface HUD, loaded
-by the [ACEUIModLoader](../..), inside whose package it ships, and built on its library.
+A capability probe for the Assetto Corsa EVO HUD. One of the loader's **developer apps**: it ships inside `ACEUIModLoader.kspkg`, and the app drawer keeps it behind the `DEVELOPER APPS` switch that is off by default.
 
-It exists to answer one question before we build anything ambitious on the HUD:
-**what can JavaScript actually do inside the game's Cohtml/V8?** The game runs V8
-9.4 started with `--noexpose_wasm`, in a Cohtml sandbox with no Web Audio and no
-video demuxers — so the browser is not a reliable guide. This mod runs a battery of
-feature detections in the real in-game engine and reports each as
-**yes / no / partial / warn**, both in a draggable panel and in the game log.
+It exists to answer one question before anything ambitious gets built on the HUD: **what can JavaScript actually do inside the game's Cohtml/V8?** The game runs V8 9.4 started with `--noexpose_wasm`, in a Cohtml sandbox with no Web Audio and no video demuxers — so the browser is not a reliable guide. This runs about 70 feature detections in the real in-game engine and reports each as **yes / no / partial / warn**, both in a draggable panel and in the game log.
 
-The findings belong in the `ACEGameInternals` notes; this repo is the instrument
-that produces them, and a place to prototype the next capability we want to lean on
-(the pixel path for ACEDOOM, a track-map renderer, networked overlays, ...).
+The findings themselves belong in the [`ACEGameInternals`](https://github.com/dreasgrech/ACEGameInternals) notes; this is the instrument that produces them, and the place to prototype the next capability worth leaning on — the pixel path ACEDOOM uses, a track-map renderer, networked overlays.
 
 ## What it probes
 
