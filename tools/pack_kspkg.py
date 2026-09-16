@@ -255,7 +255,10 @@ def plan_padding(files, dirs, game_dir=None, mods_dir=None, package_name="mod", 
         pad, win = lookup_sim.find_padding(base, mod_paths, overrides, path_hash, others=others,
                                            mod_name=package_name, max_pad=WIDE_PAD, max_salt=WIDE_SALT)
     for name, hashes, file_list in others:
-        theirs = [h for h in file_list if h in base_set]
+        # Distinct hashes, not records: a package that carries duplicate records for its
+        # override has many records for one file, and counting records would report a mod
+        # that overrides one file as overriding thirty-two.
+        theirs = {h for h in file_list if h in base_set}
         lines.append(f"installed alongside: {name} ({len(hashes)} entries, {len(theirs)} file override(s) of base files)")
     if pad is None:
         lines.append("NO padding layout found that makes every override win (ours and the installed packages')")
@@ -267,7 +270,7 @@ def plan_padding(files, dirs, game_dir=None, mods_dir=None, package_name="mod", 
     for rel, _ in files:
         lines.append(f"  {rel}: resolves to {win[path_hash(rel)]}")
     for name, hashes, file_list in others:
-        theirs = [h for h in file_list if h in base_set]
+        theirs = {h for h in file_list if h in base_set}
         if theirs:
             lines.append(f"  {name}: its {len(theirs)} file override(s) still resolve to it")
     return pad, lines

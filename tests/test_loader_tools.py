@@ -384,6 +384,50 @@ class BuildLoaderTests(unittest.TestCase):
                              "the package carries every listed file of every bundled app, and nothing else")
 
 
+class BuildOptionTests(unittest.TestCase):
+    """
+    The build's command line. A typo must fail loudly: `--instal` once built the package
+    and quietly did not install it, which reads exactly like a build that worked.
+    """
+
+    def setUp(self):
+        # build_loader writes dist/ whether or not --install is given, so a bad-option case
+        # that got as far as building would quietly replace the release artefact. Every case
+        # here asserts it did not.
+        self.dist = build_loader.OUT
+        self.before = os.path.getmtime(self.dist) if os.path.exists(self.dist) else None
+
+    def tearDown(self):
+        after = os.path.getmtime(self.dist) if os.path.exists(self.dist) else None
+        self.assertEqual(self.before, after, "a test rebuilt dist/: tests must not touch the release artefact")
+
+    def run_build(self, *args):
+        import subprocess
+        return subprocess.run([sys.executable, os.path.join(TOOLS, "build_loader.py")] + list(args),
+                              capture_output=True, text=True, cwd=ROOT)
+
+    def test_an_unknown_option_is_refused_before_anything_is_built(self):
+        done = self.run_build("--instal", "--dups=1")
+        self.assertNotEqual(done.returncode, 0)
+        self.assertIn("unknown option(s): --instal", done.stdout + done.stderr)
+        self.assertNotIn("wrote ", done.stdout, "nothing may be written when the options are wrong")
+
+    def test_dups_must_be_a_number_or_auto(self):
+        done = self.run_build("--dups=abc")
+        self.assertNotEqual(done.returncode, 0)
+        self.assertIn("--dups takes a whole number or 'auto'", done.stdout + done.stderr)
+        self.assertNotIn("assembled ", done.stdout, "the option is checked before any work is done")
+
+    def test_the_documented_options_and_the_accepted_ones_are_the_same_set(self):
+        # Both directions: a documented option the build refuses is a lie, and an accepted
+        # one nobody wrote down is a feature only its author knows about.
+        documented = set(re.findall(r"^\s+(--[a-z-]+)", build_loader.__doc__, re.M))
+        known = build_loader.KNOWN_FLAGS | {f.rstrip("=") for f in build_loader.VALUED_FLAGS}
+        self.assertTrue(documented, "no options found in the docstring: the pattern stopped matching")
+        self.assertEqual(documented - known, set(), "documented but not accepted")
+        self.assertEqual(known - documented, set(), "accepted but not documented")
+
+
 @unittest.skipUnless(os.path.exists(os.path.join(_repos.game_dir(), "content.kspkg")), "game not installed")
 class SecondEntryPointTests(unittest.TestCase):
     """

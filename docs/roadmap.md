@@ -8,4 +8,6 @@
 
 **Checking the package listing order against Coherent's documentation.** The order the game adds `mods\*.kspkg` in is the filesystem's, which on NTFS is the case-insensitive uppercase collation. That is observed rather than documented, and it is the one assumption in the lookup model that has never been verified against a source other than the game's own behaviour.
 
+**A reproducible release artifact across checkouts.** The build is byte-for-byte reproducible on one machine, but there is no `.gitattributes`, so the line endings of `src/*.js` follow each developer's `core.autocrlf` and the packaged bytes differ between checkouts. Nothing about the lookup changes — the paths, and therefore the padding and the record counts, are identical either way — but a published hash could not be verified by someone else rebuilding. Pinning the packaged sources to LF fixes it, at the cost of one renormalising commit.
+
 **A licence.** There isn't one, which means all rights reserved by default and nobody may legally fork or redistribute.

@@ -21,14 +21,19 @@ build_loader.py - build the ACEUIModLoader package.
 5. --install copies it to the game's mods folder.
 
 Usage:
-  python tools/build_loader.py [--install] [--no-verify] [--no-apps] [--dups=N]
+  python tools/build_loader.py [--install] [--no-verify] [--no-apps] [--no-host]
+                               [--release] [--dups=N|auto]
 
-  --release  plan the padding for a STOCK install instead of this machine's mods
-             folder -- what a package other people will install has to be built for
-  --no-host  leave out the cohtml.js override, so the HUD page is the only way in
-  --dups=N  write N table records for the cohtml.js override instead of one, so the
-            game's merged vector holds N of ours against the base package's single
-            record. See pack_kspkg.py for why this matters and why N must be measured.
+  --install   copy the result into the game's mods folder
+  --no-verify skip re-reading the package to check every entry against its source
+  --no-apps   build the library alone, without the developer apps in apps/
+  --no-host   leave out the cohtml.js override, so the HUD page is the only way in
+  --release   plan the padding for a STOCK install instead of this machine's mods
+              folder -- what a package other people will install has to be built for
+  --dups=N    write N table records for each override instead of one, so the game's
+              merged vector holds N of ours against the base package's single record.
+              `auto` reads the measurement in dups.json. See pack_kspkg.py for why this
+              matters and tune_dups.py for why N has to be measured rather than chosen.
 """
 import json
 import os
@@ -269,14 +274,31 @@ def recorded_dups(build_dir, targets, release=False):
     return int(recorded["dups"])
 
 
+KNOWN_FLAGS = {"--install", "--no-verify", "--no-apps", "--no-host", "--release"}
+VALUED_FLAGS = ("--dups=",)
+
+
 if __name__ == "__main__":
     flags = set(sys.argv[1:])
+    # A typo'd flag must not look like success: --instal used to build the package and
+    # quietly not install it, which reads exactly like a build that worked.
+    unknown = sorted(f for f in flags if f not in KNOWN_FLAGS and not f.startswith(VALUED_FLAGS))
+    if unknown:
+        print(__doc__)
+        raise SystemExit("unknown option(s): " + ", ".join(unknown))
+    # argv, not the set: given --dups=16 --dups=32 the set would pick one arbitrarily, and
+    # this option decides the whole construction.
+    given = [a.split("=", 1)[1] for a in sys.argv[1:] if a.startswith("--dups=")]
+    if len(set(given)) > 1:
+        raise SystemExit("--dups given more than once: " + ", ".join(sorted(set(given))))
+    asked = given[0] if given else "1"
+    if asked != "auto" and not asked.isdigit():
+        raise SystemExit(f"--dups takes a whole number or 'auto', not {asked!r}")
     with_host = "--no-host" not in flags
     release = "--release" in flags
     temporary = []
     build = assemble(with_apps="--no-apps" not in flags, with_host=with_host)
     os.makedirs(os.path.dirname(OUT), exist_ok=True)
-    asked = next((a.split("=", 1)[1] for a in flags if a.startswith("--dups=")), "1")
     # The overrides this build actually carries, which is also what a recorded measurement
     # has to have been taken for -- a --no-host build has only the page.
     wanted = list(TARGETS) if with_host else [PAGE_PATH]
