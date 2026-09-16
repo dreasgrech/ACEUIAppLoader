@@ -1,0 +1,554 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<title>DevConsole tests</title>
+<style>
+  body { margin: 0; background: #222; color: #ddd; font: 12px monospace; }
+  /* stand-in for the game's HUD container */
+  .absolutecenter { position: relative; width: 1600px; height: 900px; overflow: hidden; }
+  #results { white-space: pre; }
+</style>
+<!-- shared test doubles (fake frame clock, in-memory localStorage, console capture) from the loader repo -->
+<script src="../../../ACEUIModLoader/tests/lib/doubles.js"></script>
+<script>
+window.ModelCurrentCar = { has_focused_car: true, speed: 123.4, gas_percent: 0.5 };
+</script>
+<!-- the ACEUIModLoader library from the sibling checkout, in load order (in game it is part of cohtml.js) -->
+<script src="../../../ACEUIModLoader/tests/lib/lib.js"></script>
+<link rel="stylesheet" type="text/css" href="../../devconsole/devconsole.css">
+<script>
+// lines logged before the console attaches must show up once it does
+console.log("early line one");
+console.warn("early warning");
+</script>
+<!-- classic script, as the loader injects it: `DevConsole` is a page-wide binding -->
+<script src="../../devconsole/devconsole.js"></script>
+</head>
+<body>
+<div class="absolutecenter" id="center"></div>
+<pre id="results"></pre>
+<div id="done" hidden></div>
+
+<script>
+(function () {
+    const H = window.__harness;
+    const t = H.t, eq = H.eq, ok = H.ok;
+    // what the loader knows about this mod; outside the game the title falls back to the name and the version reads "dev"
+    const me = ACEUIModLoader.mod("devconsole");
+
+    const clock = window.__clock;
+    const center = document.getElementById("center");
+    const MAX = DevConsole.MAX_ROWS;
+    const visibleRows = function (root) {
+        return Array.prototype.slice.call(root.querySelectorAll(".dc-row")).filter(function (r) { return !r.classList.contains("dc-hidden"); });
+    };
+    const texts = function (root) { return visibleRows(root).map(function (r) { return r.querySelector(".dc-text").textContent; }); };
+    const lastRow = function (root) { const rows = visibleRows(root); return rows[rows.length - 1]; };
+    const key = function (target, init) { target.dispatchEvent(new KeyboardEvent("keydown", Object.assign({ bubbles: true, cancelable: true }, init))); };
+    const mouse = function (type, x, y, target) { (target || window).dispatchEvent(new MouseEvent(type, { clientX: x, clientY: y, bubbles: true })); };
+    let frame = 1000;
+    const nextFrame = function () { frame += 16; clock.step(frame); };
+
+    t("library and module present, constants, load logged", function () {
+        eq(typeof ACEUIModLoader.console, "object", "ACEUIModLoader.console"); eq(typeof DevConsole, "object", "DevConsole");
+        eq(DevConsole.MAX_ROWS, 200); eq(DevConsole.TOGGLE_CODE, "Backquote"); eq(DevConsole.FILTERS.length, 3);
+        eq(me.version, ACEUIModLoader.loader.DEV_VERSION, "version comes from the loader"); eq(me.prefix, "[devconsole]");
+        eq(me.hudId, "hud_devconsole"); eq(me.storageKey, "acedevconsole.pos"); eq(me.key("open"), "acedevconsole.open");
+        ok(window.__log.some(function (l) { return l.indexOf(me.prefix + " script loaded, version " + me.version + ", library " + ACEUIModLoader.VERSION) >= 0; }), "the library logs the script-loaded line for every mod");
+        eq(document.getElementById(me.name), null, "harness must not carry the auto-mount root");
+        eq(typeof DevConsole.VERSION, "undefined", "identity is the loader's, not re-exported");
+    });
+
+    const root = document.createElement("div");
+    center.appendChild(root);
+    let state = DevConsole.attach(root);
+    const input = root.querySelector(".dc-input");
+
+    t("attach builds header, 3 filters, MAX_ROWS rows and the prompt; open by default; panel and loop wired", function () {
+        eq(root.querySelectorAll(".dc-filter").length, 3, "filters"); eq(root.querySelectorAll(".dc-row").length, MAX, "row pool");
+        ok(input, "prompt input"); eq(input.getAttribute("data-nodrag"), "", "prompt does not drag");
+        eq(root.querySelector(".dc-title").textContent, "ACE Dev Console" + me.version, "title + version span");
+        eq(root.querySelector(".dc-version").textContent, me.version, "version span");
+        ok(root.querySelector(".dc-scrollbar") && root.querySelector(".dc-thumb"), "scrollbar markup");
+        eq(root.querySelector(".dc-scrollbar").getAttribute("data-nodrag"), "", "scrollbar does not drag the panel");
+        ok(root.querySelector(".dc-follow").classList.contains("dc-hidden"), "follow chip hidden while following");
+        eq(root.querySelector('[data-action="close"]').textContent, "×", "close glyph");
+        eq(ACEUIModLoader.drawer.isVisible("devconsole"), true, "on by default");
+        eq(state.ui.panel.hudId, me.hudId); eq(state.ui.panel.storageKey, me.storageKey);
+        eq(root.style.visibility, "hidden", "hidden until positioned"); ok(state.ui.loop.running, "loop running");
+        eq(getComputedStyle(root).position, "absolute", "stylesheet applied");
+        ok(window.__log.some(function (l) { return l.indexOf(me.prefix + " console attached") >= 0 && l.indexOf("buffered line(s)") >= 0; }), "attach logged");
+    });
+
+    t("first frame shows the lines buffered before attach, oldest first, with times and levels", function () {
+        eq(visibleRows(root).length, 0, "nothing rendered before a frame");
+        nextFrame();
+        const shown = texts(root);
+        ok(shown.length >= 2, "rows rendered");
+        eq(shown[0], "early line one", "first buffered line"); eq(shown[1], "early warning", "second");
+        eq(visibleRows(root)[1].getAttribute("data-level"), "warn", "level attribute");
+        ok(/^\d\d:\d\d:\d\d$/.test(visibleRows(root)[0].querySelector(".dc-time").textContent), "time format");
+        ok(shown.some(function (s) { return s.indexOf(me.prefix + " console attached") === 0; }), "its own attach line is in the buffer");
+    });
+
+    t("a new console.warn renders on the next frame with its level; counts update; nothing rewritten when clean", function () {
+        eq(state.dirty, false, "clean after render");
+        console.warn("fresh warning");
+        eq(state.dirty, true, "subscriber marked dirty");
+        nextFrame();
+        const row = lastRow(root);
+        eq(row.querySelector(".dc-text").textContent, "fresh warning"); eq(row.getAttribute("data-level"), "warn");
+        eq(root.querySelector('[data-filter="warn"] .dc-count').textContent, "2", "warn count");
+        const sentinel = row.querySelector(".dc-text"); sentinel.textContent = "sentinel";
+        nextFrame();
+        eq(sentinel.textContent, "sentinel", "no rewrite without new lines");
+    });
+
+    t("filter toggle hides that level, persists, and shows it again", function () {
+        const warnBtn = root.querySelector('[data-filter="warn"]');
+        warnBtn.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+        eq(state.filters.warn, false); ok(!warnBtn.classList.contains("on"));
+        eq(JSON.parse(localStorage.getItem(me.key("filters"))).warn, false, "persisted");
+        nextFrame();
+        ok(texts(root).indexOf("fresh warning") === -1, "warn rows hidden"); ok(texts(root).indexOf("early line one") >= 0, "log rows still shown");
+        warnBtn.querySelector(".dc-count").dispatchEvent(new MouseEvent("click", { bubbles: true }));   // click on a child still toggles
+        eq(state.filters.warn, true); nextFrame(); ok(texts(root).indexOf("fresh warning") >= 0, "shown again");
+    });
+
+    t("prompt: expression result, statement, error, echo; history with arrows; input cleared", function () {
+        input.value = "1 + 1"; key(input, { key: "Enter" });
+        eq(input.value, "", "cleared");
+        nextFrame();
+        let shown = texts(root);
+        eq(shown[shown.length - 2], "> 1 + 1", "echo"); eq(shown[shown.length - 1], "2", "result");
+        eq(lastRow(root).getAttribute("data-level"), "result");
+        input.value = "ModelCurrentCar.speed"; key(input, { key: "Enter" }); nextFrame();
+        eq(texts(root).pop(), "123.4", "reads page globals");
+        input.value = "nope()"; key(input, { key: "Enter" }); nextFrame();
+        eq(texts(root).pop(), "ReferenceError: nope is not defined", "error text"); eq(lastRow(root).getAttribute("data-level"), "error");
+        input.value = "window.__side = 7"; key(input, { key: "Enter" }); nextFrame();
+        eq(window.__side, 7, "statements run"); eq(texts(root).pop(), "7");
+        input.value = "   "; key(input, { key: "Enter" }); eq(state.dirty, false, "blank input does nothing");
+        key(input, { key: "ArrowUp" }); eq(input.value, "window.__side = 7", "history 1");
+        key(input, { key: "ArrowUp" }); eq(input.value, "nope()", "history 2");
+        key(input, { key: "ArrowDown" }); key(input, { key: "ArrowDown" }); eq(input.value, "", "back to the draft");
+        eq(state.history.length, 4);
+    });
+
+    t("an object result is expanded over indented lines, not squashed onto one", function () {
+        input.value = "({ a: 1, b: { c: 2 }, d: \"hi\" })";
+        key(input, { key: "Enter" });
+        nextFrame();
+        const shown = texts(root);
+        const tree = shown.slice(shown.length - 8);
+        eq(tree[0], "> ({ a: 1, b: { c: 2 }, d: \"hi\" })", "echo first");
+        eq(tree[1], "Object {", "headline then brace");
+        eq(tree[2], "  a: 1", "one property per line, indented");
+        eq(tree[3], "  b: Object {", "nested object opens");
+        eq(tree[4], "    c: 2", "nested property indented further");
+        eq(tree[5], "  }", "nested close");
+        eq(tree[6], "  d: \"hi\"", "strings quoted");
+        eq(tree[7], "}", "closing brace");
+        eq(lastRow(root).getAttribute("data-level"), "result", "still a result line");
+    });
+
+    t("arrays show their length, deep values are capped and cycles are marked", function () {
+        const out = [];
+        DevConsole.treeLines([1, 2], "", 0, out, []);
+        eq(out[0], "Array(2) [", "length in the headline");
+        eq(out[1], "  0: 1", "index as the label");
+
+        const loop = { name: "root" };
+        loop.self = loop;
+        const cyc = [];
+        DevConsole.treeLines(loop, "", 0, cyc, []);
+        ok(cyc.some(function (l) { return l.indexOf("[circular]") >= 0; }), "cycle marked, not followed");
+
+        let deep = { v: 0 };
+        let i;
+        for (i = 0; i < DevConsole.TREE_MAX_DEPTH + 3; i += 1) { deep = { down: deep }; }
+        const capped = [];
+        DevConsole.treeLines(deep, "", 0, capped, []);
+        ok(capped.some(function (l) { return l.indexOf("...") >= 0; }), "depth capped");
+    });
+
+    t("Tab completes a name, cycles alternatives, and shows clickable chips", function () {
+        window.__accomplice = { alpha: 1, alfresco: 2, beta: 3 };
+        input.value = "__accomplice";
+        key(input, { key: "Tab" });
+        eq(input.value, "__accomplice", "an exact single match completes to itself");
+
+        input.value = "__accomplice.al";
+        key(input, { key: "Tab" });
+        eq(input.value, "__accomplice.alfresco", "first alternative inserted");
+        const chips = root.querySelectorAll(".dc-suggest-item:not(.dc-hidden)");
+        eq(chips.length, 2, "both alternatives offered");
+        ok(!root.querySelector(".dc-suggest").classList.contains("dc-hidden"), "strip shown");
+
+        key(input, { key: "Tab" });
+        eq(input.value, "__accomplice.alpha", "Tab cycles to the next");
+        key(input, { key: "Tab" });
+        eq(input.value, "__accomplice.alfresco", "and wraps around");
+
+        key(input, { key: "Escape" });
+        ok(root.querySelector(".dc-suggest").classList.contains("dc-hidden"), "Escape clears the strip");
+    });
+
+    t("completion traverses object paths and never calls anything", function () {
+        window.__called = 0;
+        window.__probe = function () { window.__called = 1; return { hidden: 1 }; };
+        window.__probe.tail = 1;
+
+        const found = DevConsole.completionsFor("__probe.ta");
+        eq(found.partial, "ta", "partial taken from after the dot");
+        ok(found.items.indexOf("tail") >= 0, "property of the function object offered");
+        eq(window.__called, 0, "the function was never invoked");
+
+        const nested = DevConsole.completionsFor("ModelCurrentCar.spe");
+        ok(nested.items.indexOf("speed") >= 0, "walks into a page global");
+
+        eq(DevConsole.completionsFor("").items.length, 0, "nothing typed, nothing offered");
+        eq(DevConsole.completionsFor("__nothing_here.x").items.length, 0, "unresolvable base offers nothing");
+        DevConsole.resetCompletion(state);
+    });
+
+    t("Enter without a key name and with an unrelated keyCode does nothing", function () {
+        input.value = "should stay"; key(input, { keyCode: 65 });
+        eq(input.value, "should stay"); eq(state.dirty, false);
+        input.value = "";
+    });
+
+    t("legacy keyCode-only events work for Enter, arrows and the toggle (the game's engine reports keyCode)", function () {
+        input.value = "2 * 21"; key(input, { keyCode: 13 }); nextFrame();
+        eq(texts(root).pop(), "42", "Enter by keyCode");
+        key(input, { keyCode: 38 }); eq(input.value, "2 * 21", "ArrowUp by keyCode");
+        key(input, { keyCode: 40 }); eq(input.value, "", "ArrowDown by keyCode");
+        key(window, { keyCode: 192 });
+        eq(ACEUIModLoader.drawer.isVisible("devconsole"), false, "toggle by keyCode");
+        key(window, { keyCode: 192 });
+        eq(ACEUIModLoader.drawer.isVisible("devconsole"), true, "and back by keyCode");
+        eq(DevConsole.KEY_CODES.Enter, 13);
+    });
+
+    t("clear button empties the buffer and the rows", function () {
+        root.querySelector('[data-action="clear"]').dispatchEvent(new MouseEvent("click", { bubbles: true }));
+        eq(ACEUIModLoader.console.entries().length, 0); nextFrame();
+        eq(visibleRows(root).length, 0, "rows hidden"); eq(root.querySelector('[data-filter="log"] .dc-count').textContent, "0");
+    });
+
+    t("more lines than rows: only the newest MAX_ROWS are shown, newest last", function () {
+        let i; for (i = 0; i < MAX + 30; i += 1) { console.log("bulk " + i); }
+        nextFrame();
+        const shown = texts(root);
+        eq(shown.length, MAX, "row pool fully used"); eq(shown[0], "bulk 30", "oldest visible"); eq(shown[MAX - 1], "bulk " + (MAX + 29), "newest last");
+        eq(root.querySelector('[data-filter="log"] .dc-count').textContent, String(MAX + 30), "count is the buffer's, not the rows'");
+    });
+
+    const body = root.querySelector(".dc-body");
+    const track = root.querySelector(".dc-scrollbar");
+    const thumb = root.querySelector(".dc-thumb");
+    const followChip = root.querySelector(".dc-follow");
+    const atBottom = function () { return Math.abs(body.scrollTop - (body.scrollHeight - body.clientHeight)) <= 1; };
+    // Cohtml convention (what the console is built for): a positive deltaY scrolls UP.
+    const wheel = function (deltaY) { body.dispatchEvent(new WheelEvent("wheel", { deltaY: deltaY, bubbles: true, cancelable: true })); };
+    const wheelUp = function () { wheel(100); };
+    const wheelDown = function () { wheel(-100); };
+
+    t("scrollbar: with overflowing content the thumb is shown, sized to the visible fraction, and the newest line is followed", function () {
+        ok(body.scrollHeight > body.clientHeight, "content overflows in the harness");
+        ok(!track.classList.contains("dc-nofit"), "track visible");
+        const h = parseFloat(thumb.style.height);
+        ok(h >= DevConsole.MIN_THUMB_PX && h < track.clientHeight, "thumb height " + h);
+        ok(Math.abs(h - Math.max(DevConsole.MIN_THUMB_PX, Math.round(track.clientHeight * body.clientHeight / body.scrollHeight))) <= 1, "thumb proportional");
+        ok(atBottom(), "scrolled to the newest line"); eq(state.follow, true); ok(followChip.classList.contains("dc-hidden"));
+        ok(thumb.style.transform.indexOf("translateY(") === 0, "thumb placed with a transform");
+    });
+
+    t("wheel up scrolls back by a quarter view, stops following and shows LATEST; new lines do not yank the view", function () {
+        const before = body.scrollTop;
+        const yBefore = thumb.style.transform;
+        wheelUp();
+        ok(Math.abs((before - body.scrollTop) - body.clientHeight * DevConsole.WHEEL_STEP) <= 1, "one notch = WHEEL_STEP of the view");
+        eq(state.follow, false, "not following"); ok(!followChip.classList.contains("dc-hidden"), "LATEST shown");
+        ok(thumb.style.transform !== yBefore, "thumb moved");
+        const held = body.scrollTop;
+        console.log("arrives while scrolled up"); nextFrame();
+        eq(body.scrollTop, held, "view held"); eq(state.follow, false);
+    });
+
+    t("wheel down to the bottom resumes following; the LATEST chip does the same; clear resets to following", function () {
+        wheelDown(); wheelDown(); wheelDown(); wheelDown();
+        ok(atBottom(), "back at the bottom"); eq(state.follow, true); ok(followChip.classList.contains("dc-hidden"));
+        wheelUp(); eq(state.follow, false);
+        followChip.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+        eq(state.follow, true, "chip resumes"); nextFrame(); ok(atBottom(), "rendered at the bottom");
+        wheelUp(); eq(state.follow, false);
+        root.querySelector('[data-action="clear"]').dispatchEvent(new MouseEvent("click", { bubbles: true })); nextFrame();
+        eq(state.follow, true, "clear follows again"); ok(track.classList.contains("dc-nofit"), "no thumb when nothing overflows");
+        let i; for (i = 0; i < MAX; i += 1) { console.log("refill " + i); }
+        nextFrame(); ok(!track.classList.contains("dc-nofit"), "thumb back with content");
+    });
+
+    t("thumb never leaves the track and is red while dragged; dragging it scrolls proportionally and releases on mouseup", function () {
+        eq(DevConsole.WHEEL_SIGN, -1, "Cohtml wheel sign: positive deltaY is up");
+        DevConsole.setFollow(state, true); nextFrame(); ok(atBottom());
+        const y = parseFloat(thumb.style.transform.replace(/[^0-9.-]/g, ""));
+        ok(y + parseFloat(thumb.style.height) <= track.clientHeight + 0.5, "thumb end within the track: " + (y + parseFloat(thumb.style.height)) + " <= " + track.clientHeight);
+        const rect = thumb.getBoundingClientRect();
+        thumb.dispatchEvent(new MouseEvent("mousedown", { clientX: rect.left + 2, clientY: rect.top + 2, bubbles: true }));
+        ok(track.classList.contains("dragging"), "dragging class"); ok(state.scroller.state.drag, "drag state");
+        ok(!root.classList.contains("dragging"), "panel itself not dragging");
+        const startTop = body.scrollTop;
+        mouse("mousemove", rect.left + 2, rect.top + 2 - 40);
+        ok(body.scrollTop < startTop, "dragging up scrolled up: " + body.scrollTop + " < " + startTop); eq(state.follow, false);
+        const travel = track.clientHeight - parseFloat(thumb.style.height);
+        const expected = startTop - 40 * (body.scrollHeight - body.clientHeight) / travel;
+        ok(Math.abs(body.scrollTop - Math.max(0, expected)) <= 1, "proportional: " + body.scrollTop + " vs " + expected);
+        mouse("mouseup", 0, 0);
+        ok(!track.classList.contains("dragging")); eq(state.scroller.state.drag, null);
+        const held = body.scrollTop; mouse("mousemove", 0, 0); eq(body.scrollTop, held, "released");
+    });
+
+    t("text filter hides non-matching lines case-insensitively, keeps counts, Escape clears it, typing there does not toggle", function () {
+        const search = root.querySelector(".dc-search");
+        ok(search && search.getAttribute("data-nodrag") === "", "search field, no drag");
+        DevConsole.setFollow(state, true);
+        console.warn("Needle in the haystack"); console.log("plain line"); nextFrame();
+        const logCount = root.querySelector('[data-filter="log"] .dc-count').textContent;
+        search.value = "NEEDLE"; search.dispatchEvent(new Event("input", { bubbles: true })); nextFrame();
+        eq(texts(root).join("|"), "Needle in the haystack", "only the match is shown");
+        eq(root.querySelector('[data-filter="log"] .dc-count').textContent, logCount, "counts are the buffer's");
+        key(search, { code: "Backquote", key: "`" });
+        eq(ACEUIModLoader.drawer.isVisible("devconsole"), true, "backquote in the filter field does not toggle");
+        search.value = "nomatchxyz"; search.dispatchEvent(new Event("keyup", { bubbles: true })); nextFrame();
+        eq(visibleRows(root).length, 0, "no match, nothing shown"); ok(track.classList.contains("dc-nofit"), "no thumb when nothing is shown");
+        key(search, { key: "Escape" }); nextFrame();
+        eq(search.value, "", "Escape clears"); eq(state.query, ""); ok(texts(root).length > 2, "all lines back");
+    });
+
+    t("scale set from the settings window moves the panel, and the panel's buttons write back", function () {
+        /* one source of truth: the -/+ buttons and the settings window are two views of
+           the same stored value, not two copies of it */
+        ACEUIModLoader.settings.set("devconsole", "scale", 1.4);
+        eq(state.scale, 1.4, "changing the setting scales the panel");
+        eq(root.style.fontSize, "1.4rem");
+        ACEUIModLoader.settings.set("devconsole", "scale", 1);
+        eq(state.scale, 1, "and back");
+    });
+
+    t("- and + scale the whole panel in steps, clamped, persisted and restored; the thumb is re-applied", function () {
+        eq(state.scale, 1); eq(root.style.fontSize, "1rem", "root font-size drives every em inside");
+        const w = root.offsetWidth; const rowH = visibleRows(root)[0].offsetHeight;
+        root.querySelector('[data-action="larger"]').dispatchEvent(new MouseEvent("click", { bubbles: true }));
+        eq(state.scale, 1.1); eq(root.style.fontSize, "1.1rem"); eq(ACEUIModLoader.settings.get("devconsole", "scale"), 1.1, "persisted through the settings store");
+        ok(root.offsetWidth > w, "panel wider"); ok(visibleRows(root)[0].offsetHeight > rowH, "rows taller");
+        eq(state.scroller.state.thumbHeight, -1, "thumb geometry invalidated"); nextFrame(); ok(state.scroller.state.thumbHeight > 0, "thumb re-applied");
+        let i; for (i = 0; i < 30; i += 1) { root.querySelector('[data-action="smaller"]').dispatchEvent(new MouseEvent("click", { bubbles: true })); }
+        eq(state.scale, DevConsole.SCALE_MIN, "clamped at the minimum");
+        for (i = 0; i < 30; i += 1) { root.querySelector('[data-action="larger"]').dispatchEvent(new MouseEvent("click", { bubbles: true })); }
+        eq(state.scale, DevConsole.SCALE_MAX, "clamped at the maximum");
+        DevConsole.setScale(state, 1.3);
+        const root3 = document.createElement("div"); center.appendChild(root3);
+        const state3 = DevConsole.attach(root3);
+        eq(state3.scale, 1.3, "restored on attach"); eq(root3.style.fontSize, "1.3rem");
+        DevConsole.detach(state3); root3.remove();
+        DevConsole.setScale(state, 1); nextFrame();
+    });
+
+    t("a click on the scrollbar track jumps to that fraction; the top holds, the bottom follows", function () {
+        const rect = track.getBoundingClientRect();
+        track.dispatchEvent(new MouseEvent("mousedown", { clientX: rect.left + 2, clientY: rect.top + 1, bubbles: true }));
+        ok(body.scrollTop < body.clientHeight * 0.1, "near the top (1 px into the track): " + body.scrollTop); eq(state.follow, false);
+        ok(!root.classList.contains("dragging"), "track click does not drag the panel");
+        track.dispatchEvent(new MouseEvent("mousedown", { clientX: rect.left + 2, clientY: rect.bottom - 1, bubbles: true }));
+        ok(atBottom(), "at the bottom"); eq(state.follow, true);
+    });
+
+    /* Closing used to hide the root and leave the drawer saying the console was on, which
+       is the one place in the UI you can get an app back from. Both the key and the x now
+       switch the app off, and the key is the loader's so it still works once it is off. */
+    t("the toggle key and the x switch the app off, where the drawer can see it", function () {
+        const drawer = ACEUIModLoader.drawer;
+
+        key(window, { code: "Backquote", key: "`" });
+        eq(drawer.isVisible("devconsole"), false, "off in the drawer");
+
+        key(window, { code: "Backquote", key: "`" });
+        eq(drawer.isVisible("devconsole"), true, "the same key brings it back while it is off");
+
+        key(input, { code: "Backquote", key: "`" });
+        eq(drawer.isVisible("devconsole"), true, "typing a backquote in the prompt does not toggle");
+
+        root.querySelector('[data-action="close"]').dispatchEvent(new MouseEvent("click", { bubbles: true }));
+        eq(drawer.isVisible("devconsole"), false, "x closes");
+        ACEUIModLoader.mod("devconsole").show(true);
+    });
+
+    t("a hidden HUD skips rendering", function () {
+        document.body.classList.add(ACEUIModLoader.HUD_HIDDEN_CLASS);
+        console.log("hud hidden line"); nextFrame(); eq(state.dirty, true, "not rendered while the HUD is hidden");
+        document.body.classList.remove(ACEUIModLoader.HUD_HIDDEN_CLASS); nextFrame(); eq(state.dirty, false);
+    });
+
+    t("mousedown on the prompt or a button does not drag; on the header it does and saves under the mod's keys", function () {
+        root.style.left = "100px"; root.style.top = "100px"; root.style.right = "auto";
+        mouse("mousedown", 110, 110, input); mouse("mousemove", 300, 300); mouse("mouseup", 0, 0);
+        eq(root.style.left, "100px", "prompt did not drag"); ok(!root.classList.contains("dragging"));
+        mouse("mousedown", 110, 110, root.querySelector('[data-filter="log"]')); mouse("mousemove", 300, 300); mouse("mouseup", 0, 0);
+        eq(root.style.left, "100px", "filter button did not drag");
+        const header = root.querySelector(".dc-header");
+        mouse("mousedown", 110, 105, header); ok(root.classList.contains("dragging"), "header drags");
+        mouse("mousemove", 160, 125); mouse("mouseup", 0, 0);
+        eq(root.style.left, "150px", "moved"); eq(root.style.top, "120px");
+        ok(JSON.parse(localStorage.getItem(me.storageKey)).x === "150px", "saved under acedevconsole.pos");
+    });
+
+    t("detach stops the loop, unsubscribes and releases the key, click, wheel and track listeners", function () {
+        const listeners = ACEUIModLoader.console.listenerCount();
+        const cancelled = clock.cancelled;
+        DevConsole.detach(state);
+        eq(clock.cancelled, cancelled + 1); eq(state.ui.loop.running, false); eq(ACEUIModLoader.console.listenerCount(), listeners - 1, "unsubscribed");
+        const follow = state.follow; wheelUp(); eq(state.follow, follow, "wheel released");
+        const search = root.querySelector(".dc-search"); search.value = "zzz"; search.dispatchEvent(new Event("input", { bubbles: true }));
+        eq(state.query, "", "search released"); search.value = "";
+        // the toggle key belongs to the loader rather than to this panel, so there is
+        // nothing here for detach to release: that is what makes it work once the app is off
+        state.dirty = false;
+        console.log("after detach"); eq(state.dirty, false, "no longer following the buffer");
+        input.value = "1"; key(input, { key: "Enter" }); eq(input.value, "1", "prompt released");
+        state = DevConsole.attach(root);
+        eq(root.querySelectorAll(".dc-row").length, MAX, "markup reused"); DevConsole.detach(state);
+    });
+
+    t(".fields shows the schema against the live object, and flags both kinds of mismatch", function () {
+        state = DevConsole.attach(root);   // the detach case above released the listeners
+        /* stand-in for the generated protofields.js, so no file load is needed here */
+        window.ACEProtoFields = {
+            version: "test",
+            messages: { UIDemoState: [["alpha", "int32", 1, ""], ["beta", "float", 2, ""], ["gamma", "string", 3, "repeated"]] },
+            enums: {},
+            origin: { UIDemoState: "Demo.proto" },
+            models: { ModelDemo: "UIDemoState" }
+        };
+        window.ModelDemo = { alpha: 7, gamma: "x", extra: 1 };
+
+        input.value = ".fields ModelDemo"; key(input, { key: "Enter" }); nextFrame();
+        const out = texts(root).join("\n");
+        ok(out.indexOf("alpha") >= 0 && out.indexOf("= 7") >= 0, "a live field shows its value");
+        ok(out.indexOf("beta") >= 0 && out.indexOf("(not published)") >= 0, "a documented field the game never fills is flagged");
+        ok(out.indexOf("repeated string") >= 0, "the label and type are shown");
+        ok(out.indexOf("#3") >= 0, "with the protobuf tag");
+        ok(out.indexOf("3 defined, 2 live") >= 0, "counts both sides");
+        ok(out.indexOf("live but not in the schema: extra") >= 0, "and what the game added on top");
+
+        input.value = ".fields Nonsense"; key(input, { key: "Enter" }); nextFrame();
+        ok(texts(root).pop().indexOf("no schema called Nonsense") >= 0, "unknown name explained");
+
+        input.value = ".fields"; key(input, { key: "Enter" }); nextFrame();
+        ok(texts(root).join("\n").indexOf("ModelDemo") >= 0, "bare .fields lists what is known");
+    });
+
+    t(".logtest reports which console methods actually reach the console", function () {
+        input.value = ".logtest"; key(input, { key: "Enter" }); nextFrame();
+        const out = texts(root).join(" ~ ");
+        DevConsole.detach(state);          // release before asserting, so a failure cannot leak handlers
+
+        ok(out.indexOf("logtest:") >= 0, "reports");
+        ok(/captured: [^~]*\blog\b/.test(out), "console.log is captured");
+        ok(/captured: [^~]*\bwarn\b/.test(out), "console.warn is captured");
+        ok(/captured: [^~]*\berror\b/.test(out), "console.error is captured");
+        /* the library wraps trace/dir/table too: it runs before the stock bundle, so the
+           bundle's own console.trace wrapper calls ours and the line is still captured */
+        if (typeof console.trace === "function") {
+            ok(/captured: [^~]*\btrace\b/.test(out), "console.trace is captured as well");
+            ok(!/NOT captured: [^~]*\btrace\b/.test(out), "trace is not reported as lost");
+        }
+    });
+
+    t("prompt: focusing a text box stops the game reading keys as car controls, and always releases", function () {
+        /* Typing an expression used to toggle headlights, wipers and anything else bound
+           to a letter. The stock chat box solves it by flipping ModelMenuState.is_chat_active
+           and pushing the menu state back to the engine; ksUI.menuState.toggleKeyboardInput
+           is that path, so we take the same one. */
+        const calls = [];
+        const actions = [];
+        window.ksUI = { menuState: {
+            toggleKeyboardInput: function (on) { calls.push(on); },
+            ignoreInputActions: function (on) { actions.push(on); }
+        } };
+        state = DevConsole.attach(root);
+        const search = root.querySelector(".dc-search");
+
+        input.dispatchEvent(new Event("focus"));
+        eq(calls.pop(), true, "captured while the prompt has focus");
+        /* is_chat_active alone was not enough: the arrow keys still moved the seat, so the
+           bound gameplay actions have to be suppressed as well */
+        eq(actions.pop(), true, "bound gameplay actions suppressed too");
+        input.dispatchEvent(new Event("blur"));
+        eq(calls.pop(), false, "released on blur");
+        eq(actions.pop(), false, "and the actions released with it");
+
+        search.dispatchEvent(new Event("focus"));
+        eq(calls.pop(), true, "the filter box captures too");
+        search.dispatchEvent(new Event("blur"));
+        eq(calls.pop(), false, "and releases");
+
+        /* Releasing matters more than capturing: a console still holding it would leave
+           the car unable to read its own controls. */
+        input.dispatchEvent(new Event("focus"));
+        calls.length = 0;
+        DevConsole.setOpen(state, false);
+        ok(calls.indexOf(false) >= 0, "closing the console releases it");
+
+        DevConsole.setOpen(state, true);
+        input.dispatchEvent(new Event("focus"));
+        calls.length = 0;
+        DevConsole.detach(state);
+        ok(calls.indexOf(false) >= 0, "detaching releases it");
+
+        /* an engine that offers only one of the two still gets what it has */
+        window.ksUI = { menuState: { toggleKeyboardInput: function (on) { calls.push(on); } } };
+        eq(DevConsole.captureKeyboard(true), true, "one lever is enough to count as captured");
+
+        delete window.ksUI;
+        eq(DevConsole.captureKeyboard(true), false, "outside the game there is nothing to capture, and it says so");
+    });
+
+    t("prompt: .run refuses anything but a plain name, unknown commands print the list, a good name adds the script", function () {
+        state = DevConsole.attach(root);
+        input.value = ".run ../x"; key(input, { key: "Enter" }); nextFrame();
+        eq(texts(root).pop(), "run: plain file names only, e.g. .run probe"); eq(lastRow(root).getAttribute("data-level"), "error");
+        input.value = ".what"; key(input, { key: "Enter" }); nextFrame();
+        const help = texts(root);
+        ok(help[help.length - 3].indexOf("commands: .run <name>") === 0, "command list starts with .run");
+        ok(help[help.length - 2].indexOf(".fields") >= 0, "the list mentions .fields");
+        ok(help[help.length - 1].indexOf(".logtest") >= 0, "and .logtest"); eq(lastRow(root).getAttribute("data-level"), "error");
+        input.value = ".5 + 1"; key(input, { key: "Enter" }); nextFrame();
+        eq(texts(root).pop(), "1.5", "a number starting with a dot is still JavaScript");
+        input.value = ".run hello"; key(input, { key: "Enter" }); nextFrame();
+        eq(texts(root).pop(), "run: loading ACEUIModLoaderMods/snippets/hello.js", "loading line");
+        eq(document.querySelectorAll("script[src$='snippets/hello.js']").length, 1, "script tag added");
+        eq(state.history.pop(), ".run hello", "commands are in the history too");
+    });
+
+    const finishAfterSnippet = function (tries) {
+        if (window.__snippet !== 1 && tries > 0) {
+            setTimeout(function () { finishAfterSnippet(tries - 1); }, 20);
+            return;
+        }
+
+        nextFrame();
+        t("the snippet ran once and its completion was reported", function () {
+            eq(window.__snippet, 1, "snippet executed");
+            eq(texts(root).pop(), "run: hello.js done"); eq(lastRow(root).getAttribute("data-level"), "result");
+            DevConsole.detach(state);
+        });
+        H.finish();
+    };
+
+    finishAfterSnippet(100);
+}());
+</script>
+</body>
+</html>

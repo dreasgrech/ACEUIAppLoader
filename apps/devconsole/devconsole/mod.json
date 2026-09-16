@@ -1,0 +1,13 @@
+{
+  "version": "0.10.0",
+  "title": "DevConsole",
+  "styles": [
+    "devconsole.css"
+  ],
+  "scripts": [
+    "devconsole.js"
+  ],
+  "files": [
+    "protofields.js"
+  ]
+}

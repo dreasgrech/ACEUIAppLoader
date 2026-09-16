@@ -1,0 +1,374 @@
+/*
+ * DevConsole -- console stylesheet.
+ *
+ * Linked into hud.html by the ACEUIModLoader after the stock ui.css /
+ * uicomponents.css, so the font variable below is the game's. The look follows
+ * the stock HUD widgets (chat, MFD): a black 75 % panel with a solid #1c1e1f
+ * header bar, flat text buttons that turn #bd0000 on hover, thin white
+ * scrollbar thumb on a dark track, hairline row separators.
+ *
+ * Scaling: every length inside the panel is in em, relative to the root's
+ * font-size, which the script sets (`root.style.fontSize = scale + "rem"`) from
+ * the - / + buttons. At scale 1 the numbers below are the same as in rem.
+ *
+ * Cohtml notes: no var() fallbacks (unsupported); inputs get explicit box
+ * properties because the engine gives them its own padding; the script only
+ * ever changes textContent, one attribute and classes on a fixed set of rows,
+ * plus the scrollbar thumb's height (on content change) and transform.
+ */
+
+.ace-devconsole {
+    position: absolute;
+    right: 2rem;
+    top: 5rem;
+    width: 46em;
+    height: 22em;
+    display: flex;
+    flex-direction: column;
+    background: rgba(0, 0, 0, 0.75);
+    border: 2px solid transparent;
+    color: rgba(255, 255, 255, 0.8);
+    font-family: var(--font-family-main);
+    font-size: 1rem;
+    font-weight: 400;
+    cursor: pointer;
+}
+
+.ace-devconsole.dragging {
+    border-color: #fff;
+    background: rgba(0, 0, 0, 0.5);
+}
+
+/* closed by the toggle key or the x button; visibility keeps the layout so restores still measure it */
+.ace-devconsole.dc-closed {
+    visibility: hidden;
+}
+
+body.hide-hud .ace-devconsole {
+    visibility: hidden;
+}
+
+/* ---- header: title, filters, text filter, tools ------------------------------------ */
+
+.ace-devconsole .dc-header {
+    display: flex;
+    flex-direction: row;
+    align-items: stretch;
+    height: 2.2em;
+    padding: 0 0 0 1em;
+    background: #1c1e1f;
+    font-size: 0.75em;
+    letter-spacing: 0.05em;
+}
+
+.ace-devconsole .dc-title {
+    flex: 1 1 auto;
+    display: flex;
+    align-items: center;
+    font-weight: 600;
+    color: #fff;
+}
+
+.ace-devconsole .dc-version {
+    margin-left: 0.5em;
+    font-weight: 400;
+    color: #666;
+}
+
+.ace-devconsole .dc-filters,
+.ace-devconsole .dc-tools {
+    display: flex;
+    flex-direction: row;
+    align-items: stretch;
+}
+
+/* flat text buttons, stock style: no border, red on hover */
+.ace-devconsole .dc-filter,
+.ace-devconsole .dc-btn {
+    display: flex;
+    align-items: center;
+    padding: 0 0.8em;
+    color: #999;
+    cursor: pointer;
+    transition: background-color 0.15s, color 0.15s;
+}
+
+.ace-devconsole .dc-filter:hover,
+.ace-devconsole .dc-btn:hover {
+    background: #bd0000;
+    color: #fff;
+}
+
+.ace-devconsole .dc-filter.on {
+    color: #fff;
+}
+
+.ace-devconsole .dc-count {
+    min-width: 1.8em;
+    margin-left: 0.45em;
+    padding: 0 0.4em;
+    border-radius: 0.25em;
+    background: rgba(255, 255, 255, 0.12);
+    color: #ccc;
+    font-size: 0.85em;
+    text-align: center;
+}
+
+.ace-devconsole .dc-filter.on .dc-count {
+    background: #fff;
+    color: #000;
+}
+
+.ace-devconsole .dc-filter:hover .dc-count {
+    background: rgba(0, 0, 0, 0.35);
+    color: #fff;
+}
+
+/* text filter: a dark inset field; Cohtml gives inputs their own padding, so every box property is explicit */
+.ace-devconsole .dc-search {
+    flex: 0 0 auto;
+    width: 12em;
+    height: 1.55em;
+    min-height: 0;
+    box-sizing: border-box;
+    align-self: center;
+    margin: 0 0 0 0.8em;
+    padding: 0 0.5em;
+    border: none;
+    border-radius: 0.25em;
+    background: rgba(0, 0, 0, 0.5);
+    color: #fff;
+    font-family: var(--font-family-main);
+    font-size: 0.85em;
+    font-weight: 400;
+    letter-spacing: 0;
+    line-height: 1.55em;
+    outline: none;
+    cursor: text;
+}
+
+.ace-devconsole .dc-search:focus {
+    background: rgba(0, 0, 0, 0.8);
+}
+
+.ace-devconsole .dc-tools {
+    margin-left: 0.65em;
+    border-left: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+/* square glyph buttons: scale - / +, close */
+.ace-devconsole .dc-btn.dc-glyph {
+    width: 2.2em;
+    padding: 0;
+    justify-content: center;
+    font-size: 1.1em;
+}
+
+.ace-devconsole .dc-btn.dc-close {
+    font-size: 1.2em;
+}
+
+/* ---- body: lines + scrollbar ----------------------------------------------------- */
+
+.ace-devconsole .dc-scroll {
+    flex: 1 1 auto;
+    position: relative;
+    min-height: 0;
+}
+
+.ace-devconsole .dc-body {
+    position: absolute;
+    top: 0;
+    right: 0;
+    bottom: 0;
+    left: 0;
+    overflow: hidden;
+    padding: 0.25em 1.4em 0.25em 0.75em;
+    font-size: 0.7em;
+}
+
+.ace-devconsole .dc-row {
+    display: flex;
+    flex-direction: row;
+    align-items: flex-start;
+    padding: 0.15em 0;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+    line-height: 1.3;
+    white-space: pre-wrap;
+    overflow-wrap: break-word;
+}
+
+.ace-devconsole .dc-row.dc-hidden {
+    display: none;
+}
+
+.ace-devconsole .dc-time {
+    flex: 0 0 auto;
+    margin-right: 0.85em;
+    color: #666;
+}
+
+.ace-devconsole .dc-text {
+    flex: 1 1 auto;
+}
+
+/* stock scrollbar look: dark track inset 0.5em, white thumb, red while hovered or dragged */
+.ace-devconsole .dc-scrollbar {
+    position: absolute;
+    top: 0.5em;
+    right: 0.5em;
+    bottom: 0.5em;
+    width: 0.35em;
+    min-width: 8px;
+    background: #111;
+    border: 1px solid #000;
+    border-width: 0 1px 0 1px;
+    cursor: pointer;
+    transition: opacity 0.25s ease-out;
+}
+
+.ace-devconsole .dc-scrollbar.dc-nofit {
+    opacity: 0;
+    pointer-events: none;
+}
+
+.ace-devconsole .dc-scrollbar:hover,
+.ace-devconsole .dc-scrollbar.dragging {
+    background: #222;
+    border-color: #444;
+}
+
+.ace-devconsole .dc-thumb {
+    box-sizing: border-box;
+    width: 100%;
+    height: 100px;
+    background: #fff;
+    border: 1px solid #000;
+    border-width: 1px 0 1px 0;
+    cursor: pointer;
+    transition: background-color 0.25s;
+}
+
+.ace-devconsole .dc-scrollbar:hover .dc-thumb,
+.ace-devconsole .dc-scrollbar.dragging .dc-thumb {
+    background: #bd0000;
+}
+
+/* shown while scrolled away from the newest line; click to follow again */
+.ace-devconsole .dc-follow {
+    position: absolute;
+    right: 1.4em;
+    bottom: 0.5em;
+    padding: 0.15em 0.9em;
+    border-radius: 0.3em;
+    background: rgba(28, 30, 31, 0.9);
+    color: #ccc;
+    font-size: 0.65em;
+    letter-spacing: 0.08em;
+    cursor: pointer;
+}
+
+.ace-devconsole .dc-follow:hover {
+    background: #bd0000;
+    color: #fff;
+}
+
+.ace-devconsole .dc-follow.dc-hidden {
+    display: none;
+}
+
+/* ---- level colours -------------------------------------------------------------------- */
+
+.ace-devconsole [data-level="info"] .dc-text,
+.ace-devconsole [data-level="debug"] .dc-text { color: rgba(255, 255, 255, 0.6); }
+
+.ace-devconsole [data-level="warn"] .dc-text { color: #fabc3c; }
+
+.ace-devconsole [data-level="error"] .dc-text { color: #ff5a5e; }
+
+.ace-devconsole [data-level="input"] .dc-text { color: #fff; font-weight: 600; }
+
+.ace-devconsole [data-level="result"] .dc-text { color: #5fd07a; }
+
+/* ---- tab completion: chips between the log and the prompt --------------------------- */
+
+.ace-devconsole .dc-suggest {
+    flex: 0 0 auto;
+    display: flex;
+    flex-direction: row;
+    flex-wrap: wrap;
+    align-items: center;
+    padding: 0.3em 1.05em;
+    background: rgba(28, 30, 31, 0.9);
+    border-top: 1px solid rgba(255, 255, 255, 0.08);
+    font-size: 0.7em;
+}
+
+.ace-devconsole .dc-suggest.dc-hidden {
+    display: none;
+}
+
+.ace-devconsole .dc-suggest-item {
+    margin: 0.1em 0.45em 0.1em 0;
+    padding: 0.05em 0.4em;
+    border: 1px solid transparent;
+    border-radius: 0.2em;
+    color: rgba(255, 255, 255, 0.6);
+    cursor: pointer;
+    user-select: none;
+}
+
+.ace-devconsole .dc-suggest-item.dc-hidden {
+    display: none;
+}
+
+/* the one Tab will insert next */
+.ace-devconsole .dc-suggest-item.dc-suggest-on {
+    background: rgba(255, 255, 255, 0.12);
+    border-color: rgba(255, 255, 255, 0.25);
+    color: #fff;
+}
+
+/* ---- footer: prompt ----------------------------------------------------------------- */
+
+.ace-devconsole .dc-footer {
+    flex: 0 0 auto;
+    display: flex;
+    flex-direction: row;
+    align-items: center;
+    height: 2.35em;
+    background: rgba(28, 30, 31, 0.75);
+    border-top: 1px solid rgba(255, 255, 255, 0.08);
+    font-size: 0.7em;
+}
+
+.ace-devconsole .dc-prompt {
+    flex: 0 0 auto;
+    padding: 0 0.7em 0 1.05em;
+    color: #bd0000;
+    font-weight: 700;
+}
+
+/* explicit box so Cohtml's default input padding/height cannot inflate it */
+.ace-devconsole .dc-input {
+    flex: 1 1 auto;
+    height: 2.35em;
+    min-height: 0;
+    box-sizing: border-box;
+    margin: 0;
+    padding: 0 1.05em 0 0;
+    border: none;
+    border-radius: 0;
+    background: transparent;
+    color: #fff;
+    font-family: var(--font-family-main);
+    font-size: 1em;
+    font-weight: 400;
+    line-height: 2.35em;
+    outline: none;
+    cursor: text;
+}
+
+.ace-devconsole .dc-input:focus {
+    background: rgba(255, 255, 255, 0.06);
+}

@@ -1,0 +1,135 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<title>DevConsole preview</title>
+<!--
+  Out-of-game preview. Loads the ACEUIModLoader library from the sibling checkout of the loader
+  repo, then the real stylesheet and script from devconsole/, inside a 16:9 stand-in
+  for the game's HUD container, with buttons that produce log lines and a fake
+  ModelCurrentCar to poke at from the prompt. Open this file directly in Edge or
+  Chrome:
+
+      dev/preview.html
+
+  What it cannot show: Cohtml quirks (this is Chromium, notably keyboard focus
+  behaviour of the prompt in game), the stock HUD around the panel, and the
+  game's font (a system font stands in for --font-family-main).
+-->
+<script src="../../ACEUIModLoader/tests/lib/lib.js"></script>
+<link rel="stylesheet" type="text/css" href="../devconsole/devconsole.css">
+<style>
+    :root { --font-family-main: "Segoe UI", "Helvetica Neue", Arial, sans-serif; font-size: 16px; }
+    html, body { margin: 0; height: 100%; background: #101214; color: #ddd; font-family: var(--font-family-main); }
+    body { display: flex; flex-direction: column; }
+
+    #stage-wrap { flex: 1 1 auto; display: flex; align-items: center; justify-content: center; min-height: 0; }
+    .absolutecenter { position: relative; aspect-ratio: 16 / 9; height: 100%; max-width: 100%; margin: auto;
+                      background: radial-gradient(ellipse at 50% 60%, #3a4046 0%, #1b1e22 70%); overflow: hidden;
+                      box-shadow: 0 0 0 1px #333; }
+
+    #panel { flex: 0 0 auto; display: flex; flex-wrap: wrap; gap: 0.75rem 1.5rem; align-items: center;
+             padding: 0.5rem 1rem; background: #181b1e; border-top: 1px solid #333; font-size: 0.8rem; }
+    #panel button { background: #2a2e33; color: #ddd; border: 1px solid #555; border-radius: 3px; padding: 0.2rem 0.6rem; cursor: pointer; }
+    #panel button.on { background: #3aa6ff; color: #000; border-color: #3aa6ff; }
+    #panel .dim { opacity: 0.6; }
+</style>
+</head>
+<body class="hud">
+<div id="stage-wrap">
+    <div class="absolutecenter" id="stage">
+        <div id="devconsole"></div>
+    </div>
+</div>
+<div id="panel">
+    <span>DevConsole <b id="version">?</b> preview</span>
+    <button data-emit="log">console.log</button>
+    <button data-emit="warn">console.warn</button>
+    <button data-emit="error">console.error</button>
+    <button data-emit="object">log an object</button>
+    <button data-emit="throw">uncaught error</button>
+    <button id="btn-flood" class="on">flood (1 line/s)</button>
+    <button id="btn-hide">hide HUD</button>
+    <button id="btn-reset">reset position</button>
+    <span class="dim">backquote toggles; try <code>ModelCurrentCar</code> or <code>ACEUIModLoader.mods</code> in the prompt</span>
+</div>
+
+<script>
+/** Fake game side: a ModelCurrentCar for the prompt to inspect, and buttons that log. */
+window.ModelCurrentCar = { has_focused_car: true, speed: 0, rpm: 0, gear: 3, gas_percent: 0, brake_percent: 0 };
+
+const Preview = (function () {
+
+    const FLOOD_EVERY_MS = 1000;
+    const SPEED_PERIOD_MS = 9000;
+    const MAX_SPEED = 250;
+    const MAX_RPM = 8000;
+
+    const state = { flood: true, lastFlood: 0, count: 0 };
+
+    const q = function (selector) { return document.querySelector(selector); };
+
+    const emit = function (kind) {
+        state.count += 1;
+
+        if (kind === "log") { console.log("preview line", state.count); }
+
+        if (kind === "warn") { console.warn("preview warning", state.count); }
+
+        if (kind === "error") { console.error("preview error", state.count); }
+
+        if (kind === "object") { console.log("car:", window.ModelCurrentCar); }
+
+        if (kind === "throw") { setTimeout(function () { throw new Error("preview uncaught " + state.count); }, 0); }
+    };
+
+    const step = function (now) {
+        const car = window.ModelCurrentCar;
+        const phase = (now % SPEED_PERIOD_MS) / SPEED_PERIOD_MS;
+
+        car.speed = Math.round(MAX_SPEED * Math.abs(Math.sin(phase * Math.PI)) * 10) / 10;
+        car.rpm = Math.round(MAX_RPM * (0.3 + 0.7 * Math.abs(Math.sin(phase * Math.PI * 3))));
+
+        if (state.flood && now - state.lastFlood > FLOOD_EVERY_MS) {
+            state.lastFlood = now;
+            emit(state.count % 5 === 4 ? "warn" : "log");
+        }
+
+        requestAnimationFrame(step);
+    };
+
+    const wire = function () {
+        q("#version").textContent = ACEUIModLoader.mod("devconsole").version;
+
+        ACEUIModLoader.toArray(document.querySelectorAll("[data-emit]")).forEach(function (button) {
+            button.addEventListener("click", function () { emit(button.getAttribute("data-emit")); });
+        });
+
+        q("#btn-flood").addEventListener("click", function () {
+            state.flood = !state.flood;
+            q("#btn-flood").classList.toggle("on", state.flood);
+        });
+
+        q("#btn-hide").addEventListener("click", function () {
+            const hidden = document.body.classList.toggle(ACEUIModLoader.HUD_HIDDEN_CLASS);
+
+            q("#btn-hide").classList.toggle("on", hidden);
+        });
+
+        q("#btn-reset").addEventListener("click", function () {
+            ACEUIModLoader.persist.removeLocal(DevConsole.STORAGE_KEY);
+            location.reload();
+        });
+
+        requestAnimationFrame(step);
+    };
+
+    return { wire: wire, state: state };
+}());
+</script>
+<script defer src="../devconsole/devconsole.js"></script>
+<script>
+document.addEventListener("DOMContentLoaded", function () { Preview.wire(); });
+</script>
+</body>
+</html>
