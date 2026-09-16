@@ -1,0 +1,650 @@
+/*
+ * ACE UI Profiler -- stylesheet. Linked by the ACEUIModLoader after the stock CSS, so
+ * --font-family-main is the game's. Stock HUD widget look: black panel, solid #1c1e1f
+ * header, #bd0000 accents. No var() fallbacks (Cohtml drops the whole declaration).
+ *
+ * The panel is sized in em off the root's font-size, so one value scales all of it, and
+ * the graph is a fixed-size canvas because the script addresses its pixels directly.
+ */
+
+.ace-profiler {
+    position: absolute;
+    left: 2rem;
+    top: 5rem;
+    width: 30em;
+    display: flex;
+    flex-direction: column;
+    background: rgba(0, 0, 0, 0.88);
+    /* the longhand as well: if the shorthand is ever dropped, the panel is still readable */
+    background-color: rgba(0, 0, 0, 0.88);
+    border: 2px solid transparent;
+    border-radius: 0.2em;
+    color: rgba(255, 255, 255, 0.85);
+    font-family: var(--font-family-main);
+    font-size: 1rem;
+    cursor: pointer;
+}
+
+.ace-profiler.dragging {
+    border-color: #fff;
+}
+
+.ace-profiler.pr-hidden {
+    display: none;
+}
+
+body.hide-hud .ace-profiler {
+    visibility: hidden;
+}
+
+/*
+ * The panel's background. It is a child rather than the root's own because the root's
+ * background does not paint in game -- from the stylesheet or set inline -- while every
+ * child's does, the header and the canvas included.
+ */
+.ace-profiler .pr-ground {
+    position: absolute;
+    left: 0;
+    top: 0;
+    right: 0;
+    bottom: 0;
+    background: rgba(0, 0, 0, 0.88);
+    border-radius: 0.2em;
+}
+
+.ace-profiler .pr-header,
+.ace-profiler .pr-graph,
+.ace-profiler .pr-legend,
+.ace-profiler .pr-frame,
+.ace-profiler .pr-head,
+.ace-profiler .pr-scroll {
+    position: relative;
+}
+
+/* ---- header ------------------------------------------------------------------- */
+
+.ace-profiler .pr-header {
+    height: 2.3em;
+    padding: 0 0.4em 0 0.7em;
+    display: flex;
+    flex-direction: row;
+    align-items: center;
+    background: #1c1e1f;
+    border-bottom: 1px solid rgba(0, 0, 0, 0.5);
+    color: #fff;
+    font-size: 0.8em;
+    font-weight: 700;
+    letter-spacing: 0.06em;
+}
+
+.ace-profiler .pr-title {
+    flex: 0 0 auto;
+}
+
+/* the running numbers: their own line, so the controls cannot crowd them out */
+.ace-profiler .pr-stat {
+    position: relative;
+    padding: 0.3em 0.6em 0 0.6em;
+    color: rgba(255, 255, 255, 0.8);
+    font-size: 0.72em;
+    letter-spacing: 0.02em;
+    white-space: nowrap;
+    overflow: hidden;
+}
+
+.ace-profiler .pr-tools {
+    flex: 1 1 auto;
+    justify-content: flex-end;
+    display: flex;
+    flex-direction: row;
+}
+
+/* ---- graph -------------------------------------------------------------------- */
+
+.ace-profiler .pr-graph {
+    position: relative;
+    padding: 0.3em 0.3em 0 0.3em;
+}
+
+/*
+ * What the columns mean. Full height is 33 ms; the two ruled lines are 8.5 ms (one of the
+ * game's frames at 117 fps) and 17.1 ms (one of the HUD page's, which the engine advances at
+ * half the game's rate). The labels are laid over the canvas at the same fraction of full
+ * scale that the canvas rules its lines at, so the two cannot drift apart.
+ */
+.ace-profiler .pr-scale-top,
+.ace-profiler .pr-tick {
+    position: absolute;
+    right: 0.5em;
+    color: rgba(255, 255, 255, 0.35);
+    font-size: 0.6em;
+    pointer-events: none;
+}
+
+.ace-profiler .pr-scale-top {
+    top: 0.4em;
+}
+
+/* the box the ticks measure against: exactly the canvas, padding excluded */
+.ace-profiler .pr-scale {
+    position: absolute;
+    left: 0;
+    right: 0;
+    top: 0.3em;
+    height: 5em;
+    pointer-events: none;
+}
+
+/*
+ * Where each guide's label sits, for each scale the graph can be drawn at. This belongs in
+ * the stylesheet rather than in a `style.bottom` write because the scale changes while the
+ * panel is running, and writing styles from a per-frame path is the one thing this project
+ * does not do -- the graph carries the scale as an attribute instead, as the tree carries
+ * its depth. A tick at or above full scale is the ceiling, which the top label already names.
+ */
+.ace-profiler .pr-tick {
+    margin-bottom: 0.1em;
+    /* readable over a busy graph, which is exactly where these sit */
+    padding: 0 0.2em;
+    background: rgba(0, 0, 0, 0.55);
+}
+
+.ace-profiler .pr-graph[data-full="0.5"] .pr-tick[data-ms="8.5"] { display: none; }
+
+.ace-profiler .pr-graph[data-full="0.5"] .pr-tick[data-ms="17.1"] { display: none; }
+
+.ace-profiler .pr-graph[data-full="1"] .pr-tick[data-ms="8.5"] { display: none; }
+
+.ace-profiler .pr-graph[data-full="1"] .pr-tick[data-ms="17.1"] { display: none; }
+
+.ace-profiler .pr-graph[data-full="2"] .pr-tick[data-ms="8.5"] { display: none; }
+
+.ace-profiler .pr-graph[data-full="2"] .pr-tick[data-ms="17.1"] { display: none; }
+
+.ace-profiler .pr-graph[data-full="4"] .pr-tick[data-ms="8.5"] { display: none; }
+
+.ace-profiler .pr-graph[data-full="4"] .pr-tick[data-ms="17.1"] { display: none; }
+
+.ace-profiler .pr-graph[data-full="8.5"] .pr-tick[data-ms="8.5"] { display: none; }
+
+.ace-profiler .pr-graph[data-full="8.5"] .pr-tick[data-ms="17.1"] { display: none; }
+
+.ace-profiler .pr-graph[data-full="17"] .pr-tick[data-ms="8.5"] { bottom: 49.7%; }
+
+.ace-profiler .pr-graph[data-full="17"] .pr-tick[data-ms="17.1"] { display: none; }
+
+.ace-profiler .pr-graph[data-full="33"] .pr-tick[data-ms="8.5"] { bottom: 25.8%; }
+
+.ace-profiler .pr-graph[data-full="33"] .pr-tick[data-ms="17.1"] { bottom: 51.8%; }
+
+.ace-profiler .pr-graph[data-full="66"] .pr-tick[data-ms="8.5"] { display: none; }
+
+.ace-profiler .pr-graph[data-full="66"] .pr-tick[data-ms="17.1"] { bottom: 25.9%; }
+
+.ace-profiler .pr-graph[data-full="133"] .pr-tick[data-ms="8.5"] { display: none; }
+
+.ace-profiler .pr-graph[data-full="133"] .pr-tick[data-ms="17.1"] { bottom: 12.9%; }
+
+.ace-profiler .pr-canvas {
+    width: 100%;
+    height: 5em;
+    display: block;
+    /* opaque, so the graph reads over a bright scene and an empty one is obviously empty */
+    background-color: #0c0e10;
+    border-radius: 0.15em;
+    /* the canvas is 300 logical columns stretched to the panel's width: keep them crisp */
+    image-rendering: pixelated;
+}
+
+.ace-profiler .pr-legend {
+    display: flex;
+    flex-direction: row;
+    flex-wrap: wrap;
+    padding: 0.3em 0.5em 0 0.5em;
+    color: rgba(255, 255, 255, 0.5);
+    font-size: 0.62em;
+    white-space: nowrap;
+    overflow: hidden;
+}
+
+.ace-profiler .pr-key {
+    display: flex;
+    flex-direction: row;
+    align-items: center;
+    margin-right: 0.7em;
+}
+
+.ace-profiler .pr-swatch {
+    width: 0.55em;
+    height: 0.55em;
+    margin-right: 0.3em;
+    border-radius: 0.1em;
+}
+
+.ace-profiler .pr-frame {
+    padding: 0.25em 0.6em 0.4em 0.6em;
+    color: rgba(255, 255, 255, 0.5);
+    font-size: 0.68em;
+    white-space: nowrap;
+    overflow: hidden;
+}
+
+/* ---- table -------------------------------------------------------------------- */
+
+.ace-profiler .pr-head,
+.ace-profiler .pr-row {
+    display: flex;
+    flex-direction: row;
+    align-items: center;
+    position: relative;
+    padding: 0.12em 0.6em;
+    font-size: 0.72em;
+    white-space: nowrap;
+}
+
+/*
+ * No text-transform: this engine ignores it, which is why the headings came out lowercase
+ * while every label written uppercase in the script did not. The words are capitalised at
+ * the source instead.
+ */
+.ace-profiler .pr-head {
+    color: rgba(255, 255, 255, 0.4);
+    background: rgba(255, 255, 255, 0.03);
+    border-bottom: 1px solid rgba(255, 255, 255, 0.12);
+    letter-spacing: 0.03em;
+}
+
+/*
+ * Each heading is a row of its own so the sort arrow sits beside the word. As text it was a
+ * glyph the font drew on a second line, which made that column taller than the others and
+ * pushed its heading out of line with the numbers underneath it.
+ */
+.ace-profiler .pr-head > div {
+    display: flex;
+    flex-direction: row;
+    align-items: center;
+    justify-content: flex-end;
+}
+
+.ace-profiler .pr-head .pr-name {
+    justify-content: flex-start;
+}
+
+/* the arrow, drawn out of borders: no glyph, no font to depend on, no line to wrap onto */
+.ace-profiler .pr-arrow {
+    flex: 0 0 auto;
+    width: 0;
+    height: 0;
+    margin-left: 0.4em;
+    border-left: 0.32em solid transparent;
+    border-right: 0.32em solid transparent;
+    border-top: 0.4em solid #bd0000;
+    border-bottom: 0;
+}
+
+.ace-profiler .pr-head .sorted.asc .pr-arrow {
+    border-top: 0;
+    border-bottom: 0.4em solid #bd0000;
+}
+
+/* only the column in force shows one */
+.ace-profiler .pr-head .pr-arrow {
+    display: none;
+}
+
+.ace-profiler .pr-head .sorted .pr-arrow {
+    display: block;
+}
+
+/*
+ * A heading is a heading whatever its column says: without this the LAYOUT label took the
+ * yellow its numbers are drawn in and TOTAL took their white, so two of the five looked
+ * like a different kind of thing. Only the column in use is lit.
+ */
+.ace-profiler .pr-head .pr-name,
+.ace-profiler .pr-head .pr-calls,
+.ace-profiler .pr-head .pr-ms,
+.ace-profiler .pr-head .pr-self,
+.ace-profiler .pr-head .pr-layout,
+.ace-profiler .pr-head .pr-share {
+    color: rgba(255, 255, 255, 0.45);
+    overflow: hidden;
+}
+
+.ace-profiler .pr-head .sorted {
+    color: #fff;
+    background: rgba(255, 255, 255, 0.07);
+}
+
+.ace-profiler .pr-arrow {
+    padding-left: 0.25em;
+    font-size: 0.75em;
+}
+
+/*
+ * Alternate rows, shaded so one row can be followed across five columns. The class is set
+ * when the row pool is built: the slots never move, so neither does the stripe.
+ */
+.ace-profiler .pr-row.alt {
+    background: rgba(255, 255, 255, 0.028);
+}
+
+.ace-profiler .pr-row.pr-hidden {
+    display: none;
+}
+
+/*
+ * The tree's indent. It has to be layout, not text: a label of leading spaces is collapsed
+ * by the engine before it is drawn, which made the tree view look identical to the flat one.
+ */
+.ace-profiler .pr-row[data-depth="1"] .pr-name { padding-left: 1.2em; }
+
+.ace-profiler .pr-row[data-depth="2"] .pr-name { padding-left: 2.4em; }
+
+.ace-profiler .pr-row[data-depth="3"] .pr-name { padding-left: 3.6em; }
+
+.ace-profiler .pr-row[data-depth="4"] .pr-name { padding-left: 4.8em; }
+
+.ace-profiler .pr-row[data-depth="1"] .pr-name,
+.ace-profiler .pr-row[data-depth="2"] .pr-name,
+.ace-profiler .pr-row[data-depth="3"] .pr-name,
+.ace-profiler .pr-row[data-depth="4"] .pr-name {
+    color: rgba(255, 255, 255, 0.62);
+}
+
+/*
+ * The share bar sits *behind* its row and is scaled by transform only, never by width:
+ * a chip a third of an em wide could not be compared at a glance, and a bar that spans the
+ * row can. The header's spacer keeps its columns lined up with the rows'.
+ */
+.ace-profiler .pr-bar {
+    position: absolute;
+    left: 0;
+    top: 0;
+    bottom: 0;
+    width: 100%;
+    opacity: 0.4;
+    background: rgba(255, 255, 255, 0.2);
+    transform-origin: left center;
+}
+
+.ace-profiler .pr-head .pr-bar {
+    display: none;
+}
+
+.ace-profiler .pr-name {
+    position: relative;
+    flex: 1 1 auto;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.ace-profiler .pr-calls,
+.ace-profiler .pr-ms,
+.ace-profiler .pr-self,
+.ace-profiler .pr-layout,
+.ace-profiler .pr-share {
+    position: relative;
+    flex: 0 0 auto;
+    width: 3.7em;
+    padding-left: 0.5em;
+    text-align: right;
+    color: rgba(255, 255, 255, 0.72);
+}
+
+/*
+ * Total is the branch, self is the row's own hands. A mod at 2 ms total and 0.05 ms self is
+ * not slow -- it is calling something slow, and the row under it names it. Total is the
+ * brighter of the two because it is the one you scan for first.
+ */
+.ace-profiler .pr-ms {
+    color: #fff;
+}
+
+.ace-profiler .pr-self {
+    color: rgba(255, 255, 255, 0.55);
+}
+
+/* forced layout reads: what this renderer charges for, where Unity would show GC Alloc */
+.ace-profiler .pr-layout {
+    color: rgba(255, 210, 58, 0.85);
+}
+
+.ace-profiler .pr-share {
+    width: 3.4em;
+    color: #fff;
+    font-weight: 600;
+}
+
+/* ---- the list, scrolled by hand (Cohtml ignores overflow: auto) ---------------- */
+
+.ace-profiler .pr-scroll {
+    position: relative;
+    display: flex;
+    flex-direction: row;
+    height: 11.5em;
+    padding-bottom: 0.3em;
+}
+
+.ace-profiler .pr-rows {
+    flex: 1 1 auto;
+    height: 100%;
+    overflow: hidden;
+}
+
+.ace-profiler .pr-scrollbar {
+    flex: 0 0 auto;
+    width: 0.4em;
+    margin: 0 0.25em;
+    background: rgba(255, 255, 255, 0.08);
+    border-radius: 0.2em;
+}
+
+.ace-profiler .pr-scrollbar.pr-nofit {
+    background: transparent;
+}
+
+.ace-profiler .pr-scrollbar.pr-nofit .pr-thumb {
+    display: none;
+}
+
+.ace-profiler .pr-thumb {
+    width: 100%;
+    background: rgba(255, 255, 255, 0.35);
+    border-radius: 0.2em;
+}
+
+.ace-profiler .pr-scrollbar.dragging .pr-thumb {
+    background: #bd0000;
+}
+
+/*
+ * The legend's colours. The canvas cannot read these back -- getComputedStyle reports
+ * inline styles and initial values in this engine, not the cascade -- so the same six
+ * are declared in the script for the graph, and a test keeps the two in step.
+ */
+
+.ace-profiler .pr-swatch[data-band="mod"],
+.ace-profiler .pr-bar[data-band="mod"] { background: #44ea78; }
+
+.ace-profiler .pr-swatch[data-band="stock"],
+.ace-profiler .pr-bar[data-band="stock"] { background: #3aa6ff; }
+
+.ace-profiler .pr-swatch[data-band="event"],
+.ace-profiler .pr-bar[data-band="event"] { background: #ffd23a; }
+
+.ace-profiler .pr-swatch[data-band="timer"],
+.ace-profiler .pr-bar[data-band="timer"] { background: #c07cff; }
+
+.ace-profiler .pr-swatch[data-band="profiler"],
+.ace-profiler .pr-bar[data-band="profiler"] { background: #ff8a3a; }
+
+.ace-profiler .pr-swatch[data-band="other"] { background: rgba(255, 255, 255, 0.22); }
+
+/* the engine's bar is the one exception: 22% white behind a 40% bar is not a bar at all */
+.ace-profiler .pr-bar[data-band="other"] { background: rgba(255, 255, 255, 0.55); }
+
+/* not bands, but the graph paints with them too: the frame guides and the sweep head */
+.ace-profiler .pr-swatch[data-band="guide"] { background: rgba(255, 255, 255, 0.38); }
+
+.ace-profiler .pr-swatch[data-band="sweep"] { background: rgba(255, 255, 255, 0.5); }
+
+/* ---- controls ------------------------------------------------------------------ */
+
+/*
+ * The buttons were each a different width with a different amount of air around them.
+ * One height, one padding, one radius; the three views are one segmented control because
+ * they are one choice; REC and the close button are the only two that stand out, because
+ * they are the only two that do something you cannot undo by looking.
+ */
+.ace-profiler .pr-btn {
+    height: 1.8em;
+    padding: 0 0.6em;
+    display: flex;
+    flex-direction: row;
+    align-items: center;
+    justify-content: center;
+    border: 0;
+    border-radius: 0.2em;
+    background: transparent;
+    color: rgba(255, 255, 255, 0.62);
+    font-size: 0.8em;
+    font-weight: 600;
+    letter-spacing: 0.04em;
+}
+
+.ace-profiler .pr-btn.on {
+    color: #fff;
+}
+
+/* what separates the profiling controls from the ones that are about the window */
+.ace-profiler .pr-sep {
+    width: 1px;
+    height: 1.1em;
+    margin: 0 0.45em;
+    background: rgba(255, 255, 255, 0.14);
+}
+
+/*
+ * The three views are tabs, not buttons: one of them is always in force, and a filled box
+ * for the one in force reads as "your pointer is here" rather than "this is what you are
+ * looking at". An accent underline says it without competing with REC.
+ */
+.ace-profiler .pr-modes {
+    display: flex;
+    flex-direction: row;
+    margin: 0 0.3em;
+}
+
+.ace-profiler .pr-modes .pr-mode {
+    border-radius: 0;
+    border-bottom: 2px solid transparent;
+}
+
+.ace-profiler .pr-modes .pr-mode.on {
+    color: #fff;
+    border-bottom-color: #bd0000;
+}
+
+/* REC: the one control with a colour of its own, because it is the one that changes state */
+.ace-profiler .pr-rec {
+    margin-right: 0.2em;
+    padding-left: 0.45em;
+    background: rgba(255, 255, 255, 0.07);
+}
+
+.ace-profiler .pr-rec.on {
+    background: #bd0000;
+    color: #fff;
+}
+
+/* the dot, drawn rather than typed: a glyph is at the mercy of whatever font the game has */
+.ace-profiler .pr-dot {
+    width: 0.55em;
+    height: 0.55em;
+    margin-right: 0.4em;
+    border-radius: 50%;
+    background: rgba(255, 255, 255, 0.35);
+}
+
+.ace-profiler .pr-rec.on .pr-dot {
+    background: #fff;
+}
+
+.ace-profiler .pr-glyph {
+    min-width: 1.6em;
+    padding: 0;
+    font-size: 0.9em;
+}
+
+.ace-profiler .pr-close:hover {
+    background: #bd0000;
+    color: #fff;
+}
+
+/* ---- the legend, which is also the band switches ------------------------------- */
+
+/*
+ * A legend entry is a switch, so it is drawn as one: a chip you can tell is clickable, and
+ * visibly empty when its band is off. Without the chip the only hint that the legend does
+ * anything was that the text went grey after you had already clicked it.
+ */
+.ace-profiler .pr-key {
+    padding: 0.15em 0.4em;
+    background: rgba(255, 255, 255, 0.07);
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    border-radius: 0.25em;
+}
+
+.ace-profiler .pr-key.off {
+    background: transparent;
+    border-color: rgba(255, 255, 255, 0.08);
+}
+
+/* a band switched off: the graph and the table both drop it */
+.ace-profiler .pr-key.off {
+    color: rgba(255, 255, 255, 0.25);
+}
+
+.ace-profiler .pr-key.off .pr-swatch {
+    background: rgba(255, 255, 255, 0.12);
+}
+
+/* ---- under the cursor ----------------------------------------------------------- */
+
+/*
+ * A control that does not answer the mouse reads as a picture of a control. The dev console
+ * proved :hover works in this engine, so the things that can be clicked say so, and a row
+ * lights under the pointer -- which is how you follow one across five columns on a HUD you
+ * are glancing at rather than staring at.
+ */
+.ace-profiler .pr-btn:hover {
+    background: rgba(255, 255, 255, 0.16);
+    border-color: rgba(255, 255, 255, 0.32);
+    color: #fff;
+}
+
+.ace-profiler .pr-rec.on:hover {
+    background: #d40000;
+    border-color: #ff5b5b;
+}
+
+.ace-profiler .pr-close:hover {
+    background: #bd0000;
+    border-color: #bd0000;
+    color: #fff;
+}
+
+.ace-profiler .pr-key:hover {
+    background: rgba(255, 255, 255, 0.18);
+    border-color: rgba(255, 255, 255, 0.3);
+    color: #fff;
+}
+
+.ace-profiler .pr-head [data-sort]:hover {
+    color: #fff;
+}
+
+.ace-profiler .pr-row:hover {
+    background: rgba(255, 255, 255, 0.09);
+}
