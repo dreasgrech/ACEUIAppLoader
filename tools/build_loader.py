@@ -40,6 +40,15 @@ import kspkg  # noqa: E402
 import pack_kspkg as pk  # noqa: E402
 
 HOST_PATH = "uiresources/js/cohtml.js"
+# The second way in. Every stock page loads cohtml.js, and the page itself is a file in
+# content.kspkg too, so overriding it is a SECOND, independent tie for the same library --
+# and the script it adds sits at a new path, which always resolves whatever the merged
+# layout turns out to be. The loader runs if either tie falls our way.
+PAGE_PATH = "uiresources/hud.html"
+BOOT_PATH = "uiresources/ACEUIModLoaderApps/loader.js"
+PAGE_ANCHOR = "<script src='js/cohtml.js'></script>"
+PAGE_TAG = "<script src='ACEUIModLoaderApps/loader.js'></script>"
+TARGETS = (HOST_PATH, PAGE_PATH)   # the overrides that carry duplicate records
 APPS_DIR = os.path.join(_repos.REPO, "apps")
 APPS_PATH = "uiresources/ACEUIModLoaderApps"
 APPS_INDEX = "apps.json"
@@ -62,6 +71,7 @@ LIB_ORDER = [
 ]
 BUILD_DIR = os.path.join(_repos.REPO, "build")
 OUT = os.path.join(_repos.REPO, "dist", "ACEUIModLoader.kspkg")
+DUPS_FILE = os.path.join(_repos.REPO, "dups.json")
 
 
 def read_version():
@@ -136,6 +146,43 @@ def copy_apps(build_dir, apps_dir=APPS_DIR):
     return index
 
 
+def assemble_page(build_dir, base_pkg, sources):
+    """
+    Our copy of the stock HUD page plus the library at a new path.
+
+    The page is Kunos' own, byte for byte, with one script tag added, so it has to be
+    re-extracted for every game version: if the stock page changes and we serve last
+    version's copy, the whole HUD breaks rather than merely failing to load the loader.
+    The anchor check below is what makes that a build failure instead of a launch one.
+
+    The library copy is wrapped in a guard because both ways in can win at once, and
+    loading it twice would register every mod twice. cohtml.js runs first (the page loads
+    it above our tag), so when that tie went our way this file does nothing at all.
+    """
+    stock = kspkg.extract(base_pkg, PAGE_PATH).decode("utf-8")
+    if PAGE_ANCHOR not in stock:
+        raise SystemExit(f"stock {PAGE_PATH} no longer contains {PAGE_ANCHOR!r}; "
+                         f"the page changed in this game version -- re-check before building")
+    page = stock.replace(PAGE_ANCHOR, PAGE_ANCHOR + "\n    " + PAGE_TAG, 1)
+    target = os.path.join(build_dir, *PAGE_PATH.split("/"))
+    os.makedirs(os.path.dirname(target), exist_ok=True)
+    with open(target, "w", encoding="utf-8", newline="") as f:
+        f.write(page)
+
+    boot = os.path.join(build_dir, *BOOT_PATH.split("/"))
+    os.makedirs(os.path.dirname(boot), exist_ok=True)
+    with open(boot, "w", encoding="utf-8", newline="\n") as f:
+        f.write("/* ACEUIModLoader %s -- the library, loaded by our copy of hud.html.\n"
+                "   Does nothing when the cohtml.js override already won its tie. */\n"
+                "(function () {\n    if (window.ACEUIModLoader) { return; }\n" % read_version())
+        for name, text in sources:
+            f.write(marker(name))
+            f.write(text)
+        f.write("\n}());\n")
+    print(f"assembled {PAGE_PATH}: stock {len(stock)} bytes + one script tag, "
+          f"and {BOOT_PATH} ({len(sources)} library files, guarded)")
+
+
 def assemble(build_dir=BUILD_DIR, game_dir=None, with_apps=True):
     base_pkg = os.path.join(game_dir or _repos.game_dir(), "content.kspkg")
     if not os.path.exists(base_pkg):
@@ -156,18 +203,43 @@ def assemble(build_dir=BUILD_DIR, game_dir=None, with_apps=True):
             appended += len(text)
     print(f"assembled {HOST_PATH}: stock {len(stock)} bytes + {len(sources)} library files, {appended} chars (v{read_version()})")
 
+    assemble_page(build_dir, base_pkg, sources)
+
     if with_apps:
         copy_apps(build_dir)
 
     return build_dir
 
 
+def recorded_dups(build_dir, targets):
+    """
+    The duplicate count tools/tune_dups.py measured for THIS file set.
+
+    A tuning is only valid for the package it was measured against -- which counts win
+    depends on the whole hash set -- so a mismatched fingerprint is a build failure
+    rather than a silent fallback to an arbitrary number.
+    """
+    if not os.path.exists(DUPS_FILE):
+        raise SystemExit(f"--dups=auto needs {DUPS_FILE}: run python tools/tune_dups.py --write")
+    with open(DUPS_FILE, encoding="utf-8") as f:
+        recorded = json.load(f)
+    files, dirs = pk.collect(build_dir)
+    want = pk.paths_fingerprint([rel for rel, _ in files] + list(dirs), targets)
+    if recorded.get("fingerprint") != want:
+        raise SystemExit(f"{DUPS_FILE} was measured for a different package "
+                         f"({recorded.get('fingerprint')} != {want}); re-run tools/tune_dups.py --write")
+    print(f"duplicates: {recorded['dups']} per override "
+          f"({recorded.get('unseen', '?')}/{recorded['scenarios']} unseen package sets when measured)")
+    return int(recorded["dups"])
+
+
 if __name__ == "__main__":
     flags = set(sys.argv[1:])
-    dups = int(next((a.split("=", 1)[1] for a in flags if a.startswith("--dups=")), 1))
     build = assemble(with_apps="--no-apps" not in flags)
     os.makedirs(os.path.dirname(OUT), exist_ok=True)
-    targets = [HOST_PATH] if dups > 1 else []
+    asked = next((a.split("=", 1)[1] for a in flags if a.startswith("--dups=")), "1")
+    dups = recorded_dups(build, TARGETS) if asked == "auto" else int(asked)
+    targets = list(TARGETS) if dups > 1 else []
     written = pk.pack(build, OUT, dups=dups, dup_targets=targets)
     if "--no-verify" not in flags:
         pk.verify(OUT, written, dups=dups, dup_targets=targets)

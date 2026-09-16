@@ -1,0 +1,12 @@
+{
+  "dups": 32,
+  "targets": [
+    "uiresources\\js\\cohtml.js",
+    "uiresources\\hud.html"
+  ],
+  "scenarios": 60,
+  "selection": 120,
+  "selection_sets": 120,
+  "unseen": 60,
+  "fingerprint": "7cfb9349b92705fe"
+}

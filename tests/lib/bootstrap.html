@@ -1,0 +1,55 @@
+<!DOCTYPE html>
+<html>
+<head>
+<title>bootstrap guard check</title>
+</head>
+<body>
+<pre id="results"></pre>
+<div id="done"></div>
+<script>
+    window.__lines = [];
+    window.__pass = 0;
+    window.__total = 0;
+    window.t = function (name, fn) {
+        window.__total += 1;
+        try {
+            fn();
+            window.__pass += 1;
+            window.__lines.push("PASS " + name);
+        } catch (e) {
+            window.__lines.push("FAIL " + name + "  -- " + (e && e.message ? e.message : e));
+        }
+    };
+</script>
+
+<!-- the real build artefact, loaded exactly as our copy of hud.html loads it -->
+<script src="loader.js"></script>
+<script src="loader.js"></script>
+
+<script>
+    t("the guarded bundle parses and defines the namespace", function () {
+        if (!window.ACEUIModLoader) { throw new Error("window.ACEUIModLoader is missing"); }
+    });
+    t("it reports the built version", function () {
+        if (!window.ACEUIModLoader.VERSION) { throw new Error("no VERSION"); }
+    });
+    t("the namespaces the library promises are all there", function () {
+        const want = ["console", "dom", "keys", "scroll", "persist", "panel", "loop",
+                      "input", "apps", "loader", "drawer", "window", "settings"];
+        const missing = want.filter(function (n) { return !window.ACEUIModLoader[n]; });
+        if (missing.length) { throw new Error("missing: " + missing.join(", ")); }
+    });
+    t("loading it a second time is a no-op, not a second library", function () {
+        // The page above loads it twice on purpose: both ways in can win at once.
+        if (window.ACEUIModLoader.__loadedTwice) { throw new Error("guard did not hold"); }
+    });
+    t("the bare identifier resolves through the window property", function () {
+        /* jshint evil:true */
+        if (typeof ACEUIModLoader === "undefined") { throw new Error("bare name unresolved"); }
+    });
+    document.getElementById("results").textContent =
+        window.__lines.join("\n") + "\nSUMMARY " + window.__pass + "/" + window.__total;
+    document.getElementById("done").textContent = "DONE";
+</script>
+</body>
+</html>

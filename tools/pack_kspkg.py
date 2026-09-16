@@ -57,6 +57,7 @@ rather than assumed.
 Every file below <source_dir> is stored with its path relative to <source_dir>,
 so <source_dir>/uiresources/hud.html becomes "uiresources\\hud.html" in the package.
 """
+import hashlib
 import os
 import shutil
 import struct
@@ -155,6 +156,16 @@ def make_entry(path: str, flags: int, size: int, offset: int) -> bytes:
             + struct.pack("<ihh", 0, flags, len(raw))
             + struct.pack("<Q", path_hash(path))
             + struct.pack("<qq", size, offset))
+
+
+def paths_fingerprint(mod_paths, targets) -> str:
+    """
+    Identifies a package's hash set. Which duplicate counts and padding layouts win
+    depends on every path in the package, so a tuning is only valid for the file set it
+    was measured against; this is what a build compares to notice the set has moved on.
+    """
+    blob = "\n".join(sorted(normalize(p) for p in mod_paths) + ["->"] + sorted(normalize(t) for t in targets))
+    return hashlib.sha256(blob.encode("utf-8")).hexdigest()[:16]
 
 
 def decoy_path(rel: str, index: int) -> str:

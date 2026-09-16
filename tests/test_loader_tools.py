@@ -355,22 +355,93 @@ class BuildLoaderTests(unittest.TestCase):
             entries = kspkg.read_entries(out)
             w = lookup_sim.winners(base, [e.hash for e in entries.values()])
             self.assertEqual(w[pk.path_hash(build_loader.HOST_PATH)], "mod", "cohtml.js override would lose")
-            # one override and nothing else: everything the package adds beyond cohtml.js
-            # is a bundled app, at a path of its own that no stock file can collide with
+            # Two overrides and nothing else: cohtml.js and our copy of the HUD page, which
+            # are the two independent ways the library can reach the page. Everything else
+            # the package adds is a bundled app, at a path no stock file can collide with.
             shipped = sorted(p for p in entries
                              if not p.startswith("uiresources\\pad") and not entries[p].flags & kspkg.FLAG_DIR)
             # the table stores lower-case paths (kspkg.normalize)
             apps_prefix = (build_loader.APPS_PATH.replace("/", "\\") + "\\").lower()
-            self.assertIn("uiresources\\js\\cohtml.js", shipped)
-            self.assertEqual([p for p in shipped if p != "uiresources\\js\\cohtml.js" and not p.startswith(apps_prefix)],
-                             [], "the only override is cohtml.js; the rest are the bundled apps")
+            overrides = [pk.normalize(t) for t in build_loader.TARGETS]
+            for path in overrides:
+                self.assertIn(path, shipped)
+            self.assertEqual([p for p in shipped if p not in overrides and not p.startswith(apps_prefix)],
+                             [], "the only overrides are the entry points; the rest are bundled apps")
 
-            expected = {(apps_prefix + build_loader.APPS_INDEX).lower()}
+            # the bootstrap the HUD page loads lives beside the apps, at a new path of its own
+            expected = {(apps_prefix + build_loader.APPS_INDEX).lower(), pk.normalize(build_loader.BOOT_PATH)}
             for _, info in build_loader.bundled_apps():
                 for rel in ["mod.json"] + info.get("scripts", []) + info.get("styles", []) + info.get("files", []):
                     expected.add((apps_prefix + info["name"] + "\\" + rel).lower())
             self.assertEqual({p for p in shipped if p.startswith(apps_prefix)}, expected,
                              "the package carries every listed file of every bundled app, and nothing else")
+
+
+@unittest.skipUnless(os.path.exists(os.path.join(_repos.game_dir(), "content.kspkg")), "game not installed")
+class SecondEntryPointTests(unittest.TestCase):
+    """
+    Our copy of the HUD page, and the library it loads from a path of its own.
+
+    The page is a second, independent tie for the same library: the loader runs if either
+    it or the cohtml.js override wins. The script it adds is at a new path, which always
+    resolves, so winning the page is enough on its own.
+    """
+
+    def setUp(self):
+        self.tmp = tempfile.mkdtemp()
+        self.build = build_loader.assemble(os.path.join(self.tmp, "build"))
+        # read as bytes: the stock page's line endings must survive untouched, and
+        # universal-newline reading would hide a change to them
+        with open(os.path.join(self.build, *build_loader.PAGE_PATH.split("/")), "rb") as f:
+            self.page = f.read().decode("utf-8")
+        self.boot = read(os.path.join(self.build, *build_loader.BOOT_PATH.split("/")))
+
+    def tearDown(self):
+        shutil.rmtree(self.tmp, ignore_errors=True)
+
+    def test_the_page_is_the_stock_one_with_a_single_tag_added(self):
+        import kspkg
+        stock = kspkg.extract(os.path.join(_repos.game_dir(), "content.kspkg"),
+                              build_loader.PAGE_PATH).decode("utf-8")
+        self.assertEqual(self.page.replace("\n    " + build_loader.PAGE_TAG, "", 1), stock,
+                         "nothing but our script tag may differ from Kunos' page")
+        self.assertEqual(self.page.count(build_loader.PAGE_TAG), 1)
+
+    def test_our_script_runs_after_cohtml_and_before_the_stock_bundle(self):
+        # The console hook has to be in place before Kunos' bundle runs, which is why the
+        # tag goes here and not at the end of the head.
+        self.assertLess(self.page.index(build_loader.PAGE_ANCHOR), self.page.index(build_loader.PAGE_TAG))
+        self.assertLess(self.page.index(build_loader.PAGE_TAG), self.page.index("js/components.js"))
+
+    def test_a_stock_page_we_no_longer_recognise_fails_the_build(self):
+        import kspkg
+        real = kspkg.extract
+        kspkg.extract = lambda pkg, path, entries=None: (b"<html><head></head></html>"
+                                                         if path == build_loader.PAGE_PATH else real(pkg, path, entries))
+        try:
+            with self.assertRaises(SystemExit):
+                build_loader.assemble_page(os.path.join(self.tmp, "b2"),
+                                           os.path.join(_repos.game_dir(), "content.kspkg"),
+                                           build_loader.library_sources())
+        finally:
+            kspkg.extract = real
+
+    def test_the_bootstrap_carries_the_library_behind_a_guard(self):
+        self.assertIn("if (window.ACEUIModLoader) { return; }", self.boot)
+        self.assertIn("const ACEUIModLoader = (function () {", self.boot)
+        self.assertLess(self.boot.index("if (window.ACEUIModLoader) { return; }"),
+                        self.boot.index("const ACEUIModLoader = (function () {"),
+                        "the guard must come before anything it is meant to skip")
+        for name in build_loader.LIB_ORDER:
+            self.assertIn(f"/* ---- {name} ", self.boot, "the bootstrap is the whole library")
+
+    def test_the_bootstrap_runs_in_a_browser_and_loading_it_twice_is_a_no_op(self):
+        import headless
+        harness = os.path.join(self.tmp, "bootstrap.html")
+        shutil.copyfile(os.path.join(ROOT, "tests", "lib", "bootstrap.html"), harness)
+        shutil.copyfile(os.path.join(self.build, *build_loader.BOOT_PATH.split("/")),
+                        os.path.join(self.tmp, "loader.js"))
+        headless.check_harness(self, harness, 5)
 
 
 if __name__ == "__main__":
