@@ -794,8 +794,28 @@ ACEUIModLoader.loader = (function () {
         }).concat(loose);
     };
 
+    /**
+     * Say so when the package was built for a different game build.
+     *
+     * The override this library arrives through is resolved against the base package's
+     * whole file table, so a game update can leave the package loading nothing at all --
+     * and the symptom is silence, which reads like a broken mod rather than a stale one.
+     * `builtFor` is stamped in by the build; the game publishes its own version on
+     * ModelUIState, which is registered well before this runs.
+     */
+    const warnIfGameMoved = function () {
+        const built = ACEUIModLoader.builtFor;
+        const running = window.ModelUIState ? window.ModelUIState.game_version : null;
+
+        if (built && running && running !== built) {
+            log("built for game " + built + " but running on " + running
+                + ": rebuild the package if anything is missing");
+        }
+    };
+
     const start = function () {
         log("loader " + ACEUIModLoader.VERSION + " on /" + ACEUIModLoader.page);
+        warnIfGameMoved();
         state.filtering = hideMarkersFromStock();
 
         if (rawOn && !state.filtering) {

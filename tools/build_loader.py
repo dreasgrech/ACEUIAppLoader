@@ -37,6 +37,7 @@ Usage:
 """
 import json
 import os
+import re
 import shutil
 import sys
 import tempfile
@@ -90,6 +91,38 @@ def read_version():
 
 def marker(name):
     return f"\n\n/* ---- {name} (ACEUIModLoader {read_version()}, appended by ACEUIModLoader/tools/build_loader.py) ---- */\n"
+
+
+GAME_VERSION_RE = re.compile(rb"\d+\.\d+\.\d+\+release\.\d+")
+
+
+def game_version(game_dir=None):
+    """
+    The version the game reports for itself, read out of the exe.
+
+    There is no version resource on it and no version file beside it, but the string the
+    game logs at startup is a literal in the binary and appears exactly once. An ambiguous
+    or missing match returns "", because no stamp is better than a wrong one.
+    """
+    exe = os.path.join(game_dir or _repos.game_dir(), "AssettoCorsaEVO.exe")
+    if not os.path.exists(exe):
+        return ""
+    with open(exe, "rb") as f:
+        found = sorted({m.group().decode("ascii") for m in GAME_VERSION_RE.finditer(f.read())})
+    return found[0] if len(found) == 1 else ""
+
+
+def stamp(version):
+    """
+    Records the game build the package was made for, so the loader can say so when the
+    game has moved on. Appended after the library, and read in loader.start() -- which runs
+    on DOMContentLoaded, by which time this line has been parsed.
+    """
+    if not version:
+        return ""
+    return ("\n\n/* the game build this package was made for; the loader compares it with\n"
+            "   ModelUIState.game_version and says so when they differ */\n"
+            f'ACEUIModLoader.builtFor = "{version}";\n')
 
 
 def library_sources():
@@ -155,7 +188,7 @@ def copy_apps(build_dir, apps_dir=APPS_DIR):
     return index
 
 
-def assemble_page(build_dir, base_pkg, sources):
+def assemble_page(build_dir, base_pkg, sources, built_for=""):
     """
     Our copy of the stock HUD page plus the library at a new path.
 
@@ -190,6 +223,7 @@ def assemble_page(build_dir, base_pkg, sources):
         for name, text in sources:
             f.write(marker(name))
             f.write(text)
+        f.write(stamp(built_for))
         f.write("\n}());\n")
     print(f"assembled {PAGE_PATH}: stock {len(stock)} bytes + one script tag, "
           f"and {BOOT_PATH} ({len(sources)} library files, guarded)")
@@ -206,11 +240,17 @@ def assemble(build_dir=BUILD_DIR, game_dir=None, with_apps=True, with_host=True)
     if not os.path.exists(base_pkg):
         raise SystemExit(f"content.kspkg not found at {base_pkg} (set ACE_GAME_DIR)")
     sources = library_sources()
+    built_for = game_version(game_dir)
 
     if os.path.isdir(build_dir):
         shutil.rmtree(build_dir)
     if with_host:
         stock = kspkg.extract(base_pkg, HOST_PATH)
+        # Refuse a base that already carries the library: pointed at a game folder whose
+        # content.kspkg has been modified, we would otherwise append a second copy.
+        if marker(LIB_ORDER[0]).strip() in stock.decode("utf-8", "replace"):
+            raise SystemExit(f"the stock {HOST_PATH} in {base_pkg} already contains the library; "
+                             f"this is not an untouched game install")
         target = os.path.join(build_dir, *HOST_PATH.split("/"))
         os.makedirs(os.path.dirname(target), exist_ok=True)
         appended = 0
@@ -220,11 +260,13 @@ def assemble(build_dir=BUILD_DIR, game_dir=None, with_apps=True, with_host=True)
                 f.write(marker(name).encode("utf-8"))
                 f.write(text.encode("utf-8"))
                 appended += len(text)
-        print(f"assembled {HOST_PATH}: stock {len(stock)} bytes + {len(sources)} library files, {appended} chars (v{read_version()})")
+            f.write(stamp(built_for).encode("utf-8"))
+        print(f"assembled {HOST_PATH}: stock {len(stock)} bytes + {len(sources)} library files, "
+              f"{appended} chars (v{read_version()}, for game {built_for or 'unknown'})")
     else:
         print(f"NOT assembling {HOST_PATH}: the HUD page is the only way in for this build")
 
-    assemble_page(build_dir, base_pkg, sources)
+    assemble_page(build_dir, base_pkg, sources, built_for)
 
     if with_apps:
         copy_apps(build_dir)

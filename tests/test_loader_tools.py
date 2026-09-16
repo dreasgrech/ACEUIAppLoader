@@ -484,6 +484,23 @@ class SecondEntryPointTests(unittest.TestCase):
         finally:
             kspkg.extract = real
 
+    def test_both_artefacts_record_the_game_build_they_were_made_for(self):
+        # A game update can leave the package loading nothing, and the symptom is silence.
+        # The stamp is what lets the loader say "stale" instead of saying nothing.
+        version = build_loader.game_version()
+        self.assertRegex(version, r"^\d+\.\d+\.\d+\+release\.\d+$", "no game version read from the exe")
+        host = read(os.path.join(self.build, *build_loader.HOST_PATH.split("/")))
+        for where, text in (("the appended host", host), ("the bootstrap", self.boot)):
+            self.assertIn('ACEUIModLoader.builtFor = "%s";' % version, text, where)
+        self.assertLess(self.boot.index("builtFor"), self.boot.rindex("}());"),
+                        "the stamp must be inside the guard, or a second load would reset it")
+
+    def test_the_loader_compares_the_stamp_with_the_running_game(self):
+        js = read(os.path.join(SRC, "ACEUIModLoader.loader.js"))
+        self.assertIn("ACEUIModLoader.builtFor", js)
+        self.assertIn("ModelUIState", js, "the running version comes from the model the game publishes")
+        self.assertIn("warnIfGameMoved();", js, "and the check has to actually be called")
+
     def test_the_bootstrap_carries_the_library_behind_a_guard(self):
         self.assertIn("if (window.ACEUIModLoader) { return; }", self.boot)
         self.assertIn("const ACEUIModLoader = (function () {", self.boot)
