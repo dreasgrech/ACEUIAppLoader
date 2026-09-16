@@ -23,6 +23,7 @@ build_loader.py - build the ACEUIModLoader package.
 Usage:
   python tools/build_loader.py [--install] [--no-verify] [--no-apps] [--dups=N]
 
+  --no-host  leave out the cohtml.js override, so the HUD page is the only way in
   --dups=N  write N table records for the cohtml.js override instead of one, so the
             game's merged vector holds N of ours against the base package's single
             record. See pack_kspkg.py for why this matters and why N must be measured.
@@ -183,25 +184,34 @@ def assemble_page(build_dir, base_pkg, sources):
           f"and {BOOT_PATH} ({len(sources)} library files, guarded)")
 
 
-def assemble(build_dir=BUILD_DIR, game_dir=None, with_apps=True):
+def assemble(build_dir=BUILD_DIR, game_dir=None, with_apps=True, with_host=True):
+    """
+    Build the package tree. `with_host=False` leaves out the cohtml.js override, so the
+    HUD page is the only way in -- which is how that route gets tested on its own. With
+    both present the page route never has to carry anything, because cohtml.js runs first
+    and wins far more often than not.
+    """
     base_pkg = os.path.join(game_dir or _repos.game_dir(), "content.kspkg")
     if not os.path.exists(base_pkg):
         raise SystemExit(f"content.kspkg not found at {base_pkg} (set ACE_GAME_DIR)")
-    stock = kspkg.extract(base_pkg, HOST_PATH)
     sources = library_sources()
 
     if os.path.isdir(build_dir):
         shutil.rmtree(build_dir)
-    target = os.path.join(build_dir, *HOST_PATH.split("/"))
-    os.makedirs(os.path.dirname(target), exist_ok=True)
-    appended = 0
-    with open(target, "wb") as f:
-        f.write(stock)
-        for name, text in sources:
-            f.write(marker(name).encode("utf-8"))
-            f.write(text.encode("utf-8"))
-            appended += len(text)
-    print(f"assembled {HOST_PATH}: stock {len(stock)} bytes + {len(sources)} library files, {appended} chars (v{read_version()})")
+    if with_host:
+        stock = kspkg.extract(base_pkg, HOST_PATH)
+        target = os.path.join(build_dir, *HOST_PATH.split("/"))
+        os.makedirs(os.path.dirname(target), exist_ok=True)
+        appended = 0
+        with open(target, "wb") as f:
+            f.write(stock)
+            for name, text in sources:
+                f.write(marker(name).encode("utf-8"))
+                f.write(text.encode("utf-8"))
+                appended += len(text)
+        print(f"assembled {HOST_PATH}: stock {len(stock)} bytes + {len(sources)} library files, {appended} chars (v{read_version()})")
+    else:
+        print(f"NOT assembling {HOST_PATH}: the HUD page is the only way in for this build")
 
     assemble_page(build_dir, base_pkg, sources)
 
@@ -235,11 +245,13 @@ def recorded_dups(build_dir, targets):
 
 if __name__ == "__main__":
     flags = set(sys.argv[1:])
-    build = assemble(with_apps="--no-apps" not in flags)
+    with_host = "--no-host" not in flags
+    build = assemble(with_apps="--no-apps" not in flags, with_host=with_host)
     os.makedirs(os.path.dirname(OUT), exist_ok=True)
     asked = next((a.split("=", 1)[1] for a in flags if a.startswith("--dups=")), "1")
     dups = recorded_dups(build, TARGETS) if asked == "auto" else int(asked)
-    targets = list(TARGETS) if dups > 1 else []
+    wanted = list(TARGETS) if with_host else [PAGE_PATH]
+    targets = wanted if dups > 1 else []
     written = pk.pack(build, OUT, dups=dups, dup_targets=targets)
     if "--no-verify" not in flags:
         pk.verify(OUT, written, dups=dups, dup_targets=targets)
