@@ -23,7 +23,30 @@ import re
 import sys
 
 HERE = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-DEFAULT_INTERNALS = os.path.join(os.path.dirname(HERE), "ACEGameInternals", "proto")
+
+
+def find_internals():
+    """
+    ACEGameInternals/proto: $ACE_INTERNALS_DIR, or a checkout beside any directory above
+    this one. It used to be "the sibling of this repo", which stopped being true when the
+    console moved into the loader's apps/ -- and this is a tool you reach for once a game
+    version, so a wrong default would have been found the hard way.
+    """
+    override = os.environ.get("ACE_INTERNALS_DIR")
+    if override:
+        return os.path.join(override, "proto")
+    here = HERE
+    while True:
+        candidate = os.path.join(os.path.dirname(here), "ACEGameInternals", "proto")
+        if os.path.isdir(candidate):
+            return candidate
+        parent = os.path.dirname(here)
+        if parent == here:
+            return candidate
+        here = parent
+
+
+DEFAULT_INTERNALS = find_internals()
 
 # the schemas worth shipping: everything a page can actually read
 WANTED = ["PlatformUiTypes.proto", "InputEnum.proto"]
@@ -154,7 +177,7 @@ def main():
     args = parser.parse_args()
 
     if not os.path.isdir(args.protos):
-        raise SystemExit("no proto directory at %s (clone ACEGameInternals next to this repo)" % args.protos)
+        raise SystemExit("no proto directory at %s (clone ACEGameInternals beside the loader repo, or set ACE_INTERNALS_DIR)" % args.protos)
 
     version = latest_version_dir(args.protos)
     version_dir = os.path.join(args.protos, version)

@@ -221,6 +221,39 @@ window.ksUI = {
         S.stop();
     });
 
+    /* The wrapper table used to only grow: every add pushed a pair, every remove scanned
+       the whole thing and left it in place. On a HUD that adds and removes listeners all
+       session that makes the profiler itself the slow part, which is the one bug a
+       profiler must not have. */
+    t("removing a listener really removes it, and does not leave the wrapper table growing", function () {
+        const target = document.createElement("div");
+        let fired = 0;
+        const onClick = function () { fired += 1; };
+
+        S.start();
+        S.clear();
+
+        // a lot of churn, the way a page full of widgets behaves
+        let i;
+        for (i = 0; i < 50; i += 1) {
+            const throwaway = function () { return i; };
+
+            target.addEventListener("mouseover", throwaway);
+            target.removeEventListener("mouseover", throwaway);
+        }
+
+        target.addEventListener("click", onClick);
+        target.dispatchEvent(new MouseEvent("click"));
+        eq(fired, 1, "the listener ran through the wrapper");
+
+        target.removeEventListener("click", onClick);
+        target.dispatchEvent(new MouseEvent("click"));
+        eq(fired, 1, "and removing it by the original function really removed it");
+
+        stopAll();
+        S.stop();
+    });
+
     t("the counters count what this renderer charges for, since there is no allocation counter", function () {
         S.start();
         S.clear();

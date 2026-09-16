@@ -148,7 +148,12 @@ const ACEUIModLoader = (function () {
         toArray: toArray,
         percentText: percentText,
         section: section,
-        /** Filled in by a profiler (ACEUIProfiler); read only by `section` above. */
+        /**
+         * The sink `section` above calls into, filled by a profiler while it is recording
+         * and nulled when it stops. Not the profiler app: that is
+         * `ACEUIModLoader.apps.get("profiler")`, which is its panel. This is one method,
+         * and mods never touch it directly.
+         */
         profiler: null,
         errorText: errorText,
         safely: safely,

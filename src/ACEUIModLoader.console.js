@@ -83,8 +83,18 @@ ACEUIModLoader.console = (function () {
         if (state.notifying) { return; }
 
         state.notifying = true;
-        state.listeners.forEach(function (listener) { listener(entry); });
-        state.notifying = false;
+
+        try {
+            // one bad listener must not take the others down with it, and must not stop
+            // the console updating for the rest of the session: safely() logs where it
+            // threw, and that log line is captured like any other (the guard above stops
+            // it recursing). Without the finally, a throw left the flag set for ever.
+            state.listeners.forEach(function (listener) {
+                ACEUIModLoader.safely("[console] listener", function () { listener(entry); });
+            });
+        } finally {
+            state.notifying = false;
+        }
     };
 
     const push = function (level, text) {

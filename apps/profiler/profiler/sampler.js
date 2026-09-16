@@ -560,10 +560,34 @@ const ACEProfilerSampler = (function () {
             return add.call(this, type, wrapper, options);
         };
 
-        EventTarget.prototype.removeEventListener = function (type, fn, options) {
-            const at = wrappers.indexOf(fn);
+        /**
+         * Find the pair for `fn` among the originals, which sit at even indices. A plain
+         * indexOf would also match a *wrapper* stored at an odd index and then hand back
+         * the next original as the thing to remove.
+         */
+        const pairFor = function (fn) {
+            let at = -1;
+            let i = 0;
 
-            return remove.call(this, type, at >= 0 ? wrappers[at + 1] : fn, options);
+            while (i < wrappers.length && at < 0) {
+                if (wrappers[i] === fn) { at = i; }
+
+                i += 2;
+            }
+
+            return at;
+        };
+
+        EventTarget.prototype.removeEventListener = function (type, fn, options) {
+            const at = pairFor(fn);
+            const wrapper = at >= 0 ? wrappers[at + 1] : fn;
+
+            // drop the pair rather than leaving it: this page adds and removes listeners
+            // constantly, and a table that only grows is scanned on every removal -- a
+            // profiler that slows the page down the longer it records is measuring itself
+            if (at >= 0) { wrappers.splice(at, 2); }
+
+            return remove.call(this, type, wrapper, options);
         };
 
         state.undo.push(function () {

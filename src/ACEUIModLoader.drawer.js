@@ -317,12 +317,36 @@ ACEUIModLoader.drawer = (function () {
      * `persist.whenHudReady` rather than polling for it here.
      */
     const adoptHudStore = function () {
-        const stored = state.touched ? null : persist.readHud(HUD_ID);
+        // A switch the user flipped before the store existed reached localStorage only,
+        // and localStorage dies with the game: their choice is newer than anything on
+        // disk, so rather than skipping, this is the moment to write it *to* disk.
+        if (state.touched) {
+            store();
 
-        if (!stored) { return false; }
+            return false;
+        }
 
-        state.visible = stored;
-        persist.writeLocal(STORE_KEY, stored);
+        const stored = persist.readHud(HUD_ID);
+        const dev = persist.readHud(DEV_HUD_ID);
+        let adopted = false;
+
+        // the developer switch first, and on its own: `isVisible` consults it, and a
+        // profile that has never touched an app switch still has one of these to restore
+        if (dev) {
+            state.developer = Boolean(dev.on);
+            persist.writeLocal(DEV_STORE_KEY, dev);
+            adopted = true;
+        }
+
+        if (stored) {
+            state.visible = stored;
+            persist.writeLocal(STORE_KEY, stored);
+            adopted = true;
+        }
+
+        if (!adopted) { return false; }
+
+        refreshRows();
         refreshAll();
 
         return true;
@@ -547,6 +571,9 @@ ACEUIModLoader.drawer = (function () {
         state.apps = [];
         state.dev = {};
         state.devRow = null;
+        // the panel below starts parked off-screen, so the flag has to agree: rebuilding
+        // while it was open would otherwise leave `open()` thinking it already is
+        state.open = false;
 
         if (stored && !state.touched) { state.visible = stored; }
 

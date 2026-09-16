@@ -622,11 +622,6 @@ const ACEUIProfiler = (function () {
     };
 
     /**
-     * One frame, one pixel column, stacked bottom-up. The few columns ahead of the sweep
-     * are wiped so the old trace cannot be mistaken for the new one, as a heart monitor
-     * does it.
-     */
-    /**
      * Change full scale and redraw what is on screen at the new one. Half a graph drawn at
      * one scale and half at another would be a lie about which frame was worse, so the ring
      * is replayed -- a few hundred fills, on a change that happens seconds apart at most.
@@ -707,6 +702,11 @@ const ACEUIProfiler = (function () {
         rescale(state, scaleFor(peak));
     };
 
+    /**
+     * One frame, one pixel column, stacked bottom-up. The few columns ahead of the sweep
+     * are wiped so the old trace cannot be mistaken for the new one, as a heart monitor
+     * does it.
+     */
     const drawColumn = function (state, frame, totals) {
         const ctx = state.ctx;
         const x = state.sweep;

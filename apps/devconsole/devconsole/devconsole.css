@@ -39,11 +39,6 @@
     background: rgba(0, 0, 0, 0.5);
 }
 
-/* closed by the toggle key or the x button; visibility keeps the layout so restores still measure it */
-.ace-devconsole.dc-closed {
-    visibility: hidden;
-}
-
 body.hide-hud .ace-devconsole {
     visibility: hidden;
 }

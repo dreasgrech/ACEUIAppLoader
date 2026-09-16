@@ -161,7 +161,6 @@ const DevConsole = (function () {
     const CLASS = {
         root: "ace-devconsole",
         dragging: "dragging",
-        closed: "dc-closed",
         header: "dc-header",
         title: "dc-title",
         version: "dc-version",
@@ -496,9 +495,7 @@ const DevConsole = (function () {
      *
      * Releasing matters more than taking: a console left holding the capture would leave
      * the car deaf to its own controls, so blur, close and detach all release it.
-     */
-    /**
-     * Hold or release the keyboard through the shared library, under this mod's name.
+     *
      * ACEUIModLoader.input counts holders, so releasing here cannot take the keyboard
      * away from another mod that still wants it (DOOM holds it while it is open).
      */
@@ -541,7 +538,6 @@ const DevConsole = (function () {
         state.dirty = true;
     };
 
-    /** Scale the whole panel: the root's font-size in rem, everything inside is em. Persisted. */
     /**
      * Scale the whole panel: one font-size in rem on the root, everything inside in em.
      * The mechanics are `me.scale`'s -- DOOM, this and the profiler had each written them.
@@ -854,7 +850,6 @@ const DevConsole = (function () {
         state.draft = "";
     };
 
-    /** Run `code` against the page; echo and result (or error) go into the shared buffer. */
     /**
      * `.run <name>` loads `ACEUIModLoaderMods/snippets/<name>.js` as a script: write it in
      * an editor, run it in game, no reinstall and no pasting. Only plain file names are
@@ -895,7 +890,7 @@ const DevConsole = (function () {
             const loaded = window[PROTO_GLOBAL];
 
             if (!ok || !loaded) {
-                lines.capture(ERROR_LEVEL, "fields: cannot load " + PROTO_FILE + " -- run tools/gen_protofields.py, then reinstall the mod");
+                lines.capture(ERROR_LEVEL, "fields: cannot load " + PROTO_FILE + " -- run tools/gen_protofields.py, then rebuild and install the loader package");
 
                 return;
             }
@@ -1052,6 +1047,7 @@ const DevConsole = (function () {
         lines.capture(ERROR_LEVEL, "          .logtest  which console methods actually reach this console");
     };
 
+    /** Run `code` against the page; echo and result (or error) go into the shared buffer. */
     const evaluate = function (state, code) {
         const trimmed = code.trim();
 
@@ -1166,10 +1162,6 @@ const DevConsole = (function () {
     // ---- lifecycle ---------------------------------------------------------------
 
     /**
-     * Build the console inside `root`, make it a persistent draggable panel, follow
-     * the shared line buffer and start the frame loop. Returns the state `detach` needs.
-     */
-    /**
      * What the console offers the other apps. One thing, because one thing is all it has
      * that they cannot do themselves: run a line in the page and show the result, prompt
      * and all, in the console's own buffer. Reading the log is `ACEUIModLoader.console`
@@ -1187,6 +1179,10 @@ const DevConsole = (function () {
         };
     };
 
+    /**
+     * Build the console inside `root`, make it a persistent draggable panel, follow
+     * the shared line buffer and start the frame loop. Returns the state `detach` needs.
+     */
     const attach = function (root) {
         const state = create(root);
 
@@ -1229,12 +1225,11 @@ const DevConsole = (function () {
             }
         });
 
-
         state.ui = me.panel(root, function (now) { tick(state, now); });
         state.unsubscribe = lines.subscribe(function () { state.dirty = true; });
         ACEUIModLoader.apps.register(me.name, surface(state));
         log("console attached, " + lines.entries().length + " buffered line(s)"
-            + ", scale " + state.scale + ", toggle key " + TOGGLE_CODE);
+            + ", scale " + state.scale + ", toggle key " + toggleKey());
 
         return state;
     };

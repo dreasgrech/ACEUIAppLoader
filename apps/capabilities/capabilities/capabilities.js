@@ -930,6 +930,7 @@ const CapabilitiesProbe = (function () {
             summary: root.querySelector("." + CLASS.summary),
             results: [],
             pending: 0,
+            run: 0,                     // which run the results belong to; see runAll
             scroller: null,             // ACEUIModLoader.scroll handle (wheel, thumb, track)
             laidOut: false,             // the scrollbar has been sized once layout exists
             bag: null,                  // every listener this panel added, for detach
@@ -993,6 +994,17 @@ const CapabilitiesProbe = (function () {
     };
 
     const runAll = function (state) {
+        /**
+         * Each run is numbered. Three of these checks are asynchronous and slow on purpose
+         * -- the socket probe waits up to three seconds for a refusal -- so clicking
+         * Re-run leaves the previous run's probes in flight. Their callbacks close over
+         * this state and would write their old answer into a fresh row, and decrement a
+         * pending count that is no longer theirs: the "probe complete" summary then fires
+         * early, or never, depending on the order they land in.
+         */
+        const generation = (state.run || 0) + 1;
+
+        state.run = generation;
         state.results = [];
         state.pending = 0;
 
@@ -1022,6 +1034,8 @@ const CapabilitiesProbe = (function () {
 
             if (check.probe) {
                 check.probe(function (status, detail) {
+                    if (state.run !== generation) { return; }
+
                     setRow(row, status, detail);
                     record(state, i, check.name, status, detail);
                     log("probe " + check.name + " = " + status + " (" + detail + ")");

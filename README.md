@@ -99,7 +99,9 @@ car.
 
 **`key` is why this exists.** Mods that hardcode hotkeys collide with whatever the player
 has bound in the game, and their bindings are not ours to shadow — so the dev console's
-toggle and DOOM's show/hide key are both rebindable from the drawer.
+toggle and DOOM's show/hide key are both rebindable from the drawer. Clicking the control
+waits for a key; Escape or a click anywhere else cancels, because a control that could only
+be escaped by pressing *some* key would swallow whichever one you pressed next.
 
 Values are written to both stores: the HUD layout container, which the game writes to disk
 and is the only thing that survives a restart, and `localStorage`, read synchronously so a
@@ -220,7 +222,7 @@ unable to read its own controls.
 
 ## The app drawer
 
-Every installed mod shows up in an **app drawer** that lives off the right edge of the
+Every mod shows up in an **app drawer** -- installed or bundled with the loader -- that lives off the right edge of the
 screen and slides in when the pointer reaches that edge, in the spirit of Content
 Manager's app bar. Each row is a switch that shows or hides that mod, and the choice
 persists across the HUD reload on Escape/resume. A mod that failed to load still gets a
@@ -514,7 +516,8 @@ winning too. Adding a package can still need the others rebuilt; the
 | `docs/design.md` | the investigation and decisions behind the loader and the library |
 | `tests/test_pack_kspkg.py` | package format tests |
 | `tests/test_loader_tools.py` | library style/contract tests, install_mod tests, a real build test (skipped without the game) |
-| `tests/test_lib_browser.py`, `tests/lib/harness.html` | 23 behavioural cases for the library in a headless browser (fake clock, storage, HUD store, fake engine) |
+| `tests/test_lib_browser.py`, `tests/lib/harness.html` | the library's behavioural cases in a headless browser (fake clock, storage, HUD store, fake engine) |
+| `tests/test_check_ingame_log.py` | the in-game smoke test's verdicts, against synthetic game logs |
 | `tests/test_modkit.py` | `new_mod.py` output passes the kit; the kit catches legacy boilerplate |
 
 ## Dependencies

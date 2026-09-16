@@ -213,7 +213,7 @@ input has the same exposure.
 ## Preview outside the game
 
 Open `dev/preview.html` in Edge or Chrome (double-click, no server needed). It
-loads the library from the sibling loader checkout, then the real
+loads the library from the loader repo it sits in, then the real
 `devconsole.css` and `devconsole.js` from `devconsole/`, inside a 16:9 stand-in for
 the game's HUD container, with buttons that emit log, warn, error, object and
 uncaught-error lines, a one-line-per-second flood, the HUD hide toggle and a

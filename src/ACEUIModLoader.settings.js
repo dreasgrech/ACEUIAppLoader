@@ -56,6 +56,8 @@ ACEUIModLoader.settings = (function () {
 
     /** Waiting for the player to press the key they want; see the `key` control. */
     const CAPTURE_TEXT = "press a key...";
+    /** Pressing this while a key control is waiting cancels it rather than binding it. */
+    const CANCEL_KEY = "Escape";
     const CLEAR_TEXT = "Reset to defaults";
 
     /** The settings window is an ACEUIModLoader.window; this is its id and width. */
@@ -207,6 +209,18 @@ ACEUIModLoader.settings = (function () {
         });
     };
 
+    /**
+     * How many listeners a mod has registered. A mod's attach runs again every time the
+     * app drawer switches it back on, so "did detach really unsubscribe" is a question its
+     * tests need to be able to ask -- the console's buffer has had the same counter for
+     * the same reason.
+     */
+    const listenerCount = function (mod) {
+        const held = entry(mod);
+
+        return held ? held.listeners.length : 0;
+    };
+
     const onChange = function (mod, listener) {
         const held = entry(mod);
 
@@ -327,8 +341,16 @@ ACEUIModLoader.settings = (function () {
 
         node.addEventListener("input", function () { set(mod, spec.key, node.value); });
 
-        // typing a value must not also drive the car
-        if (ACEUIModLoader.input) { ACEUIModLoader.input.bindFocus(node, "settings:" + mod); }
+        // typing a value must not also drive the car. bindFocus listens on the window as
+        // well as the element, so its undo is kept: a settings window opened and closed a
+        // few times would otherwise leave a pile of them behind, each still releasing the
+        // keyboard on every click anywhere.
+        if (ACEUIModLoader.input) {
+            const held = entry(mod);
+            const unbind = ACEUIModLoader.input.bindFocus(node, "settings:" + mod);
+
+            if (held) { held.undo.push(unbind); }
+        }
 
         return node;
     };
@@ -338,21 +360,48 @@ ACEUIModLoader.settings = (function () {
      * how a mod avoids colliding with whatever they have bound in the game.
      */
     const keyControl = function (mod, spec, repaint) {
+        const held = entry(mod);
+        /**
+         * While `stop` is set, this control is waiting for a key and the window keydown
+         * listener is live. It has to be cancellable: clicking it and then thinking better
+         * of it used to leave that listener bound for the rest of the session, so the next
+         * key pressed anywhere -- W, on the way out of the menu -- was silently swallowed
+         * and became the mod's hotkey.
+         */
+        const listening = { stop: null };
         const node = button("", function () {
-            node.textContent = CAPTURE_TEXT;
+            if (listening.stop) { return; }
 
-            const onKey = function (e) {
+            const finish = function () {
                 window.removeEventListener("keydown", onKey, true);
-                e.preventDefault();
-                e.stopPropagation();
-                set(mod, spec.key, e.code || e.key);
+                window.removeEventListener("mousedown", onElsewhere, true);
+                listening.stop = null;
                 repaint.forEach(function (fn) { fn(); });
             };
+            const onKey = function (e) {
+                e.preventDefault();
+                e.stopPropagation();
 
+                // Escape is the way out of a menu, not a hotkey worth binding
+                if (!ACEUIModLoader.keys.is(e, CANCEL_KEY)) { set(mod, spec.key, e.code || e.key); }
+
+                finish();
+            };
+            const onElsewhere = function (e) {
+                if (e.target !== node) { finish(); }
+            };
+
+            node.textContent = CAPTURE_TEXT;
+            listening.stop = finish;
+            held.undo.push(function () { if (listening.stop) { listening.stop(); } });
             window.addEventListener("keydown", onKey, true);
+            window.addEventListener("mousedown", onElsewhere, true);
         });
 
-        repaint.push(function () { node.textContent = String(get(mod, spec.key)); });
+        // while it is waiting, the prompt is what the control says
+        repaint.push(function () {
+            if (!listening.stop) { node.textContent = String(get(mod, spec.key)); }
+        });
 
         return node;
     };
@@ -396,13 +445,34 @@ ACEUIModLoader.settings = (function () {
         key: keyControl
     };
 
+    /**
+     * Give back everything the drawn controls bound outside their own elements: window
+     * listeners, and a key control still waiting for a key. Called before a pane is drawn
+     * again and when its window closes, so neither piles up over a session.
+     */
+    const teardown = function (mod) {
+        const held = entry(mod);
+
+        if (!held) { return 0; }
+
+        const count = held.undo.length;
+
+        held.undo.forEach(function (fn) {
+            ACEUIModLoader.safely("[settings] " + mod + " teardown", fn);
+        });
+        held.undo = [];
+        held.repaint = [];
+
+        return count;
+    };
+
     /** Draw a mod's settings into `container`; the drawer calls this for its options pane. */
     const render = function (mod, container) {
         const held = entry(mod);
 
         if (!held || !container) { return null; }
 
-        held.repaint = [];
+        teardown(mod);
 
         held.specs.forEach(function (spec) {
             const row = make("div", rowStyle);
@@ -452,7 +522,8 @@ ACEUIModLoader.settings = (function () {
 
         const win = ACEUIModLoader.window.open(windowId(mod), {
             title: titleFor(mod) + " settings",
-            width: WINDOW_WIDTH
+            width: WINDOW_WIDTH,
+            onClose: function () { teardown(mod); }
         });
 
         if (win && !win.body.childNodes.length) { render(mod, win.body); }
@@ -503,7 +574,8 @@ ACEUIModLoader.settings = (function () {
             specs: list,
             values: values,
             listeners: (mods[mod] && mods[mod].listeners) || [],
-            repaint: []
+            repaint: [],
+            undo: []            // what the drawn controls bound outside their own elements
         };
 
         // the drawer offers a way in for any mod that has something to configure; clicking
@@ -519,12 +591,14 @@ ACEUIModLoader.settings = (function () {
         TYPES: TYPES,
         define: define,
         render: render,
+        teardown: teardown,
         get: get,
         set: set,
         all: all,
         specs: specsOf,
         reset: reset,
         onChange: onChange,
+        listenerCount: listenerCount,
         open: open,
         close: close,
         toggle: toggle,

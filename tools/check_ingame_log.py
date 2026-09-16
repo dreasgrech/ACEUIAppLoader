@@ -9,7 +9,7 @@ loaded, and whether anything crashed, without a debugger. Run this after playing
   python tools/check_ingame_log.py            # newest log
   python tools/check_ingame_log.py <logfile>  # a specific log
 
-Exit codes: 0 loader ran on the HUD and every discovered mod loaded, 1 loader never
+Exit codes: 0 loader ran on the HUD and everything it started finished loading, 1 loader never
 ran (package not applied), 2 crash/exception or a mod failed, 3 no log / HUD never
 loaded.
 """
@@ -38,6 +38,75 @@ def first_match(pattern, lines):
     return None
 
 
+PROBLEM_KEYS = (" FAILED", "failed to load", "invalid JSON", "skipped", "could not wrap")
+
+
+def scan(loader_lines):
+    """
+    What the loader did, per page. The loader runs once per page and says so first, so
+    everything after a "loader X on /page" line belongs to that page until the next one.
+
+    Per page: how many mods the game's preset list named, how many apps came bundled in
+    the package, which mods it started loading and which finished, which bundled app an
+    installed copy replaced, and any line that reports a problem.
+    """
+    pages = {}
+    current = None
+    for line in loader_lines:
+        m = re.search(r"loader [\d.]+ on (/\S+)", line)
+        if m:
+            current = m.group(1)
+            pages.setdefault(current, {"presets": None, "bundled": 0, "attempted": [], "loaded": [],
+                                       "overridden": [], "empty": False, "problems": []})
+            continue
+        if current is None:
+            continue
+        page = pages[current]
+        for pattern, key in ((r"presets: (\d+) mod", "presets"), (r"bundled: (\d+) app", "bundled")):
+            m = re.search(pattern, line)
+            if m:
+                page[key] = int(m.group(1))
+        for pattern, key in ((r"mod (\S+) \S+: loading", "attempted"), (r"mod (\S+) loaded", "loaded"),
+                             (r"(\S+): installed copy overrides the bundled", "overridden")):
+            m = re.search(pattern, line)
+            if m:
+                page[key].append(m.group(1))
+        if re.search(r"\bnothing to load\b", line):
+            page["empty"] = True
+        if any(k in line for k in PROBLEM_KEYS):
+            page["problems"].append(line)
+    return pages
+
+
+def report(pages):
+    """Print a line per page and return the problems worth failing over."""
+    bad = []
+    for name in sorted(pages):
+        page = pages[name]
+        counts = []
+        if page["presets"] is not None:
+            counts.append(f"{page['presets']} installed")
+        if page["bundled"]:
+            counts.append(f"{page['bundled']} bundled")
+        missing = [m for m in page["attempted"] if m not in page["loaded"]]
+        state = ", ".join(page["loaded"]) if page["loaded"] else "nothing for this page"
+        print(f"  {name}: {' + '.join(counts) if counts else 'no sources'} -> {state}")
+        if page["overridden"]:
+            print(f"      installed copies replaced the bundled: {', '.join(page['overridden'])}")
+        for line in page["problems"]:
+            print("      " + line[:180])
+        bad += page["problems"]
+        if missing:
+            print(f"      started loading but never finished: {', '.join(missing)}")
+            bad.append(f"{name}: {', '.join(missing)} never finished loading")
+        # a page with nothing to load is normal (driverlabels.html has no mods); on the
+        # HUD it means the mods are not reaching the game at all
+        if page["empty"] and name == "/hud.html":
+            print("      nothing loaded on the HUD: no bundled apps and no installed mods found")
+            bad.append("nothing loaded on the HUD")
+    return bad
+
+
 def main(argv):
     path = argv[1] if len(argv) > 1 else newest_log()
     if not path or not os.path.exists(path):
@@ -54,19 +123,15 @@ def main(argv):
 
     crashes = [l for l in lines if "CRASH DETECTED" in l or "Exception thrown:" in l]
     loader = [l for l in lines if LOADER in l]
-    pages = sorted({m.group(1) for m in (re.search(r"loader [\d.]+ on (/\S+)", l) for l in loader) if m})
     version = first_match(r"loader ([\d.]+) on /", loader)
-    loaded = sorted({m.group(1) for m in (re.search(r"mod (\S+) loaded", l) for l in loader) if m})
-    failed = [l for l in loader if any(k in l for k in (" FAILED", "failed to load", "invalid JSON", "skipped", "nothing to load", "could not wrap"))]
-    discovered = first_match(r"(presets): (\d+) mod", loader)
+    pages = scan(loader)
 
-    print(f"loader: {'v' + version.group(1) if version else 'never ran'}; pages: {', '.join(pages) if pages else 'none'}")
-    if discovered:
-        print(f"discovered via {discovered.group(1)}: {discovered.group(2)} mod(s); loaded: {', '.join(loaded) if loaded else 'none'}")
-    for l in failed[:6]:
-        print("  " + l[:200])
+    print(f"loader: {'v' + version.group(1) if version else 'never ran'} on {len(pages)} page(s)")
+    failed = report(pages)
 
-    mod_lines = [l for l in lines if "[gameface]" in l and LOADER not in l and re.search(r"\[[A-Z][A-Za-z]+\] ", l)]
+    # any bracketed prefix that is not the loader's: a mod's own logger uses its title,
+    # which can be several words ("[ACE UI Capabilities Probe] ...")
+    mod_lines = [l for l in lines if "[gameface]" in l and LOADER not in l and re.search(r"\[[A-Z][^\]]*\] ", l)]
     echoed = [l for l in mod_lines if any(k in l for k in INTERESTING)]
     for l in echoed[:MAX_ECHO]:
         print("  " + l[:170])
@@ -87,10 +152,9 @@ def main(argv):
     if crashes or failed:
         print("RESULT: loader ran but something failed (see above)")
         return 2
-    if discovered and int(discovered.group(2)) != len(loaded):
-        print("RESULT: loader ran but not every discovered mod reported loaded")
-        return 2
-    print(f"RESULT: OK - loader on {len(pages)} page(s), mods loaded: {', '.join(loaded) if loaded else 'none'}, no crashes")
+    hud = pages["/hud.html"]
+    print(f"RESULT: OK - loader on {len(pages)} page(s), on the HUD: "
+          f"{', '.join(hud['loaded']) if hud['loaded'] else 'nothing'}, no crashes")
     return 0
 
 

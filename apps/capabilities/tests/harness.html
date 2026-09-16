@@ -50,6 +50,18 @@
         ok(state.rows[rowIndex("engine audio bridge")].dot.className.indexOf("cp-no") >= 0, "engine bridge absent outside the game");
     });
 
+    /* Three checks are asynchronous and slow on purpose, so a re-run leaves the previous
+       run's probes in flight; their callbacks would write an old answer into a fresh row
+       and decrement a pending count that is no longer theirs. */
+    t("a re-run starts a new generation, so probes still in flight cannot write into it", function () {
+        const before = state.run;
+
+        CapabilitiesProbe.runAll(state);
+        eq(state.run, before + 1, "the run is numbered");
+        eq(state.results.length, CapabilitiesProbe.CHECKS.length, "and every row was answered again");
+        ok(state.results.every(function (r) { return r && r.name; }), "each result knows its check");
+    });
+
     t("while attached it answers other apps, and stops answering when it is not", function () {
         const probe = ACEUIModLoader.apps.get("capabilities");
         ok(probe, "registered while attached");

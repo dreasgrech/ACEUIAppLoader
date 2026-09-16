@@ -175,6 +175,19 @@ document.addEventListener("DOMContentLoaded", function () {
         const off2 = ACEUIModLoader.console.subscribe(function () { console.log("from listener"); });
         console.log("trigger"); off2();
         eq(last(ACEUIModLoader.console.entries()).text, "from listener", "stored once, no infinite loop");
+
+        /* A listener that throws used to leave the re-entry guard set, which stopped every
+           later notification for the rest of the session -- the console would quietly stop
+           updating with nothing in the log to say why. */
+        const after = [];
+        const offBad = ACEUIModLoader.console.subscribe(function () { throw new Error("listener boom"); });
+        const offGood = ACEUIModLoader.console.subscribe(function (entry) { after.push(entry.text); });
+
+        console.log("first");
+        console.log("second");
+        ok(after.indexOf("first") >= 0 && after.indexOf("second") >= 0, "the good listener keeps hearing");
+        ok(window.__log.some(function (l) { return l.indexOf("[console] listener failed") >= 0; }), "and the bad one is named");
+        offBad(); offGood();
     });
 
     // ---- persist -------------------------------------------------------------------------
@@ -750,6 +763,20 @@ document.addEventListener("DOMContentLoaded", function () {
         eq(S.set("coerce", "missing", 1), undefined, "an unknown key is not invented");
     });
 
+    t("settings: listeners can be counted, so a mod can prove its detach unsubscribed", function () {
+        const S = ACEUIModLoader.settings;
+
+        S.define("counted", [{ key: "x", type: "toggle", label: "X", value: false }]);
+        eq(S.listenerCount("counted"), 0);
+
+        const off = S.onChange("counted", function () { return 0; });
+
+        eq(S.listenerCount("counted"), 1);
+        off();
+        eq(S.listenerCount("counted"), 0, "and unsubscribing really removes it");
+        eq(S.listenerCount("nobody"), 0, "a mod with no settings has none");
+    });
+
     t("settings: changes are announced to the mod and survive as stored values", function () {
         window.HUD = makeHud({});
         const S = ACEUIModLoader.settings;
@@ -795,6 +822,80 @@ document.addEventListener("DOMContentLoaded", function () {
 
         S.reset("drawn");
         eq(S.get("drawn", "follow"), false, "reset puts the defaults back");
+        pane.remove();
+    });
+
+    /* Clicking a key control arms a window-wide keydown listener. Nothing cancelled it,
+       so thinking better of it and closing the window left that listener armed: the next
+       key pressed anywhere -- W, driving away from the menu -- was swallowed and became
+       the mod's hotkey. */
+    t("settings: a key control can be cancelled, and Escape is not a hotkey", function () {
+        const S = ACEUIModLoader.settings;
+        const pane = document.createElement("div");
+        const center = document.getElementById("center");
+        const press = function (code) {
+            window.dispatchEvent(new KeyboardEvent("keydown", { code: code, bubbles: true, cancelable: true }));
+        };
+
+        center.appendChild(pane);
+        S.define("bindy", [{ key: "toggleKey", type: "key", label: "Toggle key", value: "Backquote" }]);
+        S.render("bindy", pane);
+
+        const control = ACEUIModLoader.toArray(pane.querySelectorAll("span")).filter(function (n) {
+            return n.textContent === "Backquote";
+        })[0];
+        ok(control, "the control shows the key it holds");
+
+        control.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+        eq(control.textContent, "press a key...", "clicking it waits for one");
+        press("KeyJ");
+        eq(S.get("bindy", "toggleKey"), "KeyJ", "and takes the next key pressed");
+        eq(control.textContent, "KeyJ");
+
+        // armed, then cancelled by clicking elsewhere: the next key must not be taken
+        control.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+        window.dispatchEvent(new MouseEvent("mousedown", { bubbles: true }));
+        eq(control.textContent, "KeyJ", "cancelled, and it says so");
+        press("KeyW");
+        eq(S.get("bindy", "toggleKey"), "KeyJ", "driving away does not rebind the hotkey");
+
+        // Escape is how you leave a menu, so it cancels rather than binding
+        control.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+        press("Escape");
+        eq(S.get("bindy", "toggleKey"), "KeyJ", "Escape cancels");
+        press("KeyK");
+        eq(S.get("bindy", "toggleKey"), "KeyJ", "and really did stop listening");
+        pane.remove();
+    });
+
+    /* A control that binds beyond its own element (a text box takes the keyboard through
+       ACEUIModLoader.input, which listens on the window too) has to give that back when
+       the pane goes, or opening settings a few times leaves a pile of them behind. */
+    t("settings: closing a settings window gives back what its controls bound", function () {
+        const S = ACEUIModLoader.settings;
+        const pane = document.createElement("div");
+
+        document.getElementById("center").appendChild(pane);
+        S.define("leaky", [
+            { key: "note", type: "text", label: "Note", value: "hi" },
+            { key: "toggleKey", type: "key", label: "Key", value: "F8" }
+        ]);
+        S.render("leaky", pane);
+
+        const control = ACEUIModLoader.toArray(pane.querySelectorAll("span")).filter(function (n) {
+            return n.textContent === "F8";
+        })[0];
+
+        control.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+        eq(control.textContent, "press a key...", "a key control is waiting");
+
+        eq(S.teardown("leaky") >= 1, true, "the pane had something to give back");
+        eq(control.textContent, "F8", "and the waiting control stopped waiting");
+
+        // drawing again must not stack a second set on top of the first
+        S.render("leaky", pane);
+        S.render("leaky", pane);
+        eq(S.teardown("leaky"), 1, "one pane's worth, not three");
         pane.remove();
     });
 
@@ -1350,12 +1451,48 @@ document.addEventListener("DOMContentLoaded", function () {
             window.HUD = null;
         });
 
-        t("drawer: a switch flipped before the HUD store arrives is not overwritten by it", function () {
+        /* The switch is written to the HUD store, which is the only store that survives a
+           game restart -- but it was never read back from it: localStorage dies with the
+           game, and the HUD store is not there yet when the library loads, so a player who
+           turned the developer apps on found them off again every launch. */
+        t("drawer: the developer switch survives a game restart too", function () {
             const d = ACEUIModLoader.drawer;
-            d.setVisible("racy", false);          // user acts first
+            const P = ACEUIModLoader.persist;
+
+            window.HUD = makeHud({});
+            d.setDeveloper(true);
+            eq(P.readHud(d.DEV_HUD_ID).on, true, "it reaches the store the game writes to disk");
+
+            // a restart: localStorage gone, the HUD store restored from disk, nothing touched
+            P.removeLocal(d.DEV_STORE_KEY);
+            d.state.developer = false;
+            d.state.touched = false;
+            eq(d.developerShown(), false, "with nothing loaded it defaults back to off");
+
+            d.adoptHudStore();
+            eq(d.developerShown(), true, "adopted from the HUD store");
+            eq(P.readLocal(d.DEV_STORE_KEY).on, true, "and mirrored back for the next HUD reload");
+
+            d.setDeveloper(false);
+            d.state.touched = false;
+            window.HUD = null;
+        });
+
+        t("drawer: a switch flipped before the HUD store arrives wins, and is written to it", function () {
+            const d = ACEUIModLoader.drawer;
+            const P = ACEUIModLoader.persist;
+
+            window.HUD = makeHud({ hud_acedrawer: { racy: true } });   // the copy from disk
+            d.setVisible("racy", false);          // the user acts first
             d.state.touched = true;
-            d.adoptHudStore();                    // disk copy turns up afterwards
+            d.adoptHudStore();                    // the store turns up afterwards
             eq(d.isVisible("racy"), false, "the newer choice wins over what was on disk");
+
+            /* and it has to reach that store: writeHud fails while it does not exist, so a
+               switch flipped early used to live in localStorage only -- which dies with
+               the game, losing the choice at the next launch. */
+            eq(P.readHud(d.HUD_ID).racy, false, "flushed to the store the game writes to disk");
+            window.HUD = null;
         });
 
         t("drawer: switching a mod off stops it, not just hides it", function () {
