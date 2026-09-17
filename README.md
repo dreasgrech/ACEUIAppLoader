@@ -71,13 +71,6 @@ Move your mouse to the **right edge of the screen** and the drawer slides in. Ev
 have installed is listed there with its own switch — flick one on and it appears straight
 away, flick it off and it's gone.
 
-| | |
-|---|---|
-| **Stays put** | Drag an app anywhere on screen. It's there next time. |
-| **Settings in game** | Each mod gets its own page. Nothing to edit in a text file. |
-| **Hotkeys** | Give an app a key. It won't fire while you're typing. |
-| **No trace** | One file. Delete it and the game is untouched. |
-
 ---
 
 ## Mods
