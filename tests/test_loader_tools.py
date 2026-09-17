@@ -679,7 +679,7 @@ class RepadTests(unittest.TestCase):
 
     def test_only_packages_that_lost_an_override_count_as_losers(self):
         """A package with nothing to lose is not a loser, and neither is one whose overrides
-        all still resolve. Car apps are the first kind: they only add new paths."""
+        all still resolve. Car mods are the first kind: they only add new paths."""
         counts = {"car.kspkg": (0, 0), "fine.kspkg": (2, 2), "lost.kspkg": (1, 2),
                   "gone.kspkg": (0, 1)}
         self.assertEqual(sorted(repad.losers(counts)), ["gone.kspkg", "lost.kspkg"])

@@ -291,7 +291,7 @@ built against sections 4 and 5, and where it deviates.
   The cost is a rebuild + reinstall for library changes (padding unchanged,
   it depends only on paths).
 - **Namespaces** as planned: `ACEUIModLoader` (core), `.console`, `.persist`,
-  `.panel`, `.loop`, `.loader`; flat aliases `ACEUIModLoader.ready/mods/addScript/
+  `.panel`, `.loop`, `.loader`; flat aliases `ACEUIModLoader.ready/apps/addScript/
   addStylesheet/ROOT` keep the 0.1.0 surface.
 - **Hidden-until-placed** is an inline `visibility` style set by the panel,
   not a CSS class, so the library needs no stylesheet.
