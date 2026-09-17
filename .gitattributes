@@ -1,0 +1,7 @@
+# The package embeds src/*.js verbatim, so their line endings are part of the shipped
+# bytes. Without this, they follow each developer's core.autocrlf and the same commit
+# builds a different package on a different machine -- nothing about the file lookup
+# changes (the paths, and so the padding and record counts, are identical either way),
+# but a published checksum could not be verified by anyone rebuilding from source.
+# Pinning the working tree to LF everywhere makes the build reproducible across checkouts.
+* text=auto eol=lf

@@ -167,6 +167,7 @@ const DevConsole = (function () {
         filters: "dc-filters",
         filter: "dc-filter",
         on: "on",
+        carried: "dc-carried",
         count: "dc-count",
         search: "dc-search",
         tools: "dc-tools",
@@ -373,7 +374,8 @@ const DevConsole = (function () {
             follow: true,               // mirrors the scroller, for the LATEST chip and the tests
             scroller: null,             // ACEUIModLoader.scroll handle (wheel, thumb, follow)
             rows: toArray(root.querySelectorAll("." + CLASS.row)).map(function (row) {
-                return { el: row, time: row.querySelector("." + CLASS.time), text: row.querySelector("." + CLASS.text), seq: -1, level: "" };
+                return { el: row, time: row.querySelector("." + CLASS.time), text: row.querySelector("." + CLASS.text),
+                    seq: -1, level: "", carried: false };
             }),
             filters: filters,
             filterEls: filterEls,
@@ -422,6 +424,14 @@ const DevConsole = (function () {
         if (row.level !== entry.level) {
             row.level = entry.level;
             row.el.setAttribute(LEVEL_ATTR, entry.level);
+        }
+
+        // Lines the console module carried across the HUD reload that Escape and resume
+        // cause. Worth marking: they are from a page that no longer exists, and their
+        // timestamps are older than everything below them.
+        if (row.carried !== Boolean(entry.carried)) {
+            row.carried = Boolean(entry.carried);
+            row.el.classList.toggle(CLASS.carried, row.carried);
         }
 
         row.time.textContent = timeText(entry.t);

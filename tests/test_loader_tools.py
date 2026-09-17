@@ -14,6 +14,7 @@ sys.path.insert(0, TOOLS)
 import install_mod  # noqa: E402
 import build_loader  # noqa: E402
 import post_update  # noqa: E402
+import repad  # noqa: E402
 import tune_dups  # noqa: E402
 import _repos  # noqa: E402
 
@@ -520,6 +521,18 @@ class SecondEntryPointTests(unittest.TestCase):
                         os.path.join(self.tmp, "loader.js"))
         headless.check_harness(self, harness, 6)
 
+    def test_the_console_buffer_survives_the_page_reload(self):
+        """Escape and resume reload the HUD page, which throws away the JS context -- and
+        with it the lines you reloaded to go and read. The buffer is mirrored to
+        localStorage, which outlives the page but not the game. Seeded before the library
+        loads, because the restore happens as the module defines itself."""
+        import headless
+        harness = os.path.join(self.tmp, "consolecarry.html")
+        shutil.copyfile(os.path.join(ROOT, "tests", "lib", "consolecarry.html"), harness)
+        shutil.copyfile(os.path.join(self.build, *build_loader.BOOT_PATH.split("/")),
+                        os.path.join(self.tmp, "loader.js"))
+        headless.check_harness(self, harness, 8)
+
 
 
 class PostUpdateTests(unittest.TestCase):
@@ -592,6 +605,93 @@ class PostUpdateTests(unittest.TestCase):
         self.assertEqual(post_update.overridden_base_files(bank_with_32_records, base), [10])
         self.assertEqual(post_update.overridden_base_files([99, 98], base), [])
         self.assertEqual(post_update.overridden_base_files([12, 10, 10], base), [10, 12])
+
+
+class ReproducibleBytesTests(unittest.TestCase):
+    """The packaged bytes must not depend on who checked the repo out."""
+
+    def test_no_packaged_source_carries_windows_line_endings(self):
+        """src/*.js goes into cohtml.js verbatim, so its line endings are shipped bytes.
+        With no .gitattributes they follow each developer's core.autocrlf, and the same
+        commit builds a different package on a different machine -- which does not change
+        the lookup (identical paths, so identical padding and record counts) but does mean
+        a published checksum cannot be verified by anyone rebuilding from source."""
+        packaged = [os.path.join(SRC, name) for name in build_loader.LIB_ORDER]
+        for src, info in build_loader.bundled_apps():
+            packaged += [os.path.join(src, f) for f in info.get("scripts", []) + info.get("styles", [])]
+            packaged.append(os.path.join(src, install_mod.MOD_FILE))
+        self.assertGreater(len(packaged), len(build_loader.LIB_ORDER), "the apps' files count too")
+        for path in packaged:
+            with open(path, "rb") as f:
+                body = f.read()
+            with self.subTest(file=os.path.relpath(path, ROOT)):
+                self.assertNotIn(b"\r\n", body, "must be LF; see .gitattributes")
+
+    def test_gitattributes_pins_the_working_tree(self):
+        """The test above only passes on a checkout that already has LF. This is what
+        makes that true for the next person who clones."""
+        path = os.path.join(ROOT, ".gitattributes")
+        self.assertTrue(os.path.isfile(path), ".gitattributes is missing")
+        with open(path, encoding="utf-8") as f:
+            rules = [line.split("#")[0].strip() for line in f]
+        self.assertIn("* text=auto eol=lf", rules)
+
+
+class RepadTests(unittest.TestCase):
+    """tools/repad.py: rebuilding whichever installed packages have stopped winning."""
+
+    def setUp(self):
+        self.tmp = tempfile.mkdtemp(prefix="ace-repad-")
+        self.registry = os.path.join(self.tmp, "repad.json")
+
+    def tearDown(self):
+        shutil.rmtree(self.tmp, ignore_errors=True)
+
+    def write_registry(self, entries):
+        write(self.registry, json.dumps(entries))
+        return self.registry
+
+    def test_only_packages_that_lost_an_override_count_as_losers(self):
+        """A package with nothing to lose is not a loser, and neither is one whose overrides
+        all still resolve. Car mods are the first kind: they only add new paths."""
+        counts = {"car.kspkg": (0, 0), "fine.kspkg": (2, 2), "lost.kspkg": (1, 2),
+                  "gone.kspkg": (0, 1)}
+        self.assertEqual(sorted(repad.losers(counts)), ["gone.kspkg", "lost.kspkg"])
+
+    def test_the_registry_lives_beside_the_mods_folder_not_in_the_repo(self):
+        """It names this machine's checkouts, so it is not repo content."""
+        self.assertEqual(os.path.dirname(repad.registry_path()),
+                         os.path.dirname(_repos.mods_dir()))
+        self.assertEqual(repad.registry_path("X"), "X")
+
+    def test_a_registry_that_cannot_be_acted_on_is_refused(self):
+        with self.assertRaises(SystemExit):
+            repad.load_registry(os.path.join(self.tmp, "absent.json"))
+        for broken in ({"a.kspkg": {"repo": self.tmp}},
+                       {"a.kspkg": {"command": ["x"]}},
+                       {"a.kspkg": {"repo": os.path.join(self.tmp, "nope"), "command": ["x"]}},
+                       {"a.kspkg": {"repo": self.tmp, "command": "python build.py"}},
+                       {"a.kspkg": {"repo": self.tmp, "command": []}}):
+            with self.subTest(entry=broken):
+                with self.assertRaises(SystemExit):
+                    repad.load_registry(self.write_registry(broken))
+
+    def test_a_usable_registry_is_returned_as_written(self):
+        good = {"a.kspkg": {"repo": self.tmp, "command": ["python", "tools/build.py", "--install"]}}
+        self.assertEqual(repad.load_registry(self.write_registry(good)), good)
+
+    def test_a_dry_run_reports_the_command_without_running_it(self):
+        ran = []
+        entry = {"repo": self.tmp, "command": ["python", "-c", "raise SystemExit(1)"]}
+        self.assertTrue(repad.rebuild("a.kspkg", entry, dry_run=True))
+        self.assertEqual(ran, [], "nothing was run")
+
+    def test_a_failing_rebuild_is_reported_as_failure(self):
+        """A build that exits non-zero must stop the round, not be counted as repaired."""
+        entry = {"repo": self.tmp, "command": [sys.executable, "-c", "raise SystemExit(3)"]}
+        self.assertFalse(repad.rebuild("a.kspkg", entry, dry_run=False))
+        entry = {"repo": self.tmp, "command": [sys.executable, "-c", "pass"]}
+        self.assertTrue(repad.rebuild("a.kspkg", entry, dry_run=False))
 
 
 if __name__ == "__main__":

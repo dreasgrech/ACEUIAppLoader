@@ -367,3 +367,10 @@ body.hide-hud .ace-devconsole {
 .ace-devconsole .dc-input:focus {
     background: rgba(255, 255, 255, 0.06);
 }
+
+/* Carried across the HUD reload: from a page that no longer exists, so dimmed and
+   marked down the left edge. The last one is where this run's lines start. */
+.ace-devconsole .dc-carried {
+    opacity: 0.6;
+    border-left: 2px solid rgba(255, 255, 255, 0.28);
+}

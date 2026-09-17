@@ -4,7 +4,7 @@ One package that lets several UI mods coexist in Assetto Corsa EVO, the shared l
 
 **It is a single file you drop into a folder, and deleting that file puts the game back exactly as it was.** Nothing is written into the game's own install, no launcher, no script to run, no setting to change.
 
-Loader 0.19.0, built against game version **0.9.1+release.6**. A game update needs a new build, because of how the override works.
+Loader 0.20.0, built against game version **0.9.1+release.6**. A game update needs a new build, because of how the override works.
 
 ## Installing
 
@@ -82,6 +82,7 @@ python tools/tune_dups.py --write                    # re-measure after the pack
 python tools/install_mod.py <repo>/<name>            # install a loose mod and write its marker
 python tools/check_ingame_log.py                     # after a launch: what loaded, what failed
 python tools/post_update.py --install                # after the game has been patched
+python tools/repad.py                                # after installing or removing another package mod
 ```
 
 **`--release` matters more than it looks.** A normal build plans its override against *your* mods folder, so it is tuned to keep the packages you happen to have installed working. Somebody else has a different set, usually none. A package other people will install has to be built for a stock install, which is what that flag does.
@@ -89,6 +90,8 @@ python tools/post_update.py --install                # after the game has been p
 **After a game patch, run `post_update.py`.** A patch moves the stock files the package carries and changes the hash set the override is measured against, so the package quietly stops being the one the game picks and the symptom is that nothing appears. That tool rebuilds, re-measures when something it depends on has moved, reinstalls, and then replays the lookup over the packages actually in your mods folder to say whether both ways in still resolve to it.
 
 **`--dups=auto` reads a measurement, not a constant.** How many table records the overrides carry is chosen by `tune_dups.py` and recorded in `dups.json` behind a fingerprint of the package's file set; the build refuses to use a measurement taken for a different set. Why any of that is necessary is [`docs/how-it-works.md`](docs/how-it-works.md).
+
+**Another package mod can take your override away.** Padding is chosen against everything installed when a package is built, so installing or removing one can make another stop winning, silently. `repad.py` replays the lookup over the whole mods folder, rebuilds whichever packages lost, and repeats until they all resolve or nothing improves. It needs a registry beside the mods folder saying how to rebuild each one, because the padding lives in each package's own repo — run it once to see the format.
 
 ## Tests
 
@@ -116,6 +119,7 @@ tools/
   headless.py              runs an HTML harness in a headless browser and reads its report
   check_ingame_log.py      reads the newest game log and says what the loader did
   post_update.py           rebuild, re-measure, reinstall and re-check after a game patch
+  repad.py                 rebuild whichever installed packages have lost their override
   run_tests.py             this repo's suite plus each app's, one subprocess each
   absorb_app.py            one-off git surgery: move a mod repo into apps/ with its history
 tests/

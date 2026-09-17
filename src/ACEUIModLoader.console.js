@@ -30,6 +30,20 @@ ACEUIModLoader.console = (function () {
     const MAX_ITEMS = 20;
     const MAX_TEXT = 400;
     const ELLIPSIS = "...";
+    /**
+     * Carrying the buffer across the HUD page reload that Escape and resume cause.
+     *
+     * localStorage rather than ACEUIModLoader.persist, which wraps the same calls: this
+     * module loads first, before persist exists, and it loads first on purpose so that it
+     * captures what every later module logs. It keeps fewer entries than it holds in
+     * memory, because the point is the tail -- what was happening before the reload.
+     */
+    const STORE_KEY = "aceconsole.buffer";
+    const CARRY_MAX = 200;
+    const CARRY_BYTES = 64000;
+    /** Ordinary lines can wait; an error is usually the reason someone reloads to look. */
+    const SAVE_DELAY_MS = 1000;
+    const SAVE_SOON_MS = 150;
 
     const state = {
         entries: [],
@@ -37,7 +51,73 @@ ACEUIModLoader.console = (function () {
         listeners: [],
         original: {},
         hooked: false,
-        notifying: false
+        notifying: false,
+        carried: 0,
+        saveTimer: 0,
+        savePending: 0
+    };
+
+    const readStored = function () {
+        try {
+            return JSON.parse(localStorage.getItem(STORE_KEY) || "null");
+        } catch (ignore) { /* unreadable or unavailable: nothing was carried */ }
+
+        return null;
+    };
+
+    const writeStored = function (data) {
+        try {
+            localStorage.setItem(STORE_KEY, JSON.stringify(data));
+
+            return true;
+        } catch (ignore) { /* full or unavailable: the buffer in memory still works */ }
+
+        return false;
+    };
+
+    /** Write the tail now. Trims to a size the store will take before giving up on it. */
+    const save = function () {
+        const keep = state.entries.slice(-CARRY_MAX);
+
+        state.saveTimer = 0;
+        state.savePending = 0;
+        while (keep.length > 1 && JSON.stringify(keep).length > CARRY_BYTES) { keep.shift(); }
+
+        return writeStored({ seq: state.seq, entries: keep });
+    };
+
+    /**
+     * At most one write per delay, and never push a pending one further out: a steady
+     * stream of logs would otherwise keep resetting the timer and never save at all.
+     */
+    const scheduleSave = function (level) {
+        const delay = level === "error" ? SAVE_SOON_MS : SAVE_DELAY_MS;
+
+        if (state.saveTimer && state.savePending <= delay) { return; }
+
+        if (state.saveTimer) { window.clearTimeout(state.saveTimer); }
+
+        state.savePending = delay;
+        state.saveTimer = window.setTimeout(save, delay);
+    };
+
+    /** Lines from before the reload, marked so the display can say where they end. */
+    const restore = function () {
+        const stored = readStored();
+
+        if (!stored || !Array.isArray(stored.entries) || !stored.entries.length) { return; }
+
+        stored.entries.forEach(function (entry) {
+            entry.carried = true;
+            state.entries.push(entry);
+        });
+        state.carried = stored.entries.length;
+        state.seq = Math.max(stored.seq || 0, state.seq);
+        // Said out loud, not captured: this runs before the hook is installed, so it reaches
+        // the game log -- where everything else here gets verified -- without entering the
+        // buffer it is describing. Capturing it would persist a marker that the next reload
+        // carries, and the one after that, until the buffer is mostly markers.
+        ACEUIModLoader.log("[console] carried " + state.carried + " line(s) from before the reload");
     };
 
     const truncate = function (text) {
@@ -106,6 +186,7 @@ ACEUIModLoader.console = (function () {
         if (state.entries.length > MAX_ENTRIES) { state.entries.shift(); }
 
         notify(entry);
+        scheduleSave(level);
 
         return entry;
     };
@@ -180,19 +261,33 @@ ACEUIModLoader.console = (function () {
 
     const clear = function () {
         state.entries = [];
+        state.carried = 0;
+        try {
+            localStorage.removeItem(STORE_KEY);
+        } catch (ignore) { /* nothing to remove */ }
+    };
+
+    /** How many of the entries came from before the reload. */
+    const carriedCount = function () {
+        return state.carried;
     };
 
     const listenerCount = function () {
         return state.listeners.length;
     };
 
+    restore();
     hook();
 
     return {
         MAX_ENTRIES: MAX_ENTRIES,
+        STORE_KEY: STORE_KEY,
+        CARRY_MAX: CARRY_MAX,
         LEVELS: LEVELS,
         entries: entries,
         clear: clear,
+        save: save,
+        carriedCount: carriedCount,
         capture: capture,
         subscribe: subscribe,
         listenerCount: listenerCount,

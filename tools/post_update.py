@@ -74,43 +74,54 @@ def overridden_base_files(file_hashes, base):
     return sorted({h for h in file_hashes if h in base})
 
 
-def installed_verdict(targets):
+def survey(mods_dir=None):
     """
-    Replay the lookup over the packages actually in the mods folder.
+    Replay the lookup over the packages actually installed.
 
-    This is the check the build cannot do for itself: it plans against what is installed,
-    but only once the file has been copied in is the real set known, and only then can the
-    question "does our record win" be asked of the thing on disk rather than of a plan.
+    Returns (names in load order, {name: (kept, total)}) where the pair counts the DISTINCT
+    base files that package overrides and how many still resolve to it. This is the check a
+    build cannot do for itself: it plans against what is installed, but only once every file
+    is on disk is the real set known.
 
-    Every package is checked, not just ours. A patch changes the hash set every override
-    was measured against, so another package of ours -- ACEDOOM overrides gui.bank -- can
-    lose on the same patch, and it loses just as quietly.
-
-    Returns (names in load order, [(label, still ours, detail)]), where `still ours` is
-    None for a package that overrides nothing and so has nothing it could lose.
+    Distinct matters: a package repeats an override's hash once per duplicate record, so
+    counting records reports ACEDOOM's single bank as 32 overrides -- and would call 31 of
+    32 surviving a pass on the day the real one lost.
     """
-    mods = _repos.mods_dir()
-    ours = os.path.basename(bl.OUT)
+    mods = mods_dir or _repos.mods_dir()
     base = set(lookup_sim.read_base_hashes(lookup_sim.find_base_package()))
     names = lookup_sim.scan_order([n for n in os.listdir(mods)
                                    if n.lower().endswith(".kspkg")
                                    and os.path.isfile(os.path.join(mods, n))])
-    packages = [(n, lookup_sim.read_base_hashes(os.path.join(mods, n))) for n in names]
-    vector = lookup_sim.merged(sorted(base), packages)
+    vector = lookup_sim.merged(sorted(base), [(n, lookup_sim.read_base_hashes(os.path.join(mods, n)))
+                                              for n in names])
+    out = {}
+    for name in names:
+        overrides = overridden_base_files(lookup_sim.file_hashes(os.path.join(mods, name)), base)
+        owners = lookup_sim.resolve(vector, overrides) if overrides else {}
+        out[name] = (sum(1 for h in overrides if owners[h] == name), len(overrides))
+    return names, out
 
+
+def installed_verdict(targets):
+    """The survey, plus which package owns each of the loader's own ways into the page."""
+    mods = _repos.mods_dir()
+    ours = os.path.basename(bl.OUT)
+    base = set(lookup_sim.read_base_hashes(lookup_sim.find_base_package()))
+    names, counts = survey(mods)
+    vector = lookup_sim.merged(sorted(base), [(n, lookup_sim.read_base_hashes(os.path.join(mods, n)))
+                                              for n in names])
     rows = []
     for target in targets:
         winner = lookup_sim.resolve(vector, [pk.path_hash(target)])[pk.path_hash(target)]
         rows.append((pk.normalize(target), winner == ours, winner))
-    for name, _, file_hashes in pk.installed_packages(mods, ours):
-        overrides = overridden_base_files(file_hashes, base)
-        if not overrides:
-            rows.append((name, None, "adds only new paths, nothing it could lose"))
+    for name in names:
+        if name == ours:
             continue
-        owners = lookup_sim.resolve(vector, overrides)
-        kept = sum(1 for h in overrides if owners[h] == name)
-        rows.append((name, kept == len(overrides),
-                     f"{kept} of {len(overrides)} override(s) still resolve to it"))
+        kept, total = counts[name]
+        if not total:
+            rows.append((name, None, "adds only new paths, nothing it could lose"))
+        else:
+            rows.append((name, kept == total, f"{kept} of {total} override(s) still resolve to it"))
     return names, rows
 
 

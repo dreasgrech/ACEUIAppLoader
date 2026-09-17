@@ -1,0 +1,108 @@
+<!DOCTYPE html>
+<html>
+<head>
+<title>console buffer carried across a reload</title>
+</head>
+<body>
+<pre id="results"></pre>
+<div id="done"></div>
+<script>
+    window.__lines = [];
+    window.__pass = 0;
+    window.__total = 0;
+    window.t = function (name, fn) {
+        window.__total += 1;
+        try {
+            fn();
+            window.__pass += 1;
+            window.__lines.push("PASS " + name);
+        } catch (e) {
+            window.__lines.push("FAIL " + name + "  -- " + (e && e.message ? e.message : e));
+        }
+    };
+</script>
+
+<!-- Seeded BEFORE the library loads, because the restore happens as the module defines
+     itself: that is the whole behaviour under test. Escape and resume reload the HUD page,
+     which throws away the JS context, so a buffer that only lives in memory takes the lines
+     you wanted to read with it. -->
+<script>
+    localStorage.setItem("aceconsole.buffer", JSON.stringify({
+        seq: 41,
+        entries: [
+            { seq: 39, t: 1, level: "log", text: "before the reload" },
+            { seq: 40, t: 2, level: "error", text: "the thing that went wrong" }
+        ]
+    }));
+</script>
+
+<script src="loader.js"></script>
+
+<script>
+    const con = window.ACEUIModLoader && window.ACEUIModLoader.console;
+
+    t("the library loaded and the console module is there", function () {
+        if (!con) { throw new Error("no ACEUIModLoader.console"); }
+    });
+
+    t("the lines from before the reload are in the buffer", function () {
+        const texts = con.entries().map(function (e) { return e.text; });
+        if (texts.indexOf("before the reload") < 0) { throw new Error("lost: " + texts.join(" | ")); }
+        if (texts.indexOf("the thing that went wrong") < 0) { throw new Error("lost the error line"); }
+    });
+
+    t("the carry says so in the game log, without adding itself to the buffer", function () {
+        const texts = con.entries().map(function (e) { return e.text; });
+        const markers = texts.filter(function (x) { return x.indexOf("carried") >= 0; });
+        if (markers.length) { throw new Error("the marker was captured: " + markers.join(" | ")); }
+    });
+
+    t("they are marked as carried, so a display can say where they end", function () {
+        const carried = con.entries().filter(function (e) { return e.carried; });
+        if (carried.length !== 2) { throw new Error("marked " + carried.length + ", expected 2"); }
+        if (con.carriedCount() !== 2) { throw new Error("carriedCount " + con.carriedCount()); }
+    });
+
+    t("new lines carry on from the stored sequence rather than repeating it", function () {
+        const entry = con.capture("log", "after the reload");
+        if (entry.seq <= 40) { throw new Error("seq went backwards: " + entry.seq); }
+        if (entry.carried) { throw new Error("a new line must not be marked carried"); }
+    });
+
+    t("saving writes the tail back, so the next reload sees this run too", function () {
+        con.capture("log", "written by this run");
+        if (!con.save()) { throw new Error("save reported failure"); }
+        const stored = JSON.parse(localStorage.getItem("aceconsole.buffer"));
+        const texts = stored.entries.map(function (e) { return e.text; });
+        if (texts.indexOf("written by this run") < 0) { throw new Error("not saved: " + texts.join(" | ")); }
+        if (stored.entries.length > con.CARRY_MAX) { throw new Error("saved more than CARRY_MAX"); }
+    });
+
+    t("a big buffer is trimmed to something the store will take", function () {
+        let i = 0;
+        while (i < con.CARRY_MAX + 50) {
+            con.capture("log", "line " + i);
+            i += 1;
+        }
+        con.save();
+        const stored = JSON.parse(localStorage.getItem("aceconsole.buffer"));
+        if (stored.entries.length > con.CARRY_MAX) {
+            throw new Error("kept " + stored.entries.length + ", cap is " + con.CARRY_MAX);
+        }
+        const last = stored.entries[stored.entries.length - 1].text;
+        if (last !== "line " + (con.CARRY_MAX + 49)) { throw new Error("kept the wrong end: " + last); }
+    });
+
+    t("clearing empties the buffer and the store with it", function () {
+        con.clear();
+        if (con.entries().length) { throw new Error("entries remain"); }
+        if (con.carriedCount() !== 0) { throw new Error("still reporting carried lines"); }
+        if (localStorage.getItem("aceconsole.buffer")) { throw new Error("the store was left behind"); }
+    });
+
+    document.getElementById("results").textContent =
+        window.__lines.join("\n") + "\nSUMMARY " + window.__pass + "/" + window.__total;
+    document.getElementById("done").textContent = "DONE";
+</script>
+</body>
+</html>

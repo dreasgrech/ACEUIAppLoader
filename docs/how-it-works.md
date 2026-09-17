@@ -99,3 +99,28 @@ What the build does about it:
 `tools/post_update.py` is the recovery: it rebuilds (re-reading the stock files), re-measures when the fingerprint or the game build has moved, reinstalls, and then replays the lookup over the packages actually in the mods folder to say whether both ways in still resolve to ours.
 
 **What a patch cannot break.** Everything here rests on the sort being *unstable* -- not on our replay of MSVC's introsort being right. Score the same package assuming nothing at all about the algorithm, only that a run of equal hashes ends up in some arbitrary order, and 32 records across two entry points still wins 99.908% of the time; the replay is what makes the estimate precise, not what makes the construction work. The one change that would be fatal is a *stable* sort, and that would take every override mod in the game with it.
+
+## Reproducible across checkouts
+
+`.gitattributes` pins the working tree to LF (`* text=auto eol=lf`), because some of the
+packaged bytes are copied from the checkout verbatim and would otherwise follow each
+developer's `core.autocrlf`.
+
+It is worth being exact about which, because the obvious answer is wrong. `cohtml.js`,
+`hud.html` and the bootstrap are *written* by the build from text-mode reads, so they are
+normalised whatever the sources look like and never varied. The bundled apps under
+`apps/` are copied with `shutil.copyfile`, byte for byte -- and those did vary. Converting
+the repo on 2026-09-17 shrank four packaged files: `sampler.js` by 845 bytes,
+`profiler.css` by 650, `capabilities.css` by 249, and `protofields.js` by 3, that last one
+being a file with only three CRLF lines in it, which is the kind of thing nobody notices.
+
+The roadmap expected this to cost "one renormalising commit". It did not: with
+`core.autocrlf=true` git already stored LF in the index and converted on checkout, so
+only the *working tree* was ever CRLF -- which is precisely what leaked into the copied
+files. `git ls-files --eol` reports `i/lf w/lf` afterwards and the diff is empty for
+every file that was only converted. `.gitattributes` is what stops the working tree from
+going back to CRLF, here and on anyone else's clone.
+
+Nothing about the lookup changes either way -- the paths, and therefore the padding and the
+record counts, are identical -- so this is only about a published checksum being verifiable
+by someone rebuilding from source. `ReproducibleBytesTests` pins it.
