@@ -16,7 +16,7 @@ before the profiler started.
 `perFrameAllModelUpdate`, `visibilityChecker`, `fetchAllModels`. Of the 27 kinds of custom
 element on a live HUD, 26 have wrappable methods with real names (`onBindingUpdate`,
 `updateDisplayValue`, `process`). Our own apps carry their name because
-`ACEUIModLoader.loop.start` takes an owner and stamps it on the callback it schedules.
+`ACEUIAppLoader.loop.start` takes an owner and stamps it on the callback it schedules.
 
 **The clock, however, is poor.** `performance.now()` **does not advance within a frame**:
 200,000 reads across 29 ms of real time returned one single value, because the engine hands

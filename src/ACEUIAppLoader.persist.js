@@ -1,11 +1,11 @@
 /**
- * ACEUIModLoader.persist -- the three places a HUD app can keep state.
+ * ACEUIAppLoader.persist -- the three places a HUD app can keep state.
  *
  * Primary: the stock HUD's layout container (`HUD.elementModified(id, data)` /
  * `HUD.StoredData.layouts[<current>].elements[id]`), which the game writes to disk
  * when the HUD closes and reads back on every HUD load -- the same path the stock
  * widgets use for their positions. It only exists once the HUD's layout store has
- * loaded, a little after app scripts run, so readers poll it (see ACEUIModLoader.panel).
+ * loaded, a little after app scripts run, so readers poll it (see ACEUIAppLoader.panel).
  *
  * Fallback: localStorage, which lives as long as the UI view; it survives the HUD
  * page reload that Escape/resume causes but not a game restart.
@@ -18,7 +18,7 @@
  * Ids in the HUD store follow the stock convention `hud_<name>`; localStorage keys
  * are free-form (apps use `ace<app>.<what>`). All three take plain JSON data.
  */
-ACEUIModLoader.persist = (function () {
+ACEUIAppLoader.persist = (function () {
 
     const DEFAULT_LAYOUT = "default";
     /** How often, and for how long, whenHudReady looks for the store. */

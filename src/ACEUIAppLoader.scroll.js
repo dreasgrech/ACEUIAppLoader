@@ -1,5 +1,5 @@
 /**
- * ACEUIModLoader.scroll -- scrolling a box by hand, because Cohtml will not do it.
+ * ACEUIAppLoader.scroll -- scrolling a box by hand, because Cohtml will not do it.
  *
  * `overflow: auto` is inert here: an overflowing box does not scroll to the wheel and
  * shows no scrollbar. Every panel with a list in it therefore has to move `scrollTop`
@@ -13,7 +13,7 @@
  *     on a moving element is what this renderer charges for;
  *   - a drag listens on the window, not the thumb, or the pointer outruns it.
  *
- *     const scroller = ACEUIModLoader.scroll.attach({
+ *     const scroller = ACEUIAppLoader.scroll.attach({
  *         body: bodyElement,              // the clipped box (overflow: hidden)
  *         track: trackElement,            // the scrollbar gutter
  *         thumb: thumbElement,            // the thumb inside it
@@ -35,7 +35,7 @@
  * The body needs `overflow: hidden` and the track/thumb need sizes from the app's own
  * stylesheet; this owns behaviour, not appearance.
  */
-ACEUIModLoader.scroll = (function () {
+ACEUIAppLoader.scroll = (function () {
 
     /** A wheel notch moves this fraction of the visible height. */
     const WHEEL_STEP = 0.25;
@@ -44,8 +44,8 @@ ACEUIModLoader.scroll = (function () {
     /** Cohtml reports the wheel with the opposite sign to a browser. */
     const WHEEL_SIGN = -1;
 
-    const clamp = ACEUIModLoader.clamp;
-    const dom = ACEUIModLoader.dom;
+    const clamp = ACEUIAppLoader.clamp;
+    const dom = ACEUIAppLoader.dom;
 
     const maxScroll = function (body) {
         return Math.max(0, body.scrollHeight - body.clientHeight);

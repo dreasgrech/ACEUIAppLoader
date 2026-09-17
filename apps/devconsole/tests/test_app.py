@@ -1,4 +1,4 @@
-"""The shared ACEUIModLoader test kit (appkit.py in the loader repo) plus the console's own contract."""
+"""The shared ACEUIAppLoader test kit (appkit.py in the loader repo) plus the console's own contract."""
 import json
 import os
 import re
@@ -12,11 +12,11 @@ ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 LOADER = os.environ.get("ACE_LOADER_DIR")
 HERE = ROOT
 while not LOADER:
-    for candidate in (HERE, os.path.join(HERE, "ACEUIModLoader")):
+    for candidate in (HERE, os.path.join(HERE, "ACEUIAppLoader")):
         if os.path.isfile(os.path.join(candidate, "tools", "appkit.py")):
             LOADER = candidate
     if not LOADER and HERE == os.path.dirname(HERE):
-        raise SystemExit("ACEUIModLoader not found: clone it next to this repo or set ACE_LOADER_DIR")
+        raise SystemExit("ACEUIAppLoader not found: clone it next to this repo or set ACE_LOADER_DIR")
     HERE = os.path.dirname(HERE)
 sys.path.insert(0, os.path.join(LOADER, "tools"))
 
@@ -47,8 +47,8 @@ class BundledAppContractTests(unittest.TestCase):
         self.assertIs(self.info.get("developer"), True)
 
     def test_it_offers_itself_only_while_it_is_running(self):
-        self.assertIn("ACEUIModLoader.shared.register(me.name, surface(state));", self.source)
-        self.assertIn("ACEUIModLoader.shared.unregister(me.name);", self.source)
+        self.assertIn("ACEUIAppLoader.shared.register(me.name, surface(state));", self.source)
+        self.assertIn("ACEUIAppLoader.shared.unregister(me.name);", self.source)
         self.assertLess(self.source.index("shared.unregister"), self.source.index("state.ui.stop();"),
                         "withdrawn first thing in detach: there is no panel to answer into")
 
@@ -63,14 +63,14 @@ class ConsoleContractTests(unittest.TestCase):
     def test_rows_are_a_fixed_pool(self):
         self.assertEqual(self.js.count("root.innerHTML = markup()"), 1, "markup built once, at attach")
         self.assertIn("if (row.seq === entry.seq) { return; }", self.js, "unchanged rows are skipped")
-        self.assertIn("if (!state.dirty || ACEUIModLoader.hudHidden()) { return; }", self.js, "render only when dirty")
+        self.assertIn("if (!state.dirty || ACEUIAppLoader.hudHidden()) { return; }", self.js, "render only when dirty")
 
     def test_keys_go_through_the_library_rather_than_a_private_table(self):
         """The engine reports legacy keyCode only (the stock bundle checks `keyCode == 13`)
         and sends the backquote as a character under `key`. Both facts, and the table that
-        encodes them, now live in ACEUIModLoader.keys, so the console must use it and must
+        encodes them, now live in ACEUIAppLoader.keys, so the console must use it and must
         not grow another copy."""
-        self.assertIn("const keys = ACEUIModLoader.keys;", self.js)
+        self.assertIn("const keys = ACEUIAppLoader.keys;", self.js)
         self.assertIn("keys.is(e, ", self.js, "key checks go through the library")
         self.assertNotIn("const KEY_CODES = {", self.js, "no private keyCode table")
         self.assertIsNone(re.search(r"e\.key === RUN_KEY", self.js), "use keys.is()")
@@ -79,13 +79,13 @@ class ConsoleContractTests(unittest.TestCase):
     def test_scrolling_and_the_toggle_key_come_from_the_library(self):
         """Cohtml does not scroll an overflowing box and reports the wheel with the
         opposite sign to a browser; the capabilities probe needed the same behaviour, so
-        it is ACEUIModLoader.scroll's now. The toggle key binds through the loader,
+        it is ACEUIAppLoader.scroll's now. The toggle key binds through the loader,
         which is what keeps it from firing while the player is typing."""
-        self.assertIn("const scrolling = ACEUIModLoader.scroll;", self.js)
+        self.assertIn("const scrolling = ACEUIAppLoader.scroll;", self.js)
         self.assertIn("scrolling.attach({", self.js, "the scrollbar is the library's")
         self.assertNotIn("const WHEEL_SIGN", self.js, "no private wheel handling")
         self.assertNotIn("const syncScrollbar", self.js, "no private thumb geometry")
-        self.assertIn('ACEUIModLoader.app("devconsole").toggle(DevConsole.toggleKey);', self.js,
+        self.assertIn('ACEUIAppLoader.app("devconsole").toggle(DevConsole.toggleKey);', self.js,
                       "the hotkey is the loader's, so it still works once the app is switched off")
         self.assertNotIn("state.unbindToggle", self.js, "and the panel no longer holds one of its own")
         self.assertNotIn("isToggleKey", self.js, "no private hotkey matching")
@@ -106,9 +106,9 @@ class ConsoleContractTests(unittest.TestCase):
     def test_run_command_only_ever_requests_plain_snippet_files(self):
         # a URL that resolves to a folder crashes the game (ACEGameInternals, game-internals.md section 7)
         self.assertIn("const SNIPPET_NAME_RE = /^[A-Za-z0-9_.-]+$/;", self.js)
-        self.assertIn('const SNIPPET_DIR = ACEUIModLoader.ROOT + "snippets/";', self.js)
+        self.assertIn('const SNIPPET_DIR = ACEUIAppLoader.ROOT + "snippets/";', self.js)
         self.assertIn("if (!SNIPPET_NAME_RE.test(name)) {", self.js)
-        self.assertIn("ACEUIModLoader.addScript(url, function (ok) {", self.js)
+        self.assertIn("ACEUIAppLoader.addScript(url, function (ok) {", self.js)
         self.assertLess(self.js.find("if (COMMAND_RE.test(trimmed)) {"), self.js.find("showValue(compile(trimmed)())"),
                         "commands are taken before JavaScript")
 

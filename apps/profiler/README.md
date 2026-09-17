@@ -1,6 +1,6 @@
 # Profiler
 
-A profiler for Assetto Corsa EVO's UI, in the shape of the Unity profiler: a graph of the last frames on top, a table of what cost what underneath. One of the loader's **developer apps** -- it ships inside `ACEUIModLoader.kspkg`, and the app drawer keeps it behind the `DEVELOPER APPS` switch that is off by default.
+A profiler for Assetto Corsa EVO's UI, in the shape of the Unity profiler: a graph of the last frames on top, a table of what cost what underneath. One of the loader's **developer apps** -- it ships inside `ACEUIAppLoader.kspkg`, and the app drawer keeps it behind the `DEVELOPER APPS` switch that is off by default.
 
 It profiles the apps the loader runs **and the game's own stock HUD**, which turns out to be possible for three reasons, all measured rather than assumed -- see [`docs/internals.md`](docs/internals.md).
 
@@ -13,7 +13,7 @@ that started with the HUD would be measuring every session whether asked or not.
 - **REC** starts and stops recording; **CLEAR** empties the graph and the table.
 - **TREE** is the stack-trace view: every app with what it called inside it, indented and
   merged across the window. Wrapping alone only reaches as deep as an app's frame callback,
-  so the apps name their own parts with `ACEUIModLoader.section(...)` -- PedalGraph's
+  so the apps name their own parts with `ACEUIAppLoader.section(...)` -- PedalGraph's
   `read model` / `render`, Telemetry's `draw map` / `draw trace`, DOOM's `doom tic` /
   `present frame` -- and those appear here as children of the app that ran them.
 - **WINDOW / TREE / WORST** are one picker, because they are one choice of what the table

@@ -9,11 +9,11 @@ The package holds **two** copies of the library, reached two different ways:
 | what the package overrides | how the library gets in |
 |---|---|
 | `uiresources\js\cohtml.js` | the stock script with the library appended; runs on all 13 pages |
-| `uiresources\hud.html` | Kunos' page byte for byte with one `<script>` tag added, pointing at `ACEUIModLoaderBuiltIn/loader.js` |
+| `uiresources\hud.html` | Kunos' page byte for byte with one `<script>` tag added, pointing at `ACEUIAppLoaderBuiltIn/loader.js` |
 
 The second exists because an override is not guaranteed to win (below), and two are far better than one. The script it adds sits at a **new** path, which always resolves whatever the merged package layout turns out to be, so winning the page is enough on its own — proven in game with the `cohtml.js` override deliberately left out.
 
-Both can win at once, so the standalone copy is wrapped in `if (window.ACEUIModLoader) { return; }`. `cohtml.js` runs first, above our tag, so when that route works the second file does nothing at all.
+Both can win at once, so the standalone copy is wrapped in `if (window.ACEUIAppLoader) { return; }`. `cohtml.js` runs first, above our tag, so when that route works the second file does nothing at all.
 
 Our copy of `hud.html` is Kunos' page with one line added, which means it has to be re-extracted for **every game version**. If the stock page changes and we serve last version's copy, the whole HUD breaks rather than merely failing to load us. The build checks for the anchor it edits and fails rather than guess.
 
@@ -88,7 +88,7 @@ computed exactly before shipping.
 
 ## Finding the apps
 
-A UI page cannot list folders, but the game lists one folder for it: the video settings presets in `Saved Games\ACE\Video\*.settingspreset`. On every page the loader sends the game's own `SettingsRequestVideoPresetList`, keeps the answers beginning `ACEUIModLoaderApps-`, and treats the rest of each name as an installed app. It then reads that app's `ACEUIModLoaderApps/<name>/app.json` and injects its stylesheets and scripts, in order, on the pages the app asked for.
+A UI page cannot list folders, but the game lists one folder for it: the video settings presets in `Saved Games\ACE\Video\*.settingspreset`. On every page the loader sends the game's own `SettingsRequestVideoPresetList`, keeps the answers beginning `ACEUIAppLoader-`, and treats the rest of each name as an installed app. It then reads that app's `ACEUIAppLoader/<name>/app.json` and injects its stylesheets and scripts, in order, on the pages the app asked for.
 
 So an app is two things and no registration step. The markers must stay **empty**: the game deserialises every listed file before naming it, and an empty file is a valid default message. The stock UI shows the same list in its video presets menu, so the loader wraps `engine.on` and hands stock handlers a copy of the answer with our markers removed.
 
@@ -96,7 +96,7 @@ The game's answer is the only source of app names. Without an engine, or without
 
 ## Two roots, deliberately
 
-Bundled apps live inside the package at `uiresources\ACEUIModLoaderBuiltIn\<name>\`. Installed apps live loose at `mods\uiresources\ACEUIModLoaderApps\<name>\`.
+Bundled apps live inside the package at `uiresources\ACEUIAppLoaderBuiltIn\<name>\`. Installed apps live loose at `mods\uiresources\ACEUIAppLoader\<name>\`.
 
 They must differ, because **loose files never beat packed files**. A bundled app sitting at the installed apps' path could never be overridden, and `install_app.py` would silently stop working on it. Kept apart, the opposite holds and is the point: an installed app of the same name **wins** over the bundled copy, so working on a bundled app is still install, reload, look.
 
@@ -106,7 +106,7 @@ Those app files are *new* paths, which always resolve. Only the two entry points
 
 **Never request a URL that could be a folder.** The loose-file lookup only checks that the path exists, so a folder passes; a Resource Manager worker then throws opening it and the game dies. The loader only ever requests plain file names listed in an `app.json`.
 
-**Everything the loader logs** starts with `[ACEUIModLoader]` and lands in the game log as `[gameface]` lines; each app's own lines start with its title. `check_ingame_log.py` reads the newest log and reports what loaded, what failed, and whether the game crashed.
+**Everything the loader logs** starts with `[ACEUIAppLoader]` and lands in the game log as `[gameface]` lines; each app's own lines start with its title. `check_ingame_log.py` reads the newest log and reports what loaded, what failed, and whether the game crashed.
 
 **A missing file is harmless** — one warning line, about 5 ms. A folder is fatal. The difference is worth remembering when adding anything that fetches.
 
@@ -149,7 +149,7 @@ A patch breaks this in two ways, neither of which says anything. The package car
 What the build does about it:
 
 - **It refuses a stock page it does not recognise.** `hud.html` is Kunos' file plus one script tag; if the rest of it has changed, `assemble_page` stops rather than shipping the previous version's copy of their page over their new one.
-- **It stamps the game build it was made for.** `ACEUIModLoader.builtFor` goes into the package, and at start-up the loader compares it with `ModelUIState.game_version` and logs a line when they differ, so a log from a player on a newer build says so.
+- **It stamps the game build it was made for.** `ACEUIAppLoader.builtFor` goes into the package, and at start-up the loader compares it with `ModelUIState.game_version` and logs a line when they differ, so a log from a player on a newer build says so.
 - **It refuses a measurement taken for a different file set.** `dups.json` records the count behind a fingerprint of the package's paths and the game build it was measured on.
 
 `tools/post_update.py` is the recovery: it rebuilds (re-reading the stock files), re-measures when the fingerprint or the game build has moved, reinstalls, and then replays the lookup over the packages actually in the mods folder to say whether both ways in still resolve to ours.

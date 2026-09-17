@@ -1,8 +1,8 @@
 # DevConsole
 
-An in-game debug console for Assetto Corsa EVO's HUD. One of the loader's **developer apps**: it ships inside `ACEUIModLoader.kspkg`, so there is nothing separate to install, and the app drawer keeps it behind the `DEVELOPER APPS` switch that is off by default.
+An in-game debug console for Assetto Corsa EVO's HUD. One of the loader's **developer apps**: it ships inside `ACEUIAppLoader.kspkg`, so there is nothing separate to install, and the app drawer keeps it behind the `DEVELOPER APPS` switch that is off by default.
 
-A draggable panel showing everything the UI logs — including the stock bundle's own `console.log` / `warn` / `error` and uncaught errors — with per-level filters and counts, and a prompt that runs JavaScript against the live HUD page (`ModelCurrentCar.speed`, `ACEUIModLoader.apps`, `HUD.StoredData`). Toggle it with the backquote key, rebindable from its settings.
+A draggable panel showing everything the UI logs — including the stock bundle's own `console.log` / `warn` / `error` and uncaught errors — with per-level filters and counts, and a prompt that runs JavaScript against the live HUD page (`ModelCurrentCar.speed`, `ACEUIAppLoader.apps`, `HUD.StoredData`). Toggle it with the backquote key, rebindable from its settings.
 
 The version is in `devconsole/app.json` and nowhere else.
 

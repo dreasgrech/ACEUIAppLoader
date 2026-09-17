@@ -1,7 +1,7 @@
 {
   "machine": {
-    "dups": 16,
-    "fingerprint": "e832627bf377e424",
+    "dups": 32,
+    "fingerprint": "28e7fa8d2ba60f85",
     "game": "0.9.1+release.6",
     "release": false,
     "require": "any",
@@ -15,8 +15,8 @@
     "unseen": 60
   },
   "release": {
-    "dups": 32,
-    "fingerprint": "e832627bf377e424",
+    "dups": 16,
+    "fingerprint": "28e7fa8d2ba60f85",
     "game": "0.9.1+release.6",
     "release": true,
     "require": "any",
@@ -27,6 +27,6 @@
       "uiresources\\js\\cohtml.js",
       "uiresources\\hud.html"
     ],
-    "unseen": 59
+    "unseen": 60
   }
 }

@@ -1,7 +1,7 @@
 """Runs tests/lib/harness.html (the shared library) in a headless Chromium.
 
 The harness fakes requestAnimationFrame, localStorage and the stock HUD store, and
-exercises ACEUIModLoader.core/console/persist/panel/loop/loader deterministically. See
+exercises ACEUIAppLoader.core/console/persist/panel/loop/loader deterministically. See
 tools/headless.py for the runner and its process hygiene.
 """
 import os

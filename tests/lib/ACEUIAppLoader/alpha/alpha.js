@@ -1,6 +1,6 @@
 /* Harness fixture: an app that records what the loader gave it while its script ran. */
 (function () {
-    const me = ACEUIModLoader.app();
+    const me = ACEUIAppLoader.app();
 
     window.__alpha = {
         name: me.name,

@@ -1,6 +1,6 @@
 # Capabilities Probe
 
-A capability probe for the Assetto Corsa EVO HUD. One of the loader's **developer apps**: it ships inside `ACEUIModLoader.kspkg`, and the app drawer keeps it behind the `DEVELOPER APPS` switch that is off by default.
+A capability probe for the Assetto Corsa EVO HUD. One of the loader's **developer apps**: it ships inside `ACEUIAppLoader.kspkg`, and the app drawer keeps it behind the `DEVELOPER APPS` switch that is off by default.
 
 It exists to answer one question before anything ambitious gets built on the HUD: **what can JavaScript actually do inside the game's Cohtml/V8?** The game runs V8 9.4 started with `--noexpose_wasm`, in a Cohtml sandbox with no Web Audio and no video demuxers — so the browser is not a reliable guide. This runs about 70 feature detections in the real in-game engine and reports each as **yes / no / partial / warn**, both in a draggable panel and in the game log.
 
@@ -64,7 +64,7 @@ so the probe can never wedge the HUD.
 ## Layout
 
 - `capabilities/` — the shipped app, exactly what lands in
-  `Saved Games\ACE\mods\uiresources\ACEUIModLoaderApps\capabilities\`:
+  `Saved Games\ACE\mods\uiresources\ACEUIAppLoader\capabilities\`:
   `app.json` (version, styles, scripts), `capabilities.js`, `capabilities.css`.
 - `tests/test_app.py` — runs the loader's shared test kit (`appkit.py`): app.json,
   the project's JavaScript style rules, the Cohtml rules, class/stylesheet

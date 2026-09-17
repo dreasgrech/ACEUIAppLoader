@@ -21,7 +21,7 @@ exposed as part of the loader's API -- and decide how their source should be man
 | **Loose files never beat packed files** | game-internals.md 3, proven, 3 launches | The one hard constraint on layout, see below |
 
 That last one decides the design. If a bundled app lived at the existing
-`uiresources\ACEUIModLoaderApps\profiler\`, then `install_app.py profiler` would go on
+`uiresources\ACEUIAppLoader\profiler\`, then `install_app.py profiler` would go on
 copying files the game would never serve again -- the packed copy wins for ever. The apps
 hardest to iterate on would be the three developer tools, and the failure is silent. So a
 bundled app must not occupy a path a loose app can occupy.
@@ -29,15 +29,15 @@ bundled app must not occupy a path a loose app can occupy.
 ## 2. Layout
 
 ```
-uiresources\ACEUIModLoaderBuiltIn\<name>\                       inside ACEUIModLoader.kspkg, no marker
-mods\uiresources\ACEUIModLoaderApps\<name>\ + Video\ACEUIModLoaderApps-<name>.settingspreset
+uiresources\ACEUIAppLoaderBuiltIn\<name>\                       inside ACEUIAppLoader.kspkg, no marker
+mods\uiresources\ACEUIAppLoader\<name>\ + Video\ACEUIAppLoader-<name>.settingspreset
 ```
 
 Discovery gains a second source. The built-in names are compiled into the loader (it ships
 them, so it knows them); the marker list keeps finding loose apps exactly as it does today.
 **A loose app of the same name wins**, and the loader says so in the log:
 
-    [ACEUIModLoader] profiler: loose copy overrides the bundled 0.9.0
+    [ACEUIAppLoader] profiler: loose copy overrides the bundled 0.9.0
 
 which is the whole development loop preserved -- `install_app.py profiler`, reload, and you
 are testing your working copy against a shipped loader.
@@ -85,17 +85,17 @@ writing against a known loader version.
 One registry rather than three names:
 
 ```js
-ACEUIModLoader.shared.register("profiler", { mark: mark, report: report });
-ACEUIModLoader.shared.get("profiler");
-ACEUIModLoader.shared.has("profiler");
-ACEUIModLoader.shared.names();
+ACEUIAppLoader.shared.register("profiler", { mark: mark, report: report });
+ACEUIAppLoader.shared.get("profiler");
+ACEUIAppLoader.shared.has("profiler");
+ACEUIAppLoader.shared.names();
 ```
 
-- `ACEUIModLoader.console` is already the console-hook module, so the dev console could not
+- `ACEUIAppLoader.console` is already the console-hook module, so the dev console could not
   have taken that name anyway. A registry sidesteps the collision question entirely and is
   open to third-party apps, which a hardcoded trio is not.
 - The coupling already exists in one direction: the sampler reads app names off the
-  callbacks `ACEUIModLoader.loop` schedules. Bundling makes the other direction legitimate
+  callbacks `ACEUIAppLoader.loop` schedules. Bundling makes the other direction legitimate
   -- the library handing its own timings to a profiler it knows is there, rather than the
   profiler monkey-patching to find them. It keeps the patching for the *stock* page, which
   is the only way to see that.
@@ -130,7 +130,7 @@ repos. Submodules now lose nothing, and the move is reversible in either directi
 ## 6. Directory structure once they are absorbed
 
 ```
-ACEUIModLoader/
+ACEUIAppLoader/
   apps/
     devconsole/
       devconsole/          <- ships: app.json, devconsole.js, devconsole.css, protofields.js
@@ -149,19 +149,19 @@ ACEUIModLoader/
       tests/test_app.py, tests/harness.html
       tools/ws_echo.py
       README.md
-  src/ACEUIModLoader.*.js
+  src/ACEUIAppLoader.*.js
   tools/*.py
   tests/lib/, tests/test_*.py
   docs/, dev/snippets/, README.md, VERSION
-  build/ -> uiresources/js/cohtml.js + uiresources/ACEUIModLoaderBuiltIn/<name>/
-  dist/ACEUIModLoader.kspkg
+  build/ -> uiresources/js/cohtml.js + uiresources/ACEUIAppLoaderBuiltIn/<name>/
+  dist/ACEUIAppLoader.kspkg
 ```
 
 Each app keeps the shape it has as a repo, which is worth more than it looks. The inner
 folder *is* the shipped app and its name *is* the app name -- `install_app.py` and
 `appkit.py` both derive it from the folder, it is what lands in the package as
-`ACEUIModLoaderBuiltIn\profiler\`, and it is what you install loose to
-`ACEUIModLoaderApps\profiler\` to iterate. Collapsing the two levels would ship `tests/`,
+`ACEUIAppLoaderBuiltIn\profiler\`, and it is what you install loose to
+`ACEUIAppLoader\profiler\` to iterate. Collapsing the two levels would ship `tests/`,
 `dev/` and the README into the game unless an exclude list is invented. It is also exactly
 what `git filter-repo --to-subdirectory-filter apps/<name>` produces, so nothing moves
 inside the rewrite and `git log -- apps/profiler` reaches the first commit with no rename
@@ -176,7 +176,7 @@ app is ever pulled back out. Not worth it for one repeated word in a path.
 ## 6b. Two things that changed while building it
 
 - **No compiled-in list of bundled apps.** The plan had a `BUILTIN` constant in the
-  loader's source; what shipped is an index file, `ACEUIModLoaderBuiltIn/apps.json`, written
+  loader's source; what shipped is an index file, `ACEUIAppLoaderBuiltIn/apps.json`, written
   by the build from the manifests in `apps/`. It cannot drift from what is actually in the
   package, `--no-apps` needs no source edit, and the harness can put its own fixture index
   next to its fixture app. The loader asks for it and for the preset list *at the same
@@ -213,7 +213,7 @@ what went in. PedalGraph and DOOM are untouched throughout.
 
 8. `tools/appkit.py`: find the loader by walking up for `tools/appkit.py` instead of
    assuming a sibling checkout (`ACE_LOADER_DIR` still overrides). Today's line resolves to
-   `apps/ACEUIModLoader` and would break all three suites. Update the recipe in its
+   `apps/ACEUIAppLoader` and would break all three suites. Update the recipe in its
    docstring.
 9. The three `tests/test_app.py` headers adopt that lookup.
 10. A test runner that walks `apps/*/tests` as well as `tests/`. `unittest discover` from
@@ -225,15 +225,15 @@ what went in. PedalGraph and DOOM are untouched throughout.
 
 ### C. The loader learns about bundled apps
 
-12. `src/ACEUIModLoader.loader.js`: `BUILTIN_ROOT = "ACEUIModLoaderBuiltIn/"` beside `ROOT`; a
+12. `src/ACEUIAppLoader.loader.js`: `BUILTIN_ROOT = "ACEUIAppLoaderBuiltIn/"` beside `ROOT`; a
     compiled-in `BUILTIN` name list (also the load order); an entry gains `base` and
     `builtin`; discovery merges the built-in names with the marker names, **a loose app of
     the same name wins**, with a log line saying so; the manifest's `developer` flag is
     carried on the entry. Export `BUILTIN_ROOT`, `BUILTIN`, and `base` per entry.
-13. New `src/ACEUIModLoader.shared.js`: `register(name, api)`, `get`, `has`, `names`. Must be
+13. New `src/ACEUIAppLoader.shared.js`: `register(name, api)`, `get`, `has`, `names`. Must be
     added to `LIB_ORDER` in `build_loader.py` (the build fails on an unlisted `src/` file)
     before `loader.js`, since apps register while their scripts run.
-14. `tests/lib/`: a fixture app under `tests/lib/ACEUIModLoaderBuiltIn/<name>/`, and cases in
+14. `tests/lib/`: a fixture app under `tests/lib/ACEUIAppLoaderBuiltIn/<name>/`, and cases in
     `harness.html` for: a built-in loads with no marker, a loose app of the same name wins
     and logs, the `developer` flag reaches the entry, and the registry.
 15. `tests/test_loader_tools.py`: assert the new constants alongside the existing
@@ -263,7 +263,7 @@ what went in. PedalGraph and DOOM are untouched throughout.
 ### F. Build and package
 
 23. `build_loader.py`: after assembling `cohtml.js`, copy each app's **manifest-listed
-    files only** into `build/uiresources/ACEUIModLoaderBuiltIn/<name>/`, validated through
+    files only** into `build/uiresources/ACEUIAppLoaderBuiltIn/<name>/`, validated through
     `install_app.load_app_info` so a bundled app is held to the same manifest rules as a
     loose one; print a line per app; write `apps.json` (name, version, title, developer)
     into the build and commit a copy at the repo root as the record of what shipped.
@@ -276,14 +276,14 @@ what went in. PedalGraph and DOOM are untouched throughout.
 ### G. The three apps
 
 26. `"developer": true` in each `app.json`, versions bumped.
-27. Each registers its public surface through `ACEUIModLoader.shared.register(...)`, keeping
+27. Each registers its public surface through `ACEUIAppLoader.shared.register(...)`, keeping
     its existing global for anyone already using it.
 28. Cases in each app's `test_app.py` for the flag and the registration.
 
 ### H. Documentation
 
 29. Loader README: the install section drops to one package for the dev tools; `developer`
-    joins the app.json key table; `ACEUIModLoader.shared` joins the library section; Layout
+    joins the app.json key table; `ACEUIAppLoader.shared` joins the library section; Layout
     gains `apps/`; the test command becomes the new runner.
 30. Each app README: ships with the loader, install loose only to iterate on it.
 31. This document: mark the decision taken and what actually shipped.

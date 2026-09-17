@@ -64,7 +64,7 @@
             ctx.fillText("x", 2, 10);
             calls.push("fillText");
         } catch (e) {
-            log(label + ": drawing threw after " + calls.join(", ") + ": " + ACEUIModLoader.errorText(e));
+            log(label + ": drawing threw after " + calls.join(", ") + ": " + ACEUIAppLoader.errorText(e));
 
             return;
         }

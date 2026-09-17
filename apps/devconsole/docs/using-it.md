@@ -10,7 +10,7 @@ evaluates).
 
 | command | what it does |
 |---|---|
-| `.run <name>` | loads `ACEUIModLoaderApps/snippets/<name>.js` as a script — write it in an editor, run it in game, no reinstall and no pasting |
+| `.run <name>` | loads `ACEUIAppLoader/snippets/<name>.js` as a script — write it in an editor, run it in game, no reinstall and no pasting |
 | `.fields [name]` | the **schema** fields of a `Model*` global or message, against what the game actually published |
 | `.logtest` | which console methods really reach this console, measured from the inside |
 
@@ -58,7 +58,7 @@ not make (a paste), which would otherwise splice a completion into the wrong pla
 
 **Results are expanded, not squashed.** A game model is a wall of fields, so an object
 result is printed over many lines — one property per line, indented, in the style of a
-browser's dev tools — rather than the single line `ACEUIModLoader.console.format` uses for
+browser's dev tools — rather than the single line `ACEUIAppLoader.console.format` uses for
 log lines:
 
 ```
@@ -101,7 +101,7 @@ throws prints the error instead of killing the print.
   is not valid syntax it runs as statements (`window.x = 1`). Errors are shown
   in red. Arrow up/down walk the history (50 entries). Escape leaves the prompt.
 - **`.run <name>`**: loads `<name>.js` from the snippets folder,
-  `Saved Games/ACE/mods/uiresources/ACEUIModLoaderApps/snippets/`, as a script.
+  `Saved Games/ACE/mods/uiresources/ACEUIAppLoader/snippets/`, as a script.
   Write anything longer than a line in an editor, save, type `.run name` in
   game: no reinstall, no pasting. The folder sits next to the app folders and
   outside every app, so reinstalling an app never touches it. Only plain file
@@ -112,7 +112,7 @@ throws prints the error instead of killing the print.
   whenever the HUD page is reloaded (Escape/resume), but everything the loader
   and other apps logged while the page was loading is already in it.
 - Drag anywhere except the buttons and the prompt to move it; the position
-  persists like the stock widgets' (see the loader's `ACEUIModLoader.panel`).
+  persists like the stock widgets' (see the loader's `ACEUIAppLoader.panel`).
 
 Keyboard in game: the first launch showed typing reaches the prompt, but Enter
 did nothing because the game's engine reports keys through the legacy

@@ -150,7 +150,7 @@
                     widthWrapped = probe.offsetWidth >= 0 && widthReads > 0;
                     Object.defineProperty(proto, "offsetWidth", descriptor);
                 } catch (e) {
-                    log("layout: offsetWidth cannot be redefined: " + ACEUIModLoader.errorText(e));
+                    log("layout: offsetWidth cannot be redefined: " + ACEUIAppLoader.errorText(e));
                 }
             } else {
                 log("layout: no offsetWidth descriptor on HTMLElement.prototype");

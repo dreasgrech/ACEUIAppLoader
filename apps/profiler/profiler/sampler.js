@@ -6,7 +6,7 @@
  * last RING frames so the panel can draw them and scrub back through them.
  *
  * WHY THIS CAN WORK AT ALL. Cohtml gives a page two of the three things a profiler needs,
- * and the `.run profileprobe` snippet in ACEUIModLoader/dev/snippets measured each in game:
+ * and the `.run profileprobe` snippet in ACEUIAppLoader/dev/snippets measured each in game:
  *
  *   - a clock, but a poor one. **`performance.now()` does not advance within a frame**:
  *     200,000 reads across 29 ms of real time returned one single value, because the
@@ -22,7 +22,7 @@
  *     even for chains that were already running when we started;
  *   - names: the stock bundle ships unminified, so its callbacks arrive with real
  *     function names (`perFrameAllModelUpdate`, `visibilityChecker`, `fetchAllModels`).
- *     Our own apps' frame loops carry their app name because `ACEUIModLoader.loop.start`
+ *     Our own apps' frame loops carry their app name because `ACEUIAppLoader.loop.start`
  *     takes an owner and `app().panel` passes it.
  *
  * THE CLOCK, and what it means. Frame wall time is exact: the animation-frame timestamp
@@ -498,7 +498,7 @@ const ACEProfilerSampler = (function () {
         const raf = window.requestAnimationFrame;
 
         window.requestAnimationFrame = function (fn) {
-            // ACEUIModLoader.loop stamps the app's name on the callback it schedules, so a
+            // ACEUIAppLoader.loop stamps the app's name on the callback it schedules, so a
             // app's frames are attributed by name rather than guessed from a closure
             const owner = fn && fn.aceOwner ? fn.aceOwner : "";
 
@@ -768,14 +768,14 @@ const ACEProfilerSampler = (function () {
     };
 
     /**
-     * Apps name their own work through `ACEUIModLoader.section`, which does nothing until
+     * Apps name their own work through `ACEUIAppLoader.section`, which does nothing until
      * something fills this slot. Filling it only while recording means an app pays a
      * property read and a call for being profilable, and nothing more.
      */
     const bindSections = function (on) {
-        if (!window.ACEUIModLoader) { return false; }
+        if (!window.ACEUIAppLoader) { return false; }
 
-        ACEUIModLoader.profiler = on
+        ACEUIAppLoader.profiler = on
             ? { section: function (name, fn) { return measure(name, CATEGORY.app, fn, null, []); } }
             : null;
 

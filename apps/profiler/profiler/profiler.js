@@ -19,7 +19,7 @@
  * and what you act on. The per-frame line above it is for spikes, where 1 ms of
  * quantisation does not matter because the spike is twenty.
  *
- * What it can see: our own apps by name (ACEUIModLoader.loop carries the owner), the stock
+ * What it can see: our own apps by name (ACEUIAppLoader.loop carries the owner), the stock
  * bundle's per-frame work by function name (`perFrameAllModelUpdate` and friends -- the
  * bundle ships unminified), `engine.on` model events, DOM events and timers. And `other`:
  * frame time no script accounted for, which is the engine itself -- style, layout,
@@ -27,7 +27,7 @@
  */
 const ACEUIProfiler = (function () {
 
-    const me = ACEUIModLoader.app("profiler");
+    const me = ACEUIAppLoader.app("profiler");
     const S = ACEProfilerSampler;
 
     /** The mounted panel's handle; see `panel()` at the bottom of this file. */
@@ -111,7 +111,7 @@ const ACEUIProfiler = (function () {
     const MODE_WORST = "worst";
     /** Indent per level in the tree view. Text, not padding: no style writes per row. */
     const INDENT = "     ";
-    const NODRAG_ATTR = ACEUIModLoader.panel.NO_DRAG_ATTR;
+    const NODRAG_ATTR = ACEUIAppLoader.panel.NO_DRAG_ATTR;
 
     /** Graph geometry. One pixel column per frame; 33 ms is full height, as Unity's is. */
     const GRAPH_W = 300;
@@ -229,11 +229,11 @@ const ACEUIProfiler = (function () {
         { key: "worst", label: "WORST" }
     ];
 
-    const el = ACEUIModLoader.el;
-    const close = ACEUIModLoader.close;
-    const toArray = ACEUIModLoader.toArray;
-    const clamp = ACEUIModLoader.clamp;
-    const dom = ACEUIModLoader.dom;
+    const el = ACEUIAppLoader.el;
+    const close = ACEUIAppLoader.close;
+    const toArray = ACEUIAppLoader.toArray;
+    const clamp = ACEUIAppLoader.clamp;
+    const dom = ACEUIAppLoader.dom;
     const setClass = dom.setClass;
     const log = me.log;
 
@@ -241,7 +241,7 @@ const ACEUIProfiler = (function () {
      * Settings. Recording is off by default: a profiler that instruments the page the
      * moment the HUD loads would be measuring every session whether asked to or not.
      */
-    const options = ACEUIModLoader.settings.define(me.name, [
+    const options = ACEUIAppLoader.settings.define(me.name, [
         {
             key: "toggleKey",
             type: "key",
@@ -955,11 +955,11 @@ const ACEUIProfiler = (function () {
 
         state.frames += 1;
 
-        if (ACEUIModLoader.hudHidden() || !S.recording()) { return; }
+        if (ACEUIAppLoader.hudHidden() || !S.recording()) { return; }
 
         if (frame && frame !== state.lastDrawn) {
             state.lastDrawn = frame;
-            ACEUIModLoader.section("draw graph", function () {
+            ACEUIAppLoader.section("draw graph", function () {
                 const totals = S.totals(frame);
 
                 if (!trackScale(state, frame, totals)) { drawColumn(state, frame, totals); }
@@ -972,7 +972,7 @@ const ACEUIProfiler = (function () {
 
         state.lastRefresh = now;
 
-        const report = ACEUIModLoader.section("refresh table", function () { return refreshTable(state); });
+        const report = ACEUIAppLoader.section("refresh table", function () { return refreshTable(state); });
         const stat = statText(report, state.mode);
         const line = frameText(frame);
 
@@ -1139,7 +1139,7 @@ const ACEUIProfiler = (function () {
     };
 
     const onClick = function (state, e) {
-        const node = ACEUIModLoader.closestWithAttribute(e.target, ACT_ATTR, state.root);
+        const node = ACEUIAppLoader.closestWithAttribute(e.target, ACT_ATTR, state.root);
         const act = node ? node.getAttribute(ACT_ATTR) : "";
         const value = node ? node.getAttribute(VALUE_ATTR) : "";
 
@@ -1226,15 +1226,15 @@ const ACEUIProfiler = (function () {
 
         state.bag = dom.listeners();
         state.bag.on(root, "click", function (e) { onClick(state, e); });
-        state.scroller = ACEUIModLoader.scroll.attach({
+        state.scroller = ACEUIAppLoader.scroll.attach({
             body: state.body,
             track: state.track,
             thumb: state.thumb,
             nofitClass: CLASS.nofit,
-            draggingClass: ACEUIModLoader.panel.DRAGGING_CLASS,
+            draggingClass: ACEUIAppLoader.panel.DRAGGING_CLASS,
             log: log
         });
-        state.unsubscribeSettings = ACEUIModLoader.settings.onChange(me.name, function (key) {
+        state.unsubscribeSettings = ACEUIAppLoader.settings.onChange(me.name, function (key) {
             if (key === "window") { refreshTable(state); }
         });
         // panel scale belongs to the loader now: this was the third copy of the same lines
@@ -1267,7 +1267,7 @@ const ACEUIProfiler = (function () {
         // name: an app that wants to start a recording or read the last window off does not
         // have to know the profiler's global exists. Withdrawn in detach, because the
         // handle is this panel's -- and a stopped profiler has nothing to report.
-        ACEUIModLoader.shared.register(me.name, live);
+        ACEUIAppLoader.shared.register(me.name, live);
         log("panel attached, clock " + S.CLOCK.name + " (" + S.CLOCK.resolutionMs + " ms steps)");
 
         return state;
@@ -1305,7 +1305,7 @@ const ACEUIProfiler = (function () {
     };
 
     const detach = function (state) {
-        ACEUIModLoader.shared.unregister(me.name);
+        ACEUIAppLoader.shared.unregister(me.name);
         state.ui.stop();
 
         if (state.unsubscribeSettings) {
@@ -1412,10 +1412,10 @@ const ACEUIProfiler = (function () {
 window.ACEUIProfiler = ACEUIProfiler;
 
 /* Attach to #profiler: the loader creates it in game, the preview page carries it. */
-ACEUIModLoader.app("profiler").mount(ACEUIProfiler.attach, ACEUIProfiler.detach);
+ACEUIAppLoader.app("profiler").mount(ACEUIProfiler.attach, ACEUIProfiler.detach);
 
 /*
  * The show/hide key. The loader holds it rather than the panel, because a panel that has been
  * closed is not running to hold anything -- which is exactly when you want the key to work.
  */
-ACEUIModLoader.app("profiler").toggle(ACEUIProfiler.toggleKey);
+ACEUIAppLoader.app("profiler").toggle(ACEUIProfiler.toggleKey);

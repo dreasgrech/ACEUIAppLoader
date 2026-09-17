@@ -1,5 +1,5 @@
 /*
- * ACE UI Capabilities Probe -- stylesheet. Linked by the ACEUIModLoader after the stock CSS, so
+ * ACE UI Capabilities Probe -- stylesheet. Linked by the ACEUIAppLoader after the stock CSS, so
  * --font-family-main is the game's. Stock HUD widget look: black panel, solid dark
  * header, coloured status dots. No var() fallbacks (Cohtml does not support them).
  *

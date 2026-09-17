@@ -1,5 +1,5 @@
 /**
- * ACEUIModLoader.input -- stop the game reading keystrokes as car controls.
+ * ACEUIAppLoader.input -- stop the game reading keystrokes as car controls.
  *
  * An app that takes typed input has a problem: the game still treats those keys as
  * gameplay bindings, so typing an expression toggles headlights and wipers, and the
@@ -23,16 +23,16 @@
  * blur it would yank the keyboard out from under DOOM. So each holder captures under its
  * own name and the flags only drop when the last one lets go.
  *
- *     const release = ACEUIModLoader.input.bindFocus(myInput, "myapp");       // a text box
- *     const release = ACEUIModLoader.input.bindClickFocus(myPanel, "myapp");  // click to focus
- *     ACEUIModLoader.input.capture("myapp");                             // or by hand
- *     ACEUIModLoader.input.release("myapp");                             // and in detach
+ *     const release = ACEUIAppLoader.input.bindFocus(myInput, "myapp");       // a text box
+ *     const release = ACEUIAppLoader.input.bindClickFocus(myPanel, "myapp");  // click to focus
+ *     ACEUIAppLoader.input.capture("myapp");                             // or by hand
+ *     ACEUIAppLoader.input.release("myapp");                             // and in detach
  *
  * Releasing matters more than capturing: an app that keeps the capture after it is gone
  * leaves the car unable to read its own controls, so call `release(owner)` in detach --
  * or use the unbind function `bindFocus`/`bindClickFocus` hand back, which does it.
  */
-ACEUIModLoader.input = (function () {
+ACEUIAppLoader.input = (function () {
 
     /** The two levers, in the order the stock UI calls them. */
     const LEVERS = ["toggleKeyboardInput", "ignoreInputActions"];
@@ -92,7 +92,7 @@ ACEUIModLoader.input = (function () {
                 menu[lever](want);
                 taken += 1;
             } catch (e) {
-                ACEUIModLoader.log("[input] " + lever + "(" + want + ") failed: " + ACEUIModLoader.errorText(e));
+                ACEUIAppLoader.log("[input] " + lever + "(" + want + ") failed: " + ACEUIAppLoader.errorText(e));
             }
         });
 
@@ -163,7 +163,7 @@ ACEUIModLoader.input = (function () {
         apply(false);
 
         if (names.length) {
-            ACEUIModLoader.log("[input] released everything (" + reason + "): " + names.join(", "));
+            ACEUIAppLoader.log("[input] released everything (" + reason + "): " + names.join(", "));
         }
 
         return true;
@@ -203,7 +203,7 @@ ACEUIModLoader.input = (function () {
 
             return true;
         } catch (e) {
-            ACEUIModLoader.log("[input] cannot watch " + ACTION_EVENT + ": " + ACEUIModLoader.errorText(e));
+            ACEUIAppLoader.log("[input] cannot watch " + ACTION_EVENT + ": " + ACEUIAppLoader.errorText(e));
 
             return false;
         }

@@ -110,9 +110,9 @@ window.ksUI = {
 
     // three apps with different appetites, started through the library's own loop so they
     // are named in the table rather than showing up as anonymous callbacks
-    ACEUIModLoader.loop.start(function () { spin(9000); }, "pedalgraph");
-    ACEUIModLoader.loop.start(function () { spin(2500); }, "telemetry");
-    ACEUIModLoader.loop.start(function () {
+    ACEUIAppLoader.loop.start(function () { spin(9000); }, "pedalgraph");
+    ACEUIAppLoader.loop.start(function () { spin(2500); }, "telemetry");
+    ACEUIAppLoader.loop.start(function () {
         frames += 1;
         spin(500);
         tyres.onBindingUpdate();

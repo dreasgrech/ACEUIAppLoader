@@ -14,7 +14,7 @@ An app repo's whole test suite is one file that subclasses `appkit.AppTests` wit
 - the shipped folder — `app.json` valid and minimal, nothing unlisted ships, no stock game file overridden, no legacy `VERSION` / `app.js` / install wrapper / `const VERSION`
 - the JavaScript style rules and the Cohtml rules
 - that every class a script uses exists in the stylesheet
-- that identity comes from `ACEUIModLoader.app(...)` rather than being hardcoded
+- that identity comes from `ACEUIAppLoader.app(...)` rather than being hardcoded
 - optionally a per-frame hot path, marked with `HOT_PATH`
 - and it runs every `tests/**/harness.html` in a headless browser
 

@@ -26,7 +26,7 @@
     const HOLD_MS = 2000;
     const CYCLES = 2;
 
-    const drawer = window.ACEUIModLoader && ACEUIModLoader.drawer;
+    const drawer = window.ACEUIAppLoader && ACEUIAppLoader.drawer;
     const panel = drawer && drawer.state ? drawer.state.panel : null;
 
     if (!panel) {

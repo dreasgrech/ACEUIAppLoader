@@ -37,7 +37,7 @@ An app should hand `mount` both halves of its lifecycle, so the drawer can reall
 off rather than merely hide it:
 
 ```js
-ACEUIModLoader.app("telemetry").mount(ACEUITelemetry.attach, ACEUITelemetry.detach);
+ACEUIAppLoader.app("telemetry").mount(ACEUITelemetry.attach, ACEUITelemetry.detach);
 ```
 
 Hiding the root is not enough on its own: a hidden app keeps its key handlers, its
@@ -48,7 +48,7 @@ hidden, which is all the drawer can do for it.
 Each row's OPTIONS button opens whatever that app registered:
 
 ```js
-ACEUIModLoader.drawer.registerOpener("telemetry", function () { myWindow.open(); });
+ACEUIAppLoader.drawer.registerOpener("telemetry", function () { myWindow.open(); });
 ```
 
 Declaring settings does this for you, so most apps never call it. If the opener throws,
@@ -70,16 +70,16 @@ without hand-building a panel, wiring dragging, remembering where the player put
 running a frame loop:
 
 ```js
-const win = ACEUIModLoader.window.open("doom.help", { title: "DOOM help" });
+const win = ACEUIAppLoader.window.open("doom.help", { title: "DOOM help" });
 win.body.appendChild(myContent);      // fill it with whatever you like
 win.setTitle("DOOM help (page 2)");
 win.close();
 
-ACEUIModLoader.window.toggle("doom.help", { title: "DOOM help" });
-ACEUIModLoader.window.isOpen("doom.help");
-ACEUIModLoader.window.get("doom.help");
-ACEUIModLoader.window.closeAll();
-ACEUIModLoader.window.ids();
+ACEUIAppLoader.window.toggle("doom.help", { title: "DOOM help" });
+ACEUIAppLoader.window.isOpen("doom.help");
+ACEUIAppLoader.window.get("doom.help");
+ACEUIAppLoader.window.closeAll();
+ACEUIAppLoader.window.ids();
 ```
 
 | | |
@@ -99,7 +99,7 @@ hook that throws is logged and ignored rather than breaking the window.
 key, so each window remembers its own position; prefix it with the app name
 (`"doom.help"`, `"telemetry.laps"`) to keep them apart.
 
-Dragging and position persistence come from `ACEUIModLoader.panel`, which settles a
+Dragging and position persistence come from `ACEUIAppLoader.panel`, which settles a
 restored position over a few frames, so one shared frame loop runs while any window is
 open and stops when the last one closes.
 
@@ -110,7 +110,7 @@ drawer's options pane, and tells the app when something changes. The app never t
 storage or builds a form.
 
 ```js
-const opts = ACEUIModLoader.settings.define("devconsole", [
+const opts = ACEUIAppLoader.settings.define("devconsole", [
     { key: "toggleKey", type: "key",    label: "Toggle key",    value: "Backquote" },
     { key: "scale",     type: "range",  label: "Panel scale",   value: 1, min: 0.6, max: 2, step: 0.1 },
     { key: "follow",    type: "toggle", label: "Follow newest", value: true },
@@ -118,12 +118,12 @@ const opts = ACEUIModLoader.settings.define("devconsole", [
 ]);
 
 opts.scale;                                    // stored value, already merged over the default
-ACEUIModLoader.settings.get("devconsole", "scale");
-ACEUIModLoader.settings.onChange("devconsole", function (key, value) { ... });
+ACEUIAppLoader.settings.get("devconsole", "scale");
+ACEUIAppLoader.settings.onChange("devconsole", function (key, value) { ... });
 ```
 
 Declaring settings is all it takes for a way in to appear on that app's drawer row.
-Clicking it opens **that app's own settings window** — an `ACEUIModLoader.window`, so it
+Clicking it opens **that app's own settings window** — an `ACEUIAppLoader.window`, so it
 is a normal draggable panel with an [X] at its top right, whose position is remembered per
 app. It can also be driven directly: `settings.open(app)`, `.close(app)`, `.toggle(app)`,
 `.isOpen(app)`. Settings deliberately do *not*
@@ -141,7 +141,7 @@ is exactly what the settings page is meant to replace.
 `<input type="range">` and `<select>` are unproven here, so a `range` is a pair of −/+
 buttons and a `choice` cycles on click — both patterns already proven in the dev console
 and DOOM. `text` uses a plain `<input>` (proven by the console prompt) and takes the
-keyboard through `ACEUIModLoader.input` while focused, so typing a value cannot drive the
+keyboard through `ACEUIAppLoader.input` while focused, so typing a value cannot drive the
 car.
 
 **`key` is why this exists.** Apps that hardcode hotkeys collide with whatever the player

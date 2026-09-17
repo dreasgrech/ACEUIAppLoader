@@ -33,7 +33,7 @@ BROWSERS = [
     r"C:\Program Files (x86)\Google\Chrome\Application\chrome.exe",
 ]
 BROWSER_EXES = ("msedge.exe", "chrome.exe", "chromium.exe")
-PROFILE_PREFIX = "aceuimodloader-headless-"
+PROFILE_PREFIX = "aceuiapploader-headless-"
 TIMEOUT_S = 120
 VIRTUAL_TIME_BUDGET_MS = 10000
 KILL_RETRIES = 6

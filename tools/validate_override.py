@@ -58,9 +58,9 @@ MOD_COUNTS = [0, 1, 1, 2, 2, 3, 3, 4, 5, 6, 8, 10, 12, 15, 20, 25, 30]
 SYNTHETIC_MIN, SYNTHETIC_MAX = 350, 820
 SEED = 20260917
 
-LOADER_PKG = os.path.join(_repos.REPO, "dist", "ACEUIModLoader.kspkg")
+LOADER_PKG = os.path.join(_repos.REPO, "dist", "ACEUIAppLoader.kspkg")
 DOOM_PKG = os.path.join(os.path.dirname(_repos.REPO), "ACEDOOM", "dist",
-                        "ACEUIModLoaderApps-doom.kspkg")
+                        "ACEUIAppLoader-doom.kspkg")
 LOADER_TARGETS = ("uiresources/js/cohtml.js", "uiresources/hud.html")
 DOOM_TARGETS = ("content/sfx/gui.bank", "system/gui_events.table")
 
@@ -89,7 +89,7 @@ def synthetic(rng):
 
     The first character matters more than the rest: load order is by upper-cased name, and
     a package that sorts before ours is added before it. A population of names that all sort
-    one side of "ACEUIModLoader.kspkg" would only ever measure half the problem.
+    one side of "ACEUIAppLoader.kspkg" would only ever measure half the problem.
     """
     first = rng.choice("0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz_-")
     name = first + "".join(rng.choice("abcdefghijklmnopqrstuvwxyz0123456789_") for _ in range(7))

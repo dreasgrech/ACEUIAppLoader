@@ -1,10 +1,10 @@
 /**
- * ACEUIModLoader.panel -- a draggable HUD panel that remembers where it was.
+ * ACEUIAppLoader.panel -- a draggable HUD panel that remembers where it was.
  *
  * `attach(root, options)` makes `root` draggable inside its parent (the HUD's
  * `.absolutecenter`), clamped so it stays fully on screen, and persists its
  * position as fractions of the parent (resolution independent) through
- * ACEUIModLoader.persist under `options.hudId` / `options.storageKey`. The app's frame
+ * ACEUIAppLoader.persist under `options.hudId` / `options.storageKey`. The app's frame
  * loop must call `update(panel, now)` every frame until the restore has settled.
  *
  * Restore sequence, to avoid any visible jump: the root is hidden at attach; a
@@ -18,7 +18,7 @@
  * Elements carrying `data-nodrag` (inputs, buttons) do not start a drag.
  * Options: { hudId, storageKey, log (prefixed logger), onSaved(position) }.
  */
-ACEUIModLoader.panel = (function () {
+ACEUIAppLoader.panel = (function () {
 
     const RESTORE_WAIT_MS = 2000;
     /** Class on the root while it is being dragged (apps style it). */
@@ -29,8 +29,8 @@ ACEUIModLoader.panel = (function () {
     const HIDDEN = "hidden";
     const AUTO = "auto";
 
-    const clamp = ACEUIModLoader.clamp;
-    const persist = ACEUIModLoader.persist;
+    const clamp = ACEUIAppLoader.clamp;
+    const persist = ACEUIAppLoader.persist;
 
     const isPosition = function (pos) {
         return Boolean(pos) && typeof pos.fx === "number" && typeof pos.fy === "number";
@@ -150,7 +150,7 @@ ACEUIModLoader.panel = (function () {
     };
 
     const onMouseDown = function (panel, e) {
-        if (ACEUIModLoader.closestWithAttribute(e.target, NO_DRAG_ATTR, panel.root)) { return; }
+        if (ACEUIAppLoader.closestWithAttribute(e.target, NO_DRAG_ATTR, panel.root)) { return; }
 
         const r = panel.root.getBoundingClientRect();
 
@@ -183,7 +183,7 @@ ACEUIModLoader.panel = (function () {
             root: root,
             hudId: options.hudId || null,
             storageKey: options.storageKey || null,
-            log: options.log || ACEUIModLoader.log,
+            log: options.log || ACEUIAppLoader.log,
             onSaved: options.onSaved || null,
             dragging: false,
             moved: false,               // the current drag changed the position

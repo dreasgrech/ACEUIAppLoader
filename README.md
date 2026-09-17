@@ -1,13 +1,13 @@
 <div align="center">
 
-# Assetto Corsa Evo UI App Loader
+# Assetto Corsa EVO UI App Loader
 
 **Support for custom UI Apps in Assetto Corsa EVO.**<br>
 
-[![Latest release](https://img.shields.io/github/v/release/dreasgrech/ACEUIModLoader?style=flat-square&label=download&color=0a7)](../../releases/latest)
+[![Latest release](https://img.shields.io/github/v/release/dreasgrech/ACEUIAppLoader?style=flat-square&label=download&color=0a7)](../../releases/latest)
 [![Built for](https://img.shields.io/badge/Assetto_Corsa_EVO-0.9.1%2Brelease.6-informational?style=flat-square)](#if-something-isnt-right)
-[![Downloads](https://img.shields.io/github/downloads/dreasgrech/ACEUIModLoader/total?style=flat-square&color=555)](../../releases)
-[![Issues](https://img.shields.io/github/issues/dreasgrech/ACEUIModLoader?style=flat-square&color=555)](../../issues)
+[![Downloads](https://img.shields.io/github/downloads/dreasgrech/ACEUIAppLoader/total?style=flat-square&color=555)](../../releases)
+[![Issues](https://img.shields.io/github/issues/dreasgrech/ACEUIAppLoader?style=flat-square&color=555)](../../issues)
 
 [Install](#install) · [The app drawer](#the-app-drawer) · [Apps](#apps) · [Help](#if-something-isnt-right) · [Safety](#is-it-safe) · [Developers](#for-developers)
 
@@ -38,7 +38,7 @@ added alongside each other instead of fighting over the same file.
 <table>
 <tr><td width="40" align="center"><h3>1</h3></td><td>
 
-Download **`ACEUIModLoader.kspkg`** from the [latest release](../../releases/latest).
+Download **`ACEUIAppLoader.kspkg`** from the [latest release](../../releases/latest).
 
 </td></tr>
 <tr><td align="center"><h3>2</h3></td><td>
@@ -107,7 +107,7 @@ Each is a separate download with its own instructions.
 
 1. **The game updated.** By far the most common cause.
 2. **The file is in the wrong place.** Straight into `mods`, not a subfolder, and it keeps
-   the name `ACEUIModLoader.kspkg`.
+   the name `ACEUIAppLoader.kspkg`.
 3. **Another mod that installs a `.kspkg` file.** Two of those can occasionally clash.
 
 </details>
@@ -133,7 +133,7 @@ question on its own.
 
 ## Uninstalling
 
-Delete `ACEUIModLoader.kspkg`. That's the whole procedure — nothing else to undo, nothing
+Delete `ACEUIAppLoader.kspkg`. That's the whole procedure — nothing else to undo, nothing
 left behind.
 
 ---
@@ -156,7 +156,7 @@ An app is one folder and a JavaScript file. No build step, no registration, and 
 library for the parts that are genuinely hard in this engine.
 
 ```js
-const me = ACEUIModLoader.app("myapp");
+const me = ACEUIAppLoader.app("myapp");
 
 me.mount(attach, detach);                              // the drawer starts and stops you
 me.toggle(function () { return options.toggleKey; });  // a hotkey that respects typing
@@ -170,7 +170,7 @@ Start with **[`docs/writing-an-app.md`](docs/writing-an-app.md)**.
 | | |
 |---|---|
 | [`docs/writing-an-app.md`](docs/writing-an-app.md) | the app lifecycle and `app.json` |
-| [`docs/library.md`](docs/library.md) | `ACEUIModLoader.*`: storage, hotkeys, the frame loop |
+| [`docs/library.md`](docs/library.md) | `ACEUIAppLoader.*`: storage, hotkeys, the frame loop |
 | [`docs/ui.md`](docs/ui.md) | the drawer, windows, and settings pages |
 | [`docs/building.md`](docs/building.md) | building the package, the tools, the tests |
 | [`docs/how-it-works.md`](docs/how-it-works.md) | how one file overrides a game file, and why that is hard |
@@ -192,5 +192,5 @@ The game mechanics all of this rests on are documented in
 ---
 
 <div align="center">
-<sub>Loader 0.21.0 · built for Assetto Corsa EVO <b>0.9.1+release.6</b></sub>
+<sub>Loader 0.22.0 · built for Assetto Corsa EVO <b>0.9.1+release.6</b></sub>
 </div>

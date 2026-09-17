@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-new_app.py - start a UI app for the ACEUIModLoader with everything in place.
+new_app.py - start a UI app for the ACEUIAppLoader with everything in place.
 
     python tools/new_app.py <name> [<parent dir>] [--title "Nice Name"] [--developer]
 
@@ -18,7 +18,7 @@ creates <parent dir>/ACE<Title>/ (default parent: next to this repo) holding
 drawer's "developer apps" switch -- for a profiler or a probe rather than a HUD widget.
 
 Nothing here repeats the version or the name in a second place: the script reads
-both from `ACEUIModLoader.app("<name>")`, and the loader creates `#<name>` before the
+both from `ACEUIAppLoader.app("<name>")`, and the loader creates `#<name>` before the
 script runs. Install with `python tools/install_app.py <repo>/<name>`.
 """
 import os
@@ -41,10 +41,10 @@ DEVELOPER_KEY = """
   "developer": true,"""
 
 SCRIPT = """/**
- * __TITLE__ -- a UI app for Assetto Corsa EVO, built on the ACEUIModLoader library.
+ * __TITLE__ -- a UI app for Assetto Corsa EVO, built on the ACEUIAppLoader library.
  *
  * The loader creates `<div id="__NAME__">` inside the HUD container before this
- * script runs and `ACEUIModLoader.app("__NAME__")` describes the app (name, version
+ * script runs and `ACEUIAppLoader.app("__NAME__")` describes the app (name, version
  * from app.json, title, root, a prefixed logger, derived storage keys), so none of
  * that is declared here. Styling lives in __NAME__.css.
  *
@@ -53,7 +53,7 @@ SCRIPT = """/**
  */
 const __GLOBAL__ = (function () {
 
-    const me = ACEUIModLoader.app("__NAME__");
+    const me = ACEUIAppLoader.app("__NAME__");
 
     /** Class names shared with __NAME__.css. */
     const CLASS = {
@@ -63,8 +63,8 @@ const __GLOBAL__ = (function () {
         value: "__ABBR__-value"
     };
 
-    const el = ACEUIModLoader.el;
-    const close = ACEUIModLoader.close;
+    const el = ACEUIAppLoader.el;
+    const close = ACEUIAppLoader.close;
 
     // ---- markup ------------------------------------------------------------------
 
@@ -83,8 +83,8 @@ const __GLOBAL__ = (function () {
             root: root,
             value: root.querySelector("." + CLASS.value),
             lastText: "",
-            panel: null,                // ACEUIModLoader.panel state (drag + position)
-            loop: null                  // ACEUIModLoader.loop handle
+            panel: null,                // ACEUIAppLoader.panel state (drag + position)
+            loop: null                  // ACEUIAppLoader.loop handle
         };
     };
 
@@ -93,11 +93,11 @@ const __GLOBAL__ = (function () {
     /** One animation frame: settle the panel, then draw. Only touch the DOM when something changed. */
     const tick = function (state, now) {
         const car = window.ModelCurrentCar;
-        const text = car && car.has_focused_car ? ACEUIModLoader.percentText(car.gas_percent || 0) : "-";
+        const text = car && car.has_focused_car ? ACEUIAppLoader.percentText(car.gas_percent || 0) : "-";
 
-        ACEUIModLoader.panel.update(state.panel, now);
+        ACEUIAppLoader.panel.update(state.panel, now);
 
-        if (ACEUIModLoader.hudHidden() || text === state.lastText) { return; }
+        if (ACEUIAppLoader.hudHidden() || text === state.lastText) { return; }
 
         state.lastText = text;
         state.value.textContent = text;
@@ -108,19 +108,19 @@ const __GLOBAL__ = (function () {
     const attach = function (root) {
         const state = create(root);
 
-        state.panel = ACEUIModLoader.panel.attach(root, { hudId: me.hudId, storageKey: me.storageKey, log: me.log });
-        state.loop = ACEUIModLoader.loop.start(function (now) { tick(state, now); });
+        state.panel = ACEUIAppLoader.panel.attach(root, { hudId: me.hudId, storageKey: me.storageKey, log: me.log });
+        state.loop = ACEUIAppLoader.loop.start(function (now) { tick(state, now); });
         me.log("attached");
 
         return state;
     };
 
     const detach = function (state) {
-        ACEUIModLoader.loop.stop(state.loop);
-        ACEUIModLoader.panel.detach(state.panel);
+        ACEUIAppLoader.loop.stop(state.loop);
+        ACEUIAppLoader.panel.detach(state.panel);
     };
 
-    me.log("script loaded, version=" + me.version + ", lib=" + ACEUIModLoader.VERSION);
+    me.log("script loaded, version=" + me.version + ", lib=" + ACEUIAppLoader.VERSION);
 
     return {
         CLASS: CLASS,
@@ -132,11 +132,11 @@ const __GLOBAL__ = (function () {
 }());
 
 /* Attach to #__NAME__: the loader creates it in game, the preview page carries it. */
-ACEUIModLoader.app("__NAME__").mount(__GLOBAL__.attach);
+ACEUIAppLoader.app("__NAME__").mount(__GLOBAL__.attach);
 """
 
 STYLE = """/*
- * __TITLE__ -- stylesheet. Linked by the ACEUIModLoader after the stock CSS, so
+ * __TITLE__ -- stylesheet. Linked by the ACEUIAppLoader after the stock CSS, so
  * --font-family-main is the game's. Stock HUD widget look: black 75 % panel,
  * solid #1c1e1f header, #bd0000 accents. No var() fallbacks (Cohtml).
  */
@@ -188,7 +188,7 @@ body.hide-hud .ace-__NAME__ {
 }
 """
 
-TEST = """\"\"\"Runs the shared ACEUIModLoader test kit against this app (see appkit.py in the loader repo).\"\"\"
+TEST = """\"\"\"Runs the shared ACEUIAppLoader test kit against this app (see appkit.py in the loader repo).\"\"\"
 import os
 import sys
 import unittest
@@ -200,11 +200,11 @@ ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 LOADER = os.environ.get("ACE_LOADER_DIR")
 HERE = ROOT
 while not LOADER:
-    for candidate in (HERE, os.path.join(HERE, "ACEUIModLoader")):
+    for candidate in (HERE, os.path.join(HERE, "ACEUIAppLoader")):
         if os.path.isfile(os.path.join(candidate, "tools", "appkit.py")):
             LOADER = candidate
     if not LOADER and HERE == os.path.dirname(HERE):
-        raise SystemExit("ACEUIModLoader not found: clone it next to this repo or set ACE_LOADER_DIR")
+        raise SystemExit("ACEUIAppLoader not found: clone it next to this repo or set ACE_LOADER_DIR")
     HERE = os.path.dirname(HERE)
 sys.path.insert(0, os.path.join(LOADER, "tools"))
 
@@ -305,12 +305,12 @@ PREVIEW = """<!DOCTYPE html>
 README = """# __REPO__
 
 __TITLE__: a UI app for Assetto Corsa EVO, loaded by the
-[ACEUIModLoader](../ACEUIModLoader) and built on its library.
+[ACEUIAppLoader](../ACEUIAppLoader) and built on its library.
 
 ## Layout
 
 - `__NAME__/` - the shipped app, exactly what lands in
-  `Saved Games\\ACE\\mods\\uiresources\\ACEUIModLoaderApps\\__NAME__\\`:
+  `Saved Games\\ACE\\mods\\uiresources\\ACEUIAppLoader\\__NAME__\\`:
   `app.json` (version, styles, scripts), `__NAME__.js`, `__NAME__.css`.
 - `tests/test_app.py` - runs the loader's shared test kit (`appkit.py`) against
   this repo: app.json, style and Cohtml rules, and `tests/harness.html` in a
@@ -323,7 +323,7 @@ With the loader package installed (`python tools/build_loader.py --install` in
 the loader repo):
 
 ```
-python ..\\ACEUIModLoader\\tools\\install_app.py __NAME__
+python ..\\ACEUIAppLoader\\tools\\install_app.py __NAME__
 ```
 
 Escape and resume in the car reloads the HUD and picks up changes.
@@ -365,7 +365,7 @@ def create(name, parent, title=None, developer=False):
     repo = os.path.join(parent, "ACE" + global_name)
     if os.path.exists(repo):
         raise SystemExit(f"{repo} already exists")
-    lib = "../../ACEUIModLoader/tests/lib"
+    lib = "../../ACEUIAppLoader/tests/lib"
     values = dict(NAME=name, TITLE=title, GLOBAL=global_name, ABBR=abbreviation(name), LIB=lib,
                   REPO="ACE" + global_name, DEVELOPER=DEVELOPER_KEY if developer else "")
     files = {

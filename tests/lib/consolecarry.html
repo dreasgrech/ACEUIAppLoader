@@ -39,10 +39,10 @@
 <script src="loader.js"></script>
 
 <script>
-    const con = window.ACEUIModLoader && window.ACEUIModLoader.console;
+    const con = window.ACEUIAppLoader && window.ACEUIAppLoader.console;
 
     t("the library loaded and the console module is there", function () {
-        if (!con) { throw new Error("no ACEUIModLoader.console"); }
+        if (!con) { throw new Error("no ACEUIAppLoader.console"); }
     });
 
     t("the lines from before the reload are in the buffer", function () {

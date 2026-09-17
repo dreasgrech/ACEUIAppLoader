@@ -1,11 +1,11 @@
 /**
- * ACEUIModLoader.settings -- a settings page per app, rendered by the loader.
+ * ACEUIAppLoader.settings -- a settings page per app, rendered by the loader.
  *
  * An app declares what it has; the loader stores the values, draws the controls in the
  * app drawer's options pane, and tells the app when something changes. The app never
  * touches storage or builds a form.
  *
- *     const opts = ACEUIModLoader.settings.define("devconsole", [
+ *     const opts = ACEUIAppLoader.settings.define("devconsole", [
  *         { key: "toggleKey", type: "key",    label: "Toggle key",   value: "Backquote" },
  *         { key: "scale",     type: "range",  label: "Panel scale",  value: 1, min: 0.6, max: 2, step: 0.1 },
  *         { key: "follow",    type: "toggle", label: "Follow newest", value: true },
@@ -13,34 +13,34 @@
  *     ]);
  *
  *     opts.scale;                                   // the stored value, already applied
- *     ACEUIModLoader.settings.get("devconsole", "scale");
- *     ACEUIModLoader.settings.onChange("devconsole", function (key, value) { ... });
+ *     ACEUIAppLoader.settings.get("devconsole", "scale");
+ *     ACEUIAppLoader.settings.onChange("devconsole", function (key, value) { ... });
  *
  * Types are deliberately limited to controls this engine is known to render. Cohtml is
  * not a browser: `<input type="range">` and `<select>` are unproven here, so a range is
  * a pair of -/+ buttons and a choice cycles on click -- both patterns already proven in
  * the dev console and DOOM. Text uses a plain `<input>`, which is proven (the console
- * prompt), and takes the keyboard through ACEUIModLoader.input while focused so typing a
+ * prompt), and takes the keyboard through ACEUIAppLoader.input while focused so typing a
  * value cannot drive the car.
  *
  * The `key` type exists because apps hardcoding hotkeys collide with whatever the player
  * has bound; this lets them move ours.
  *
  * Declaring settings is all it takes for the drawer to offer a way in. Clicking it opens
- * that app's own settings window -- an ACEUIModLoader.window, draggable, with an [X] --
+ * that app's own settings window -- an ACEUIAppLoader.window, draggable, with an [X] --
  * rather than unfolding a pane inside the drawer, which would push every row below it
  * down the list. The window can also be driven directly:
  *
- *     ACEUIModLoader.settings.open("devconsole");
- *     ACEUIModLoader.settings.close("devconsole");
- *     ACEUIModLoader.settings.toggle("devconsole");
- *     ACEUIModLoader.settings.isOpen("devconsole");
+ *     ACEUIAppLoader.settings.open("devconsole");
+ *     ACEUIAppLoader.settings.close("devconsole");
+ *     ACEUIAppLoader.settings.toggle("devconsole");
+ *     ACEUIAppLoader.settings.isOpen("devconsole");
  *
- * Values are written to both stores (see ACEUIModLoader.persist): the HUD layout
+ * Values are written to both stores (see ACEUIAppLoader.persist): the HUD layout
  * container, which the game writes to disk and is the only thing that survives a restart,
  * and localStorage, which is read synchronously so a value is there the moment an app asks.
  */
-ACEUIModLoader.settings = (function () {
+ACEUIAppLoader.settings = (function () {
 
     /**
      * `action` and `info` carry no value: an action is a button the app handles, an info
@@ -60,19 +60,19 @@ ACEUIModLoader.settings = (function () {
     const CANCEL_KEY = "Escape";
     const CLEAR_TEXT = "Reset to defaults";
 
-    /** The settings window is an ACEUIModLoader.window; this is its id and width. */
+    /** The settings window is an ACEUIAppLoader.window; this is its id and width. */
     const WINDOW_ID_SUFFIX = ".settings";
     const WINDOW_WIDTH = "17rem";
 
-    const THEME = ACEUIModLoader.dom.THEME;
+    const THEME = ACEUIAppLoader.dom.THEME;
 
-    const persist = ACEUIModLoader.persist;
+    const persist = ACEUIAppLoader.persist;
 
     /** name -> { specs, values, listeners } */
     const declared = {};
 
-    const css = ACEUIModLoader.dom.css;
-    const make = ACEUIModLoader.dom.make;
+    const css = ACEUIAppLoader.dom.css;
+    const make = ACEUIAppLoader.dom.make;
 
     const hudId = function (app) {
         return HUD_PREFIX + app + HUD_SUFFIX;
@@ -92,10 +92,10 @@ ACEUIModLoader.settings = (function () {
      * drawer knows the title from app.json, and the loader's description is the fallback.
      */
     const titleFor = function (name) {
-        const drawer = ACEUIModLoader.drawer;
+        const drawer = ACEUIAppLoader.drawer;
         const listed = drawer && drawer.state ? drawer.state.apps : [];
         const found = listed.filter(function (entry) { return entry.name === name; })[0];
-        const described = ACEUIModLoader.app ? ACEUIModLoader.app(name) : null;
+        const described = ACEUIAppLoader.app ? ACEUIAppLoader.app(name) : null;
 
         if (found && found.title) { return found.title; }
 
@@ -148,7 +148,7 @@ ACEUIModLoader.settings = (function () {
         if (!held) { return; }
 
         held.listeners.forEach(function (listener) {
-            ACEUIModLoader.safely("[settings] " + app + " listener", function () {
+            ACEUIAppLoader.safely("[settings] " + app + " listener", function () {
                 listener(key, value, held.values);
             });
         });
@@ -345,9 +345,9 @@ ACEUIModLoader.settings = (function () {
         // well as the element, so its undo is kept: a settings window opened and closed a
         // few times would otherwise leave a pile of them behind, each still releasing the
         // keyboard on every click anywhere.
-        if (ACEUIModLoader.input) {
+        if (ACEUIAppLoader.input) {
             const held = entry(app);
-            const unbind = ACEUIModLoader.input.bindFocus(node, "settings:" + app);
+            const unbind = ACEUIAppLoader.input.bindFocus(node, "settings:" + app);
 
             if (held) { held.undo.push(unbind); }
         }
@@ -383,7 +383,7 @@ ACEUIModLoader.settings = (function () {
                 e.stopPropagation();
 
                 // Escape is the way out of a menu, not a hotkey worth binding
-                if (!ACEUIModLoader.keys.is(e, CANCEL_KEY)) { set(app, spec.key, e.code || e.key); }
+                if (!ACEUIAppLoader.keys.is(e, CANCEL_KEY)) { set(app, spec.key, e.code || e.key); }
 
                 finish();
             };
@@ -411,7 +411,7 @@ ACEUIModLoader.settings = (function () {
         return button(spec.button || "Run", function () {
             if (typeof spec.press !== "function") { return; }
 
-            ACEUIModLoader.safely("[settings] " + app + " action " + spec.key, function () {
+            ACEUIAppLoader.safely("[settings] " + app + " action " + spec.key, function () {
                 spec.press(app);
             });
         });
@@ -458,7 +458,7 @@ ACEUIModLoader.settings = (function () {
         const count = held.undo.length;
 
         held.undo.forEach(function (fn) {
-            ACEUIModLoader.safely("[settings] " + app + " teardown", fn);
+            ACEUIAppLoader.safely("[settings] " + app + " teardown", fn);
         });
         held.undo = [];
         held.repaint = [];
@@ -501,18 +501,18 @@ ACEUIModLoader.settings = (function () {
      * Each app's settings open as their own window, not as a panel that unfolds inside
      * the drawer: with more than a couple of apps an inline pane pushes every row below
      * it down the list and the drawer becomes unusable. The window itself is
-     * ACEUIModLoader.window, so it looks and behaves like any other app window.
+     * ACEUIAppLoader.window, so it looks and behaves like any other app window.
      */
     const windowId = function (app) {
         return app + WINDOW_ID_SUFFIX;
     };
 
     const isOpen = function (app) {
-        return ACEUIModLoader.window.isOpen(windowId(app));
+        return ACEUIAppLoader.window.isOpen(windowId(app));
     };
 
     const close = function (app) {
-        return ACEUIModLoader.window.close(windowId(app));
+        return ACEUIAppLoader.window.close(windowId(app));
     };
 
     const open = function (app) {
@@ -520,7 +520,7 @@ ACEUIModLoader.settings = (function () {
 
         if (!held) { return null; }
 
-        const win = ACEUIModLoader.window.open(windowId(app), {
+        const win = ACEUIAppLoader.window.open(windowId(app), {
             title: titleFor(app) + " settings",
             width: WINDOW_WIDTH,
             onClose: function () { teardown(app); }
@@ -555,7 +555,7 @@ ACEUIModLoader.settings = (function () {
             const usable = Boolean(spec) && Boolean(spec.key) && TYPES.indexOf(spec.type) >= 0;
 
             if (!usable) {
-                ACEUIModLoader.log("[settings] " + app + ": ignoring "
+                ACEUIAppLoader.log("[settings] " + app + ": ignoring "
                     + (spec && spec.key ? "\"" + spec.key + "\"" : "a spec with no key")
                     + " -- type must be one of " + TYPES.join(", ")
                     + (spec && spec.type ? " (got \"" + spec.type + "\")" : ""));
@@ -580,8 +580,8 @@ ACEUIModLoader.settings = (function () {
 
         // the drawer offers a way in for any app that has something to configure; clicking
         // it opens this app's own window rather than unfolding a pane inside the drawer
-        if (ACEUIModLoader.drawer && typeof ACEUIModLoader.drawer.registerOpener === "function") {
-            ACEUIModLoader.drawer.registerOpener(app, function () { toggle(app); });
+        if (ACEUIAppLoader.drawer && typeof ACEUIAppLoader.drawer.registerOpener === "function") {
+            ACEUIAppLoader.drawer.registerOpener(app, function () { toggle(app); });
         }
 
         return values;

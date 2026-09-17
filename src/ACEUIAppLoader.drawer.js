@@ -1,5 +1,5 @@
 /**
- * ACEUIModLoader.drawer -- the app drawer: every loaded app in one place.
+ * ACEUIAppLoader.drawer -- the app drawer: every loaded app in one place.
  *
  * A panel that lives off the right edge of the screen and slides in when the mouse
  * reaches that edge, in the spirit of Assetto Corsa Content Manager's app bar. It lists
@@ -12,11 +12,11 @@
  * useless. It also gives apps somewhere to put settings without each one growing its own
  * settings window.
  *
- * An app gets a way in by declaring settings -- ACEUIModLoader.settings registers the
+ * An app gets a way in by declaring settings -- ACEUIAppLoader.settings registers the
  * opener on its behalf, and clicking it opens that app's own window. An app with something
  * more bespoke than a settings page registers what to open itself:
  *
- *     ACEUIModLoader.drawer.registerOpener("telemetry", function () { myWindow.open(); });
+ *     ACEUIAppLoader.drawer.registerOpener("telemetry", function () { myWindow.open(); });
  *
  * It opens a window rather than unfolding a pane inside the drawer because an inline pane
  * pushes every row below it down the list, which with a dozen apps makes the list unusable.
@@ -41,7 +41,7 @@
  * (uicomponents.css: 0.25-0.5 s, opacity paired with transform, 1-2 rem of travel).
  * `will-change` is not in this engine at all, so there is no layer hint to reach for.
  */
-ACEUIModLoader.drawer = (function () {
+ACEUIAppLoader.drawer = (function () {
 
     const STORE_KEY = "acedrawer.apps";
 
@@ -78,8 +78,8 @@ ACEUIModLoader.drawer = (function () {
     /** Above the stock HUD, below nothing in particular; the HUD does not use z-index much. */
     const Z_INDEX = "9000";
 
-    /** One palette for every surface the loader draws; see ACEUIModLoader.dom. */
-    const THEME = ACEUIModLoader.dom.THEME;
+    /** One palette for every surface the loader draws; see ACEUIAppLoader.dom. */
+    const THEME = ACEUIAppLoader.dom.THEME;
 
     const TITLE_TEXT = "APPS";
     /**
@@ -109,7 +109,7 @@ ACEUIModLoader.drawer = (function () {
         closeTimer: 0
     };
 
-    const persist = ACEUIModLoader.persist;
+    const persist = ACEUIAppLoader.persist;
 
     /**
      * Read the saved switches immediately, while the library is still loading and before
@@ -130,8 +130,8 @@ ACEUIModLoader.drawer = (function () {
 
     // ---- tiny DOM helpers ----------------------------------------------------------
 
-    const css = ACEUIModLoader.dom.css;
-    const div = ACEUIModLoader.dom.div;
+    const css = ACEUIAppLoader.dom.css;
+    const div = ACEUIAppLoader.dom.div;
 
     /** Set the text of an element we already have; `dom.make` covers the create-and-fill case. */
     const text = function (node, value) {
@@ -153,7 +153,7 @@ ACEUIModLoader.drawer = (function () {
      * loaded -- so the loader's own copy of the manifest answers until then.
      */
     const isDeveloper = function (name) {
-        const loader = ACEUIModLoader.loader;
+        const loader = ACEUIAppLoader.loader;
 
         if (Object.prototype.hasOwnProperty.call(state.dev, name)) { return state.dev[name]; }
 
@@ -194,7 +194,7 @@ ACEUIModLoader.drawer = (function () {
     const applyVisibility = function (name) {
         const root = rootOf(name);
         const on = isVisible(name);
-        const loader = ACEUIModLoader.loader;
+        const loader = ACEUIAppLoader.loader;
 
         if (root) { root.style.display = on ? "" : "none"; }
 
@@ -208,7 +208,7 @@ ACEUIModLoader.drawer = (function () {
     /**
      * Called by the loader the instant it creates an app's root, before the app's scripts
      * run. Without this a switched-off app is visible from the moment its root exists
-     * until the drawer is built -- and the drawer is built on ACEUIModLoader.ready, which
+     * until the drawer is built -- and the drawer is built on ACEUIAppLoader.ready, which
      * only fires once *every* app has finished loading. With a large app in the queue
      * that is about a second of the app flashing on and then vanishing again after a
      * pause-menu reload, which is exactly what it looked like.
@@ -298,7 +298,7 @@ ACEUIModLoader.drawer = (function () {
 
     /** Re-apply every switch: after adopting the HUD store, apps may need hiding. */
     const refreshAll = function () {
-        const apps = ACEUIModLoader.apps || [];
+        const apps = ACEUIAppLoader.apps || [];
 
         apps.forEach(function (entry) { applyVisibility(entry.name); });
         state.apps.forEach(function (app) {
@@ -365,7 +365,7 @@ ACEUIModLoader.drawer = (function () {
     };
 
     /**
-     * What the OPTIONS button on an app's row should open. ACEUIModLoader.settings calls
+     * What the OPTIONS button on an app's row should open. ACEUIAppLoader.settings calls
      * this for every app that declares settings, so most apps never call it themselves.
      */
     const registerOpener = function (name, open) {
@@ -458,7 +458,7 @@ ACEUIModLoader.drawer = (function () {
             if (e.target !== gear) {
                 onToggle();
             } else if (state.openers[app.name]) {
-                ACEUIModLoader.safely("[drawer] " + app.name + " options", state.openers[app.name]);
+                ACEUIAppLoader.safely("[drawer] " + app.name + " options", state.openers[app.name]);
             }
 
             e.stopPropagation();
@@ -519,7 +519,7 @@ ACEUIModLoader.drawer = (function () {
     };
 
     const build = function (apps) {
-        const selector = ACEUIModLoader.loader ? ACEUIModLoader.loader.CONTAINER_SELECTOR : "";
+        const selector = ACEUIAppLoader.loader ? ACEUIAppLoader.loader.CONTAINER_SELECTOR : "";
         const container = (selector && document.querySelector(selector)) || document.body;
         const stored = persist.readHud(HUD_ID) || persist.readLocal(STORE_KEY);
         const storedDev = persist.readHud(DEV_HUD_ID) || persist.readLocal(DEV_STORE_KEY);
@@ -601,7 +601,7 @@ ACEUIModLoader.drawer = (function () {
 
         // the pointer reaching the right edge opens it; leaving the panel closes it again
         hot.addEventListener("mouseenter", function () {
-            if (!ACEUIModLoader.hudHidden()) { open(); }
+            if (!ACEUIAppLoader.hudHidden()) { open(); }
         });
         panel.addEventListener("mouseenter", cancelClose);
         panel.addEventListener("mouseleave", closeSoon);
@@ -623,8 +623,8 @@ ACEUIModLoader.drawer = (function () {
     persist.whenHudReady(adoptHudStore, { pollMs: HUD_POLL_MS, waitMs: HUD_WAIT_MS });
 
     /** Build once the loader knows what is installed. */
-    if (typeof ACEUIModLoader.ready === "function") {
-        ACEUIModLoader.ready(function (apps) {
+    if (typeof ACEUIAppLoader.ready === "function") {
+        ACEUIAppLoader.ready(function (apps) {
             if (state.built) { return; }
 
             build(apps);

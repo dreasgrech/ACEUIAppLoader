@@ -4,7 +4,7 @@
  *     .run loadtest
  *
  * Sit still for about 40 s. It builds synthetic apps shaped like real ones -- a root in
- * the HUD container, ~60 elements each, an ACEUIModLoader.panel (so they add the same
+ * the HUD container, ~60 elements each, an ACEUIAppLoader.panel (so they add the same
  * global listeners and per-frame position work), and a frame loop doing a typical app's
  * writes -- then measures the page's frame rate as their number grows, and takes them all
  * away again.
@@ -34,7 +34,7 @@
     const PERCENTILE = 0.95;
     const ID_PREFIX = "loadtest_";
 
-    const loader = window.ACEUIModLoader;
+    const loader = window.ACEUIAppLoader;
     const apps = [];
     const results = [];
     let sharedLoop = null;

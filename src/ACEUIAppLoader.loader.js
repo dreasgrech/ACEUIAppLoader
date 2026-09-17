@@ -1,5 +1,5 @@
 /**
- * ACEUIModLoader.loader -- finds and loads the installed UI apps.
+ * ACEUIAppLoader.loader -- finds and loads the installed UI apps.
  *
  * Last of the library files appended to the stock `uiresources/js/cohtml.js`.
  *
@@ -7,8 +7,8 @@
  * video settings presets in `Saved Games\ACE\Video\*.settingspreset`, on request
  * `SettingsRequestVideoPresetList`, answered through `SettingsResponseVideoPresetList`
  * with the file stems. Every app therefore ships an EMPTY marker file
- * `Video\ACEUIModLoaderApps-<name>.settingspreset` next to its folder
- * `mods\uiresources\ACEUIModLoaderApps\<name>\`; the player unzips both into
+ * `Video\ACEUIAppLoader-<name>.settingspreset` next to its folder
+ * `mods\uiresources\ACEUIAppLoader\<name>\`; the player unzips both into
  * `Saved Games\ACE` and nothing has to be registered anywhere. The marker must stay
  * empty: the game deserialises each listed file first, and an empty file is a valid
  * default message. (Confirmed in game 2026-09-14.)
@@ -21,8 +21,8 @@
  * without an answer within PRESET_TIMEOUT_MS the loader logs why and loads nothing.
  *
  * Bundled apps. The loader also ships apps of its own -- its developer tools -- inside
- * its own package under `ACEUIModLoaderBuiltIn/<name>/`, listed by
- * `ACEUIModLoaderBuiltIn/apps.json` (written by tools/build_loader.py). They need no marker
+ * its own package under `ACEUIAppLoaderBuiltIn/<name>/`, listed by
+ * `ACEUIAppLoaderBuiltIn/apps.json` (written by tools/build_loader.py). They need no marker
  * and no install, so they are there even on the path where the preset list never answers.
  * The two roots must stay apart, because **loose files never beat packed files**: a
  * bundled app sitting at the loose path could never be overridden, and iterating on it
@@ -41,7 +41,7 @@
  * Before an app's scripts run the loader creates its root, `<div id="<name>"
  * data-app="<name>">`, inside the HUD's positioning container (or <body> on
  * pages without one), so a script only has to attach to `#<name>`. While the
- * scripts run, `ACEUIModLoader.app()` describes the app being loaded: name,
+ * scripts run, `ACEUIAppLoader.app()` describes the app being loaded: name,
  * version, title, root, a prefixed logger and derived storage keys, so none of
  * that is repeated in the app's own source; `app("x").mount(attach)` calls
  * `attach(#x)` once the DOM has the root, so a script needs no boot code either.
@@ -50,15 +50,15 @@
  * checks existence and then dies opening it (crashed the game three times). Only
  * plain file names listed in an app.json are ever requested.
  *
- * Everything the loader logs starts with "[ACEUIModLoader]" so the game log (and
+ * Everything the loader logs starts with "[ACEUIAppLoader]" so the game log (and
  * tools/check_ingame_log.py) can follow it.
  */
-ACEUIModLoader.loader = (function () {
+ACEUIAppLoader.loader = (function () {
 
     /** Folder, relative to the page, that holds one folder per installed (loose) app. */
-    const ROOT = "ACEUIModLoaderApps/";
+    const ROOT = "ACEUIAppLoader/";
     /** The same, for the apps bundled in the loader's own package; see the header. */
-    const BUILTIN_ROOT = "ACEUIModLoaderBuiltIn/";
+    const BUILTIN_ROOT = "ACEUIAppLoaderBuiltIn/";
     /** What lists them, since a page cannot list a folder: [{ name, version }]. */
     const BUILTIN_INDEX = "apps.json";
     const APP_FILE = "app.json";
@@ -72,12 +72,12 @@ ACEUIModLoader.loader = (function () {
     const PRESET_REQUEST = "SettingsRequestVideoPresetList";
     const PRESET_RESPONSE = "SettingsResponseVideoPresetList";
     /** Marker file name: MARKER_PREFIX + app name + MARKER_EXT, zero bytes. */
-    const MARKER_PREFIX = "ACEUIModLoaderApps-";
+    const MARKER_PREFIX = "ACEUIAppLoader-";
     const MARKER_EXT = ".settingspreset";
     /** After this long without an answer the loader gives up and loads nothing. */
     const PRESET_TIMEOUT_MS = 1500;
     /** Property set on our own response handler so the engine.on wrapper leaves it alone. */
-    const OWN_HANDLER = "aceuimodloaderRaw";
+    const OWN_HANDLER = "aceuiapploaderRaw";
 
     /** Where app roots go: the stock HUD's positioning container, else the body. */
     const CONTAINER_SELECTOR = ".absolutecenter";
@@ -99,7 +99,7 @@ ACEUIModLoader.loader = (function () {
     const SCALE_STEP = 0.1;
     const SCALE_DIGITS = 2;
 
-    const log = ACEUIModLoader.log;
+    const log = ACEUIAppLoader.log;
 
     const state = {
         apps: [],           // { name, info, status, base, builtin }
@@ -306,7 +306,7 @@ ACEUIModLoader.loader = (function () {
     const wantsPage = function (info) {
         const pages = Array.isArray(info.pages) && info.pages.length ? info.pages : DEFAULT_PAGES;
 
-        return pages.indexOf(ACEUIModLoader.page) >= 0 || pages.indexOf(ANY_PAGE) >= 0;
+        return pages.indexOf(ACEUIAppLoader.page) >= 0 || pages.indexOf(ANY_PAGE) >= 0;
     };
 
     /** The app's root element, created inside the HUD container unless the app opts out or one exists. */
@@ -324,7 +324,7 @@ ACEUIModLoader.loader = (function () {
         // An app switched off in the app drawer must be hidden the moment its root exists,
         // not when the drawer is built: the drawer builds on ready(), which fires only
         // after every app has loaded, so the app would flash on for that whole time.
-        if (ACEUIModLoader.drawer) { ACEUIModLoader.drawer.applyStored(name); }
+        if (ACEUIAppLoader.drawer) { ACEUIAppLoader.drawer.applyStored(name); }
 
         return root;
     };
@@ -335,7 +335,7 @@ ACEUIModLoader.loader = (function () {
 
     /** The drawer owns the on/off switches; without it every app is on. */
     const enabled = function (name) {
-        return !ACEUIModLoader.drawer || ACEUIModLoader.drawer.isVisible(name);
+        return !ACEUIAppLoader.drawer || ACEUIAppLoader.drawer.isVisible(name);
     };
 
     /**
@@ -381,7 +381,7 @@ ACEUIModLoader.loader = (function () {
         try {
             entry.detach(entry.instance);
         } catch (e) {
-            log("app " + name + " detach threw: " + ACEUIModLoader.errorText(e));
+            log("app " + name + " detach threw: " + ACEUIAppLoader.errorText(e));
         }
 
         entry.instance = null;
@@ -395,34 +395,34 @@ ACEUIModLoader.loader = (function () {
 
     /**
      * Everything an app's script needs to know about itself, derived from the folder name
-     * and app.json: `ACEUIModLoader.app()` while its scripts run, `ACEUIModLoader.app("x")` any
+     * and app.json: `ACEUIAppLoader.app()` while its scripts run, `ACEUIAppLoader.app("x")` any
      * time. Unknown names (preview pages without the loader) get a "dev" description.
      */
     const describe = function (name, entry) {
         const info = entry && entry.info ? entry.info : {};
         const title = info.title || name;
         const key = function (suffix) { return KEY_PREFIX + name + "." + suffix; };
-        const log = ACEUIModLoader.logger("[" + title + "]");
+        const log = ACEUIAppLoader.logger("[" + title + "]");
 
         /**
          * A value this app wants back after the HUD reloads on Escape/resume. It lives in
          * `localStorage`, which is per view: it survives that reload and dies with the
          * game. Anything that must outlive the game belongs in a declared setting
-         * (ACEUIModLoader.settings) or, if it is large, in the engine's own container
-         * (ACEUIModLoader.persist.writeStore).
+         * (ACEUIAppLoader.settings) or, if it is large, in the engine's own container
+         * (ACEUIAppLoader.persist.writeStore).
          */
         const recall = function (suffix, fallback) {
-            const value = ACEUIModLoader.persist.readLocal(key(suffix));
+            const value = ACEUIAppLoader.persist.readLocal(key(suffix));
 
             return value === null || value === undefined ? fallback : value;
         };
 
         const remember = function (suffix, value) {
-            return ACEUIModLoader.persist.writeLocal(key(suffix), value);
+            return ACEUIAppLoader.persist.writeLocal(key(suffix), value);
         };
 
         const forget = function (suffix) {
-            ACEUIModLoader.persist.removeLocal(key(suffix));
+            ACEUIAppLoader.persist.removeLocal(key(suffix));
         };
 
         /**
@@ -447,7 +447,7 @@ ACEUIModLoader.loader = (function () {
                 max: typeof opts.max === "number" ? opts.max : SCALE_MAX,
                 step: typeof opts.step === "number" ? opts.step : SCALE_STEP
             };
-            const settings = ACEUIModLoader.settings;
+            const settings = ACEUIAppLoader.settings;
             const declared = function () {
                 return settings && settings.specs(name).filter(function (spec) {
                     return spec.key === SCALE_KEY;
@@ -461,7 +461,7 @@ ACEUIModLoader.loader = (function () {
             const handle = { applied: 0, unsubscribe: null };
 
             const apply = function (value) {
-                const next = Number(ACEUIModLoader.clamp(value, bounds.min, bounds.max).toFixed(SCALE_DIGITS));
+                const next = Number(ACEUIAppLoader.clamp(value, bounds.min, bounds.max).toFixed(SCALE_DIGITS));
 
                 handle.applied = next;
                 root.style.fontSize = next + "rem";
@@ -542,7 +542,7 @@ ACEUIModLoader.loader = (function () {
          */
         const panelFor = function (root, onFrame, options) {
             const opts = options || {};
-            const panel = ACEUIModLoader.panel.attach(root, {
+            const panel = ACEUIAppLoader.panel.attach(root, {
                 hudId: HUD_ID_PREFIX + name,
                 storageKey: key(POSITION_SUFFIX),
                 log: log,
@@ -550,8 +550,8 @@ ACEUIModLoader.loader = (function () {
             });
             const handle = { panel: panel, loop: null, stopped: false };
 
-            handle.loop = ACEUIModLoader.loop.start(function (now) {
-                ACEUIModLoader.panel.update(panel, now);
+            handle.loop = ACEUIAppLoader.loop.start(function (now) {
+                ACEUIAppLoader.panel.update(panel, now);
 
                 if (onFrame) { onFrame(now); }
             }, name);
@@ -560,8 +560,8 @@ ACEUIModLoader.loader = (function () {
                 if (handle.stopped) { return false; }
 
                 handle.stopped = true;
-                ACEUIModLoader.loop.stop(handle.loop);
-                ACEUIModLoader.panel.detach(panel);
+                ACEUIAppLoader.loop.stop(handle.loop);
+                ACEUIAppLoader.panel.detach(panel);
 
                 return true;
             };
@@ -586,7 +586,7 @@ ACEUIModLoader.loader = (function () {
          * nothing is on screen, and the drawer is where anyone looks to get it back.
          */
         const show = function (on) {
-            const drawer = ACEUIModLoader.drawer;
+            const drawer = ACEUIAppLoader.drawer;
 
             if (!drawer) { return true; }
 
@@ -617,7 +617,7 @@ ACEUIModLoader.loader = (function () {
          * through the drawer. Call it once, beside `mount`; it returns an unbind for tests.
          */
         const toggleKey = function (getKey) {
-            return ACEUIModLoader.keys.bind(getKey, function (e) {
+            return ACEUIAppLoader.keys.bind(getKey, function (e) {
                 show(!shown());
                 e.preventDefault();
             });
@@ -628,7 +628,7 @@ ACEUIModLoader.loader = (function () {
             // app's script, so it says "the script ran" even for an app switched off in the
             // drawer -- which is exactly when you want to know
             log("script loaded, version " + (info.version || DEV_VERSION)
-                + ", library " + ACEUIModLoader.VERSION + ", page " + ACEUIModLoader.page);
+                + ", library " + ACEUIAppLoader.VERSION + ", page " + ACEUIAppLoader.page);
 
             const boot = function () {
                 const root = document.getElementById(name);
@@ -804,7 +804,7 @@ ACEUIModLoader.loader = (function () {
      * ModelUIState, which is registered well before this runs.
      */
     const warnIfGameMoved = function () {
-        const built = ACEUIModLoader.builtFor;
+        const built = ACEUIAppLoader.builtFor;
         const running = window.ModelUIState ? window.ModelUIState.game_version : null;
 
         if (built && running && running !== built) {
@@ -814,7 +814,7 @@ ACEUIModLoader.loader = (function () {
     };
 
     const start = function () {
-        log("loader " + ACEUIModLoader.VERSION + " on /" + ACEUIModLoader.page);
+        log("loader " + ACEUIAppLoader.VERSION + " on /" + ACEUIAppLoader.page);
         warnIfGameMoved();
         state.filtering = hideMarkersFromStock();
 
@@ -916,10 +916,10 @@ ACEUIModLoader.loader = (function () {
     };
 }());
 
-/* Convenience aliases so apps can stay on the flat `ACEUIModLoader.*` API. */
-ACEUIModLoader.ROOT = ACEUIModLoader.loader.ROOT;
-ACEUIModLoader.apps = ACEUIModLoader.loader.apps;
-ACEUIModLoader.app = ACEUIModLoader.loader.app;
-ACEUIModLoader.ready = ACEUIModLoader.loader.ready;
-ACEUIModLoader.addStylesheet = ACEUIModLoader.loader.addStylesheet;
-ACEUIModLoader.addScript = ACEUIModLoader.loader.addScript;
+/* Convenience aliases so apps can stay on the flat `ACEUIAppLoader.*` API. */
+ACEUIAppLoader.ROOT = ACEUIAppLoader.loader.ROOT;
+ACEUIAppLoader.apps = ACEUIAppLoader.loader.apps;
+ACEUIAppLoader.app = ACEUIAppLoader.loader.app;
+ACEUIAppLoader.ready = ACEUIAppLoader.loader.ready;
+ACEUIAppLoader.addStylesheet = ACEUIAppLoader.loader.addStylesheet;
+ACEUIAppLoader.addScript = ACEUIAppLoader.loader.addScript;

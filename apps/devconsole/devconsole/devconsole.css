@@ -1,7 +1,7 @@
 /*
  * DevConsole -- console stylesheet.
  *
- * Linked into hud.html by the ACEUIModLoader after the stock ui.css /
+ * Linked into hud.html by the ACEUIAppLoader after the stock ui.css /
  * uicomponents.css, so the font variable below is the game's. The look follows
  * the stock HUD widgets (chat, MFD): a black 75 % panel with a solid #1c1e1f
  * header bar, flat text buttons that turn #bd0000 on hover, thin white

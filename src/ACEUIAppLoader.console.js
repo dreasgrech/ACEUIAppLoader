@@ -1,5 +1,5 @@
 /**
- * ACEUIModLoader.console -- captures everything the UI logs, for in-game display.
+ * ACEUIAppLoader.console -- captures everything the UI logs, for in-game display.
  *
  * Wraps every console method the engine offers as soon as this file runs (before
  * the stock bundle, which calls them hundreds of times), keeps the last MAX_ENTRIES
@@ -17,7 +17,7 @@
  * Entries are { seq, t, level, text }; `capture(level, text)` adds one without
  * going through console (used by the debug console for its own echo/result lines).
  */
-ACEUIModLoader.console = (function () {
+ACEUIAppLoader.console = (function () {
 
     const MAX_ENTRIES = 500;
     const LEVELS = ["log", "info", "debug", "warn", "error", "trace", "dir", "table"];
@@ -33,7 +33,7 @@ ACEUIModLoader.console = (function () {
     /**
      * Carrying the buffer across the HUD page reload that Escape and resume cause.
      *
-     * localStorage rather than ACEUIModLoader.persist, which wraps the same calls: this
+     * localStorage rather than ACEUIAppLoader.persist, which wraps the same calls: this
      * module loads first, before persist exists, and it loads first on purpose so that it
      * captures what every later module logs. It keeps fewer entries than it holds in
      * memory, because the point is the tail -- what was happening before the reload.
@@ -117,7 +117,7 @@ ACEUIModLoader.console = (function () {
         // the game log -- where everything else here gets verified -- without entering the
         // buffer it is describing. Capturing it would persist a marker that the next reload
         // carries, and the one after that, until the buffer is mostly markers.
-        ACEUIModLoader.log("[console] carried " + state.carried + " line(s) from before the reload");
+        ACEUIAppLoader.log("[console] carried " + state.carried + " line(s) from before the reload");
     };
 
     const truncate = function (text) {
@@ -170,7 +170,7 @@ ACEUIModLoader.console = (function () {
             // threw, and that log line is captured like any other (the guard above stops
             // it recursing). Without the finally, a throw left the flag set for ever.
             state.listeners.forEach(function (listener) {
-                ACEUIModLoader.safely("[console] listener", function () { listener(entry); });
+                ACEUIAppLoader.safely("[console] listener", function () { listener(entry); });
             });
         } finally {
             state.notifying = false;
@@ -203,7 +203,7 @@ ACEUIModLoader.console = (function () {
 
         state.original[level] = original;
         console[level] = function () {
-            const args = ACEUIModLoader.toArray(arguments);
+            const args = ACEUIAppLoader.toArray(arguments);
 
             push(level, formatArgs(args));
             original.apply(console, args);
@@ -228,7 +228,7 @@ ACEUIModLoader.console = (function () {
 
         state.original.assert = original;
         console.assert = function (condition) {
-            const args = ACEUIModLoader.toArray(arguments).slice(1);
+            const args = ACEUIAppLoader.toArray(arguments).slice(1);
 
             if (!condition) { push(ASSERT_LEVEL, ASSERT_PREFIX + formatArgs(args)); }
 

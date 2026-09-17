@@ -1,5 +1,5 @@
 """
-appkit.py - the shared test kit for ACEUIModLoader apps.
+appkit.py - the shared test kit for ACEUIAppLoader apps.
 
 An app repo needs one test file. tools/new_app.py writes it; the part worth knowing is
 that it finds this kit by walking up from the app's own root, because the loader is
@@ -7,7 +7,7 @@ either beside the app (its own repo) or above it (a bundled app in the loader's 
 
     import os, sys
     ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-    ... walk up for <dir>/tools/appkit.py or <dir>/ACEUIModLoader/tools/appkit.py ...
+    ... walk up for <dir>/tools/appkit.py or <dir>/ACEUIAppLoader/tools/appkit.py ...
     sys.path.insert(0, os.path.join(LOADER, "tools"))
     from appkit import AppTests
 
@@ -19,7 +19,7 @@ not listed, no stock file is overridden, no legacy boilerplate (VERSION file, mo
 install wrapper, `const VERSION` in scripts), the project's JavaScript style rules,
 the Cohtml rules (no `var(--x, fallback)`, no per-frame SVG/canvas, no CSS in
 scripts), class names used by scripts exist in the stylesheet, identity comes from
-`ACEUIModLoader.app(...)`, and every `tests/**/harness.html` passes in a headless
+`ACEUIAppLoader.app(...)`, and every `tests/**/harness.html` passes in a headless
 browser (tools/headless.py; skipped without a browser).
 
 Optional class attributes:
@@ -152,7 +152,7 @@ class AppTests(unittest.TestCase):
             self.assertFalse(os.path.exists(os.path.join(self.ROOT, rel)), f"{rel}: gone since loader 0.4.0 (app.json holds the version)")
         self.assertFalse(os.path.exists(os.path.join(self.app_dir, "mod.js")), "mod.js: the loader creates the root now")
         for name, js in self.scripts.items():
-            self.assertIsNone(re.search(r"const VERSION\s*=", js), f"{name}: the version lives in app.json; read ACEUIModLoader.app().version")
+            self.assertIsNone(re.search(r"const VERSION\s*=", js), f"{name}: the version lives in app.json; read ACEUIAppLoader.app().version")
 
     # ---- the scripts ----------------------------------------------------------------
 
@@ -173,8 +173,8 @@ class AppTests(unittest.TestCase):
 
     def test_identity_comes_from_the_loader(self):
         joined = "\n".join(self.scripts.values())
-        self.assertIn("ACEUIModLoader.app(", joined, "read name/version/title/root/log/keys from ACEUIModLoader.app(...)")
-        self.assertIn(".mount(", joined, "attach through ACEUIModLoader.app(name).mount(attach), not your own boot code")
+        self.assertIn("ACEUIAppLoader.app(", joined, "read name/version/title/root/log/keys from ACEUIAppLoader.app(...)")
+        self.assertIn(".mount(", joined, "attach through ACEUIAppLoader.app(name).mount(attach), not your own boot code")
         for name, js in self.scripts.items():
             code = strip_js(js)
             for own in ("DOMContentLoaded", "readyState"):
@@ -182,7 +182,7 @@ class AppTests(unittest.TestCase):
             for own in LIBRARY_OWNED:
                 if own in self.ALLOW_OWN:
                     continue
-                self.assertNotIn(own, code, f"{name}: {own} belongs to the library (ACEUIModLoader.loop/persist/panel)")
+                self.assertNotIn(own, code, f"{name}: {own} belongs to the library (ACEUIAppLoader.loop/persist/panel)")
 
     def test_class_names_used_by_scripts_exist_in_the_stylesheet(self):
         css = "\n".join(self.styles.values())

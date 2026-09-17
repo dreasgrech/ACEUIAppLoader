@@ -1,22 +1,22 @@
 /**
- * ACEUIModLoader.core -- the root namespace and the small helpers every app uses.
+ * ACEUIAppLoader.core -- the root namespace and the small helpers every app uses.
  *
  * First of the library files appended to the stock `uiresources/js/cohtml.js`
  * (see tools/build_loader.py for the order), so it runs on every Gameface page
- * before Kunos' bundle. Later files add one namespace each (`ACEUIModLoader.console`,
- * `.persist`, `.panel`, `.loop`, `.loader`); apps only ever talk to `ACEUIModLoader.*`.
+ * before Kunos' bundle. Later files add one namespace each (`ACEUIAppLoader.console`,
+ * `.persist`, `.panel`, `.loop`, `.loader`); apps only ever talk to `ACEUIAppLoader.*`.
  *
  * Classic scripts: a top-level `const` is a page-wide binding but not a window
- * property, so the module is also assigned to `window.ACEUIModLoader` for apps that
+ * property, so the module is also assigned to `window.ACEUIAppLoader` for apps that
  * detect the loader that way.
  */
-const ACEUIModLoader = (function () {
+const ACEUIAppLoader = (function () {
 
     /** Loader/library version -- keep in step with the VERSION file at the repo root. */
-    const VERSION = "0.21.0";
+    const VERSION = "0.22.0";
 
     /** Prefix of every loader log line; the game log and check_ingame_log.py grep for it. */
-    const LOG_PREFIX = "[ACEUIModLoader]";
+    const LOG_PREFIX = "[ACEUIAppLoader]";
 
     /** The stock HUD toggles this class on <body> when the HUD is hidden. */
     const HUD_HIDDEN_CLASS = "hide-hud";
@@ -27,7 +27,7 @@ const ACEUIModLoader = (function () {
         console.log(LOG_PREFIX + " " + message);
     };
 
-    /** Prefixed logger for apps: ACEUIModLoader.logger("[PedalGraph]")("hello"). */
+    /** Prefixed logger for apps: ACEUIAppLoader.logger("[PedalGraph]")("hello"). */
     const logger = function (prefix) {
         return function (message) {
             console.log(prefix + " " + message);
@@ -95,17 +95,17 @@ const ACEUIModLoader = (function () {
 
     /**
      * Name a piece of work, so a profiler can say how long *that* took rather than only
-     * how long the app took. A profiler fills `ACEUIModLoader.profiler` with something
+     * how long the app took. A profiler fills `ACEUIAppLoader.profiler` with something
      * that has a `section(name, fn)`; with nothing there this is a property read and a
      * call through, which is what an app pays for being profilable when nobody is.
      *
-     *     ACEUIModLoader.section("render", function () { renderFrame(state, v, frac); });
+     *     ACEUIAppLoader.section("render", function () { renderFrame(state, v, frac); });
      *
      * Sections nest: one inside another shows up as its child, which is what turns a flat
      * "this app costs 2 ms" into a tree of where the 2 ms went.
      */
     const section = function (name, fn) {
-        const sink = ACEUIModLoader.profiler;
+        const sink = ACEUIAppLoader.profiler;
 
         if (!sink || typeof sink.section !== "function") { return fn(); }
 
@@ -151,7 +151,7 @@ const ACEUIModLoader = (function () {
         /**
          * The sink `section` above calls into, filled by a profiler while it is recording
          * and nulled when it stops. Not the profiler app: that is
-         * `ACEUIModLoader.shared.get("profiler")`, which is its panel. This is one method,
+         * `ACEUIAppLoader.shared.get("profiler")`, which is its panel. This is one method,
          * and apps never touch it directly.
          */
         profiler: null,
@@ -162,4 +162,4 @@ const ACEUIModLoader = (function () {
     };
 }());
 
-window.ACEUIModLoader = ACEUIModLoader;
+window.ACEUIAppLoader = ACEUIAppLoader;

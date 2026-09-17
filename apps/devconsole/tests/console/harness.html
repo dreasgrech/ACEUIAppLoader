@@ -14,7 +14,7 @@
 <script>
 window.ModelCurrentCar = { has_focused_car: true, speed: 123.4, gas_percent: 0.5 };
 </script>
-<!-- the ACEUIModLoader library from the sibling checkout, in load order (in game it is part of cohtml.js) -->
+<!-- the ACEUIAppLoader library from the sibling checkout, in load order (in game it is part of cohtml.js) -->
 <script src="../../../../tests/lib/lib.js"></script>
 <link rel="stylesheet" type="text/css" href="../../devconsole/devconsole.css">
 <script>
@@ -35,7 +35,7 @@ console.warn("early warning");
     const H = window.__harness;
     const t = H.t, eq = H.eq, ok = H.ok;
     // what the loader knows about this app; outside the game the title falls back to the name and the version reads "dev"
-    const me = ACEUIModLoader.app("devconsole");
+    const me = ACEUIAppLoader.app("devconsole");
 
     const clock = window.__clock;
     const center = document.getElementById("center");
@@ -51,11 +51,11 @@ console.warn("early warning");
     const nextFrame = function () { frame += 16; clock.step(frame); };
 
     t("library and module present, constants, load logged", function () {
-        eq(typeof ACEUIModLoader.console, "object", "ACEUIModLoader.console"); eq(typeof DevConsole, "object", "DevConsole");
+        eq(typeof ACEUIAppLoader.console, "object", "ACEUIAppLoader.console"); eq(typeof DevConsole, "object", "DevConsole");
         eq(DevConsole.MAX_ROWS, 200); eq(DevConsole.TOGGLE_CODE, "Backquote"); eq(DevConsole.FILTERS.length, 3);
-        eq(me.version, ACEUIModLoader.loader.DEV_VERSION, "version comes from the loader"); eq(me.prefix, "[devconsole]");
+        eq(me.version, ACEUIAppLoader.loader.DEV_VERSION, "version comes from the loader"); eq(me.prefix, "[devconsole]");
         eq(me.hudId, "hud_devconsole"); eq(me.storageKey, "acedevconsole.pos"); eq(me.key("open"), "acedevconsole.open");
-        ok(window.__log.some(function (l) { return l.indexOf(me.prefix + " script loaded, version " + me.version + ", library " + ACEUIModLoader.VERSION) >= 0; }), "the library logs the script-loaded line for every app");
+        ok(window.__log.some(function (l) { return l.indexOf(me.prefix + " script loaded, version " + me.version + ", library " + ACEUIAppLoader.VERSION) >= 0; }), "the library logs the script-loaded line for every app");
         eq(document.getElementById(me.name), null, "harness must not carry the auto-mount root");
         eq(typeof DevConsole.VERSION, "undefined", "identity is the loader's, not re-exported");
     });
@@ -74,7 +74,7 @@ console.warn("early warning");
         eq(root.querySelector(".dc-scrollbar").getAttribute("data-nodrag"), "", "scrollbar does not drag the panel");
         ok(root.querySelector(".dc-follow").classList.contains("dc-hidden"), "follow chip hidden while following");
         eq(root.querySelector('[data-action="close"]').textContent, "×", "close glyph");
-        eq(ACEUIModLoader.drawer.isVisible("devconsole"), true, "on by default");
+        eq(ACEUIAppLoader.drawer.isVisible("devconsole"), true, "on by default");
         eq(state.ui.panel.hudId, me.hudId); eq(state.ui.panel.storageKey, me.storageKey);
         eq(root.style.visibility, "hidden", "hidden until positioned"); ok(state.ui.loop.running, "loop running");
         eq(getComputedStyle(root).position, "absolute", "stylesheet applied");
@@ -225,15 +225,15 @@ console.warn("early warning");
         key(input, { keyCode: 38 }); eq(input.value, "2 * 21", "ArrowUp by keyCode");
         key(input, { keyCode: 40 }); eq(input.value, "", "ArrowDown by keyCode");
         key(window, { keyCode: 192 });
-        eq(ACEUIModLoader.drawer.isVisible("devconsole"), false, "toggle by keyCode");
+        eq(ACEUIAppLoader.drawer.isVisible("devconsole"), false, "toggle by keyCode");
         key(window, { keyCode: 192 });
-        eq(ACEUIModLoader.drawer.isVisible("devconsole"), true, "and back by keyCode");
+        eq(ACEUIAppLoader.drawer.isVisible("devconsole"), true, "and back by keyCode");
         eq(DevConsole.KEY_CODES.Enter, 13);
     });
 
     t("clear button empties the buffer and the rows", function () {
         root.querySelector('[data-action="clear"]').dispatchEvent(new MouseEvent("click", { bubbles: true }));
-        eq(ACEUIModLoader.console.entries().length, 0); nextFrame();
+        eq(ACEUIAppLoader.console.entries().length, 0); nextFrame();
         eq(visibleRows(root).length, 0, "rows hidden"); eq(root.querySelector('[data-filter="log"] .dc-count').textContent, "0");
     });
 
@@ -320,7 +320,7 @@ console.warn("early warning");
         eq(texts(root).join("|"), "Needle in the haystack", "only the match is shown");
         eq(root.querySelector('[data-filter="log"] .dc-count').textContent, logCount, "counts are the buffer's");
         key(search, { code: "Backquote", key: "`" });
-        eq(ACEUIModLoader.drawer.isVisible("devconsole"), true, "backquote in the filter field does not toggle");
+        eq(ACEUIAppLoader.drawer.isVisible("devconsole"), true, "backquote in the filter field does not toggle");
         search.value = "nomatchxyz"; search.dispatchEvent(new Event("keyup", { bubbles: true })); nextFrame();
         eq(visibleRows(root).length, 0, "no match, nothing shown"); ok(track.classList.contains("dc-nofit"), "no thumb when nothing is shown");
         key(search, { key: "Escape" }); nextFrame();
@@ -330,10 +330,10 @@ console.warn("early warning");
     t("scale set from the settings window moves the panel, and the panel's buttons write back", function () {
         /* one source of truth: the -/+ buttons and the settings window are two views of
            the same stored value, not two copies of it */
-        ACEUIModLoader.settings.set("devconsole", "scale", 1.4);
+        ACEUIAppLoader.settings.set("devconsole", "scale", 1.4);
         eq(state.scale, 1.4, "changing the setting scales the panel");
         eq(root.style.fontSize, "1.4rem");
-        ACEUIModLoader.settings.set("devconsole", "scale", 1);
+        ACEUIAppLoader.settings.set("devconsole", "scale", 1);
         eq(state.scale, 1, "and back");
     });
 
@@ -341,7 +341,7 @@ console.warn("early warning");
         eq(state.scale, 1); eq(root.style.fontSize, "1rem", "root font-size drives every em inside");
         const w = root.offsetWidth; const rowH = visibleRows(root)[0].offsetHeight;
         root.querySelector('[data-action="larger"]').dispatchEvent(new MouseEvent("click", { bubbles: true }));
-        eq(state.scale, 1.1); eq(root.style.fontSize, "1.1rem"); eq(ACEUIModLoader.settings.get("devconsole", "scale"), 1.1, "persisted through the settings store");
+        eq(state.scale, 1.1); eq(root.style.fontSize, "1.1rem"); eq(ACEUIAppLoader.settings.get("devconsole", "scale"), 1.1, "persisted through the settings store");
         ok(root.offsetWidth > w, "panel wider"); ok(visibleRows(root)[0].offsetHeight > rowH, "rows taller");
         eq(state.scroller.state.thumbHeight, -1, "thumb geometry invalidated"); nextFrame(); ok(state.scroller.state.thumbHeight > 0, "thumb re-applied");
         let i; for (i = 0; i < 30; i += 1) { root.querySelector('[data-action="smaller"]').dispatchEvent(new MouseEvent("click", { bubbles: true })); }
@@ -369,7 +369,7 @@ console.warn("early warning");
        is the one place in the UI you can get an app back from. Both the key and the x now
        switch the app off, and the key is the loader's so it still works once it is off. */
     t("the toggle key and the x switch the app off, where the drawer can see it", function () {
-        const drawer = ACEUIModLoader.drawer;
+        const drawer = ACEUIAppLoader.drawer;
 
         key(window, { code: "Backquote", key: "`" });
         eq(drawer.isVisible("devconsole"), false, "off in the drawer");
@@ -382,13 +382,13 @@ console.warn("early warning");
 
         root.querySelector('[data-action="close"]').dispatchEvent(new MouseEvent("click", { bubbles: true }));
         eq(drawer.isVisible("devconsole"), false, "x closes");
-        ACEUIModLoader.app("devconsole").show(true);
+        ACEUIAppLoader.app("devconsole").show(true);
     });
 
     t("a hidden HUD skips rendering", function () {
-        document.body.classList.add(ACEUIModLoader.HUD_HIDDEN_CLASS);
+        document.body.classList.add(ACEUIAppLoader.HUD_HIDDEN_CLASS);
         console.log("hud hidden line"); nextFrame(); eq(state.dirty, true, "not rendered while the HUD is hidden");
-        document.body.classList.remove(ACEUIModLoader.HUD_HIDDEN_CLASS); nextFrame(); eq(state.dirty, false);
+        document.body.classList.remove(ACEUIAppLoader.HUD_HIDDEN_CLASS); nextFrame(); eq(state.dirty, false);
     });
 
     t("mousedown on the prompt or a button does not drag; on the header it does and saves under the app's keys", function () {
@@ -405,10 +405,10 @@ console.warn("early warning");
     });
 
     t("detach stops the loop, unsubscribes and releases the key, click, wheel and track listeners", function () {
-        const listeners = ACEUIModLoader.console.listenerCount();
+        const listeners = ACEUIAppLoader.console.listenerCount();
         const cancelled = clock.cancelled;
         DevConsole.detach(state);
-        eq(clock.cancelled, cancelled + 1); eq(state.ui.loop.running, false); eq(ACEUIModLoader.console.listenerCount(), listeners - 1, "unsubscribed");
+        eq(clock.cancelled, cancelled + 1); eq(state.ui.loop.running, false); eq(ACEUIAppLoader.console.listenerCount(), listeners - 1, "unsubscribed");
         const follow = state.follow; wheelUp(); eq(state.follow, follow, "wheel released");
         const search = root.querySelector(".dc-search"); search.value = "zzz"; search.dispatchEvent(new Event("input", { bubbles: true }));
         eq(state.query, "", "search released"); search.value = "";
@@ -527,7 +527,7 @@ console.warn("early warning");
         input.value = ".5 + 1"; key(input, { key: "Enter" }); nextFrame();
         eq(texts(root).pop(), "1.5", "a number starting with a dot is still JavaScript");
         input.value = ".run hello"; key(input, { key: "Enter" }); nextFrame();
-        eq(texts(root).pop(), "run: loading ACEUIModLoaderApps/snippets/hello.js", "loading line");
+        eq(texts(root).pop(), "run: loading ACEUIAppLoader/snippets/hello.js", "loading line");
         eq(document.querySelectorAll("script[src$='snippets/hello.js']").length, 1, "script tag added");
         eq(state.history.pop(), ".run hello", "commands are in the history too");
     });
@@ -556,7 +556,7 @@ console.warn("early warning");
     };
 
     t("while attached it offers the other apps the one thing only it can do", function () {
-        const dc = ACEUIModLoader.shared.get("devconsole");
+        const dc = ACEUIAppLoader.shared.get("devconsole");
 
         ok(dc, "registered while attached");
         dc.evaluate("40 + 2");

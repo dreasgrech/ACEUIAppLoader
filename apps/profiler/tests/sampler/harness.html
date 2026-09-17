@@ -73,7 +73,7 @@ window.ksUI = {
        up in the next case's frames. */
     const handles = [];
     const stopAll = function () {
-        while (handles.length) { ACEUIModLoader.loop.stop(handles.pop()); }
+        while (handles.length) { ACEUIAppLoader.loop.stop(handles.pop()); }
     };
 
     const lastFrame = function () {
@@ -115,7 +115,7 @@ window.ksUI = {
         S.clear();
 
         // an app's frame loop: 3 ms of work, inside a 16 ms frame
-        handles.push(ACEUIModLoader.loop.start(function () { burn(3); }, "pretendmod"));
+        handles.push(ACEUIAppLoader.loop.start(function () { burn(3); }, "pretendmod"));
         clock.step(1000);
         clock.step(1016);
         clock.step(1032);
@@ -135,7 +135,7 @@ window.ksUI = {
         S.start();
         S.clear();
 
-        handles.push(ACEUIModLoader.loop.start(function () { burn(1); }, "pedalgraph"));
+        handles.push(ACEUIAppLoader.loop.start(function () { burn(1); }, "pedalgraph"));
         window.requestAnimationFrame(window.ksUI.perFrameAllModelUpdate);
         clock.step(2000);
         clock.step(2016);
@@ -157,7 +157,7 @@ window.ksUI = {
         S.start();
         S.clear();
 
-        handles.push(ACEUIModLoader.loop.start(function () {
+        handles.push(ACEUIAppLoader.loop.start(function () {
             burn(2);
             window.setTimeout(function child() { return 0; }, 0);   // scheduled, not run yet
             ACEProfilerSampler.measure("inner work", function () { burn(4); });
@@ -182,7 +182,7 @@ window.ksUI = {
         S.start();
         S.clear();
 
-        handles.push(ACEUIModLoader.loop.start(function () {
+        handles.push(ACEUIAppLoader.loop.start(function () {
             let i;
 
             for (i = 0; i < 10; i += 1) { ACEProfilerSampler.measure("repeated", function () { burn(0.2); }); }
@@ -207,7 +207,7 @@ window.ksUI = {
         target.addEventListener("click", function onClick() { burn(1); });
         engine.on("SomeModelUpdate", function stockHandler() { burn(1); });
 
-        handles.push(ACEUIModLoader.loop.start(function () { return 0; }, "quiet"));
+        handles.push(ACEUIAppLoader.loop.start(function () { return 0; }, "quiet"));
         clock.step(5000);
         target.dispatchEvent(new MouseEvent("click"));
         window.__engineHandlers.SomeModelUpdate();
@@ -257,7 +257,7 @@ window.ksUI = {
     t("the counters count what this renderer charges for, since there is no allocation counter", function () {
         S.start();
         S.clear();
-        handles.push(ACEUIModLoader.loop.start(function () {
+        handles.push(ACEUIAppLoader.loop.start(function () {
             const node = document.createElement("div");
 
             document.body.appendChild(node);
@@ -288,14 +288,14 @@ window.ksUI = {
         S.start();
         S.clear();
 
-        handles.push(ACEUIModLoader.loop.start(function () {
+        handles.push(ACEUIAppLoader.loop.start(function () {
             node.getBoundingClientRect();
             ACEProfilerSampler.measure("inner", function () {
                 node.getBoundingClientRect();
                 node.getBoundingClientRect();
             });
         }, "reader"));
-        handles.push(ACEUIModLoader.loop.start(function () { return 0; }, "innocent"));
+        handles.push(ACEUIAppLoader.loop.start(function () { return 0; }, "innocent"));
         clock.step(40000);
         clock.step(40016);
 
@@ -319,7 +319,7 @@ window.ksUI = {
 
         S.start();
         S.clear();
-        handles.push(ACEUIModLoader.loop.start(function () {
+        handles.push(ACEUIAppLoader.loop.start(function () {
             let j;
 
             for (j = 0; j < S.MAX_SAMPLES + 20; j += 1) { ACEProfilerSampler.measure("flood", function () { return 0; }); }
@@ -340,7 +340,7 @@ window.ksUI = {
     t("the profiler's own cost is measured too, so it cannot flatter itself", function () {
         S.start();
         S.clear();
-        handles.push(ACEUIModLoader.loop.start(function () { burn(1); }, "watched"));
+        handles.push(ACEUIAppLoader.loop.start(function () { burn(1); }, "watched"));
         clock.step(8000);
         clock.step(8016);
         clock.step(8032);
@@ -376,8 +376,8 @@ window.ksUI = {
 
         S.start();
         S.clear();
-        handles.push(ACEUIModLoader.loop.start(function () { burn(1); }, "steady"));
-        handles.push(ACEUIModLoader.loop.start(function () { return 0; }, "idle"));
+        handles.push(ACEUIAppLoader.loop.start(function () { burn(1); }, "steady"));
+        handles.push(ACEUIAppLoader.loop.start(function () { return 0; }, "idle"));
 
         for (i = 0; i < FRAMES; i += 1) { clock.step(20000 + i * 16); }
 
@@ -420,7 +420,7 @@ window.ksUI = {
         ok(S.widgets().length >= 2, "methods wrapped: " + S.widgets().join(", "));
         ok(S.widgets().indexOf("ks-huddamage.process") >= 0, "by tag and method name");
 
-        handles.push(ACEUIModLoader.loop.start(function () {
+        handles.push(ACEUIAppLoader.loop.start(function () {
             try {
                 node.onBindingUpdate(1);
                 node.process();
@@ -459,7 +459,7 @@ window.ksUI = {
 
     /*
      * Wrapping can only see as deep as the frame callback: what an app does inside its own
-     * IIFE is closures, invisible from outside. `ACEUIModLoader.section` is how an app names
+     * IIFE is closures, invisible from outside. `ACEUIAppLoader.section` is how an app names
      * those parts itself, and this is the tree they produce -- the answer to "what inside
      * this app is taking the time", which is the whole reason for the hook.
      */
@@ -469,11 +469,11 @@ window.ksUI = {
         S.start();
         S.clear();
 
-        handles.push(ACEUIModLoader.loop.start(function () {
-            ACEUIModLoader.section("sample", function () { burn(1); });
-            ACEUIModLoader.section("render", function () {
+        handles.push(ACEUIAppLoader.loop.start(function () {
+            ACEUIAppLoader.section("sample", function () { burn(1); });
+            ACEUIAppLoader.section("render", function () {
                 burn(1);
-                ACEUIModLoader.section("write rows", function () { return 0; });
+                ACEUIAppLoader.section("write rows", function () { return 0; });
             });
         }, "widget"));
 
@@ -504,15 +504,15 @@ window.ksUI = {
         let ran = 0;
 
         eq(S.recording(), false, "not recording");
-        eq(ACEUIModLoader.profiler, null, "and the loader's slot is empty");
-        eq(ACEUIModLoader.section("free", function () { ran += 1; return 7; }), 7, "the value comes back");
+        eq(ACEUIAppLoader.profiler, null, "and the loader's slot is empty");
+        eq(ACEUIAppLoader.section("free", function () { ran += 1; return 7; }), 7, "the value comes back");
         eq(ran, 1, "the work still happened");
     });
 
     t("pause keeps what was recorded and stops adding to it; clear empties it", function () {
         S.start();
         S.clear();
-        handles.push(ACEUIModLoader.loop.start(function () { return 0; }, "paused"));
+        handles.push(ACEUIAppLoader.loop.start(function () { return 0; }, "paused"));
         clock.step(9000);
         clock.step(9016);
         clock.step(9032);

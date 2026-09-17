@@ -75,11 +75,11 @@ must respect all of them.
 ```
 ACEPedalGraph/                (rename later; it is becoming "ACE UI apps")
   lib/                        shared library, one IIFE per file, loaded in this order
-    ACEUIModLoader.core.js           ACEUIModLoader.core: clamp, el/close, toArray, percentText, log(prefix)
-    ACEUIModLoader.persist.js        ACEUIModLoader.persist: HUD-store + localStorage position/state store
-    ACEUIModLoader.panel.js          ACEUIModLoader.panel: draggable, hide-with-HUD, positioning class, attach/detach
-    ACEUIModLoader.loop.js           ACEUIModLoader.loop: per-frame runtime with fixed-rate sampling helper
-    ACEUIModLoader.console.js        ACEUIModLoader.console: console.* hook + ring buffer + error capture (entry point uses it)
+    ACEUIAppLoader.core.js           ACEUIAppLoader.core: clamp, el/close, toArray, percentText, log(prefix)
+    ACEUIAppLoader.persist.js        ACEUIAppLoader.persist: HUD-store + localStorage position/state store
+    ACEUIAppLoader.panel.js          ACEUIAppLoader.panel: draggable, hide-with-HUD, positioning class, attach/detach
+    ACEUIAppLoader.loop.js           ACEUIAppLoader.loop: per-frame runtime with fixed-rate sampling helper
+    ACEUIAppLoader.console.js        ACEUIAppLoader.console: console.* hook + ring buffer + error capture (entry point uses it)
   apps/
     pedalgraph/               pedalgraph.js + pedalgraph.css (only the app-specific 200 lines)
     console/                  debugconsole.js + debugconsole.css
@@ -92,19 +92,19 @@ ACEPedalGraph/                (rename later; it is becoming "ACE UI apps")
 
 Key decisions inside that:
 
-- **Namespaces, not globals soup.** `ACEUIModLoader` is one global object; each lib
-  file adds one namespace (`ACEUIModLoader.core`, ...). Apps are `PedalGraph`,
-  `DebugConsole` etc. and only talk to `ACEUIModLoader.*`.
+- **Namespaces, not globals soup.** `ACEUIAppLoader` is one global object; each lib
+  file adds one namespace (`ACEUIAppLoader.core`, ...). Apps are `PedalGraph`,
+  `DebugConsole` etc. and only talk to `ACEUIAppLoader.*`.
 - **Persistence API** (extracted from today's code, generalised beyond
-  position): `ACEUIModLoader.persist.save(id, data)`, `ACEUIModLoader.persist.load(id, onReady)`
+  position): `ACEUIAppLoader.persist.save(id, data)`, `ACEUIAppLoader.persist.load(id, onReady)`
   where `onReady(data, source)` fires once the HUD store is available or the
-  wait window ends, plus a synchronous `ACEUIModLoader.persist.peek(id)` for the
+  wait window ends, plus a synchronous `ACEUIAppLoader.persist.peek(id)` for the
   immediate localStorage attempt. Position handling on top:
-  `ACEUIModLoader.panel.attach(root, { id, onFrame })` does the hidden-until-placed
+  `ACEUIAppLoader.panel.attach(root, { id, onFrame })` does the hidden-until-placed
   dance itself.
 - **The entry point owns load order and diagnostics.** hud.html installs the
   console hook and error capture first, then the library, then each app. The
-  per-app `PEDALGRAPH_SOURCE` tag becomes `ACEUIModLoader.source`.
+  per-app `PEDALGRAPH_SOURCE` tag becomes `ACEUIAppLoader.source`.
 - **Build step assembles, packer packs.** `build.py` copies lib + apps + hud
   into `build/uiresources/...` (single place for the game paths), then the
   existing packer runs on `build/`. The padding search already handles
@@ -114,17 +114,17 @@ Key decisions inside that:
 
 ## 5. Migration order (small, testable steps)
 
-1. Create `lib/ACEUIModLoader.core.js` and `lib/ACEUIModLoader.persist.js` by moving the
-   functions listed in section 1 unchanged; PedalGraph calls `ACEUIModLoader.*`.
+1. Create `lib/ACEUIAppLoader.core.js` and `lib/ACEUIAppLoader.persist.js` by moving the
+   functions listed in section 1 unchanged; PedalGraph calls `ACEUIAppLoader.*`.
    Tests: move the corresponding harness cases to a library harness.
-2. Extract `ACEUIModLoader.panel.js` (drag + hidden-until-placed + hide-with-HUD) and
-   `ACEUIModLoader.loop.js`; PedalGraph shrinks to its 200 lines.
+2. Extract `ACEUIAppLoader.panel.js` (drag + hidden-until-placed + hide-with-HUD) and
+   `ACEUIAppLoader.loop.js`; PedalGraph shrinks to its 200 lines.
 3. Introduce `build.py` and the `hud/` entry point; move app sources to
    `apps/pedalgraph/`. Packer input becomes `build/`.
-4. Add `ACEUIModLoader.console.js` (hook + buffer) to the entry point, verify in a
+4. Add `ACEUIAppLoader.console.js` (hook + buffer) to the entry point, verify in a
    launch that stock messages are captured (they will appear twice in the
    game log if we also re-log them -- the hook must not echo).
-5. Build the debug console app on `ACEUIModLoader.panel` + `ACEUIModLoader.console`.
+5. Build the debug console app on `ACEUIAppLoader.panel` + `ACEUIAppLoader.console`.
 
 Each step ends with the full test suite and one launch checked by
 `check_ingame_log.py`; steps 1-3 change no behaviour in game.
@@ -139,10 +139,10 @@ What the game allows:
 
 - Only one record per path wins, so only one package may override
   `hud.html`. That package is the loader. It ships the library and probes a
-  fixed set of app slots (`uiresources\ACEUIModLoaderApps\slotNN.js`, tried with dynamic
+  fixed set of app slots (`uiresources\ACEUIAppLoader\slotNN.js`, tried with dynamic
   `<script>` elements and `onerror`; Cohtml has no directory listing).
 - Mod packages ship only **new** files: their slot script, their own
-  `uiresources\ACEUIModLoaderApps\<app>\...` assets. New paths have unique hashes and
+  `uiresources\ACEUIAppLoader\<app>\...` assets. New paths have unique hashes and
   always resolve regardless of layout, so apps never need padding.
 
 What the game does not allow us to ignore, measured with `lookup_sim`:
@@ -223,7 +223,7 @@ choosing padding that wins under every permutation of the installed packages.
 
 **Recommendation.** One loader package (`js/cohtml.js` override + library,
 padded per game version, `repad` for machines with car-mod packages); every
-UI app a loose folder under `mods\uiresources\ACEUIModLoaderApps\<app>\` plus one slot
+UI app a loose folder under `mods\uiresources\ACEUIAppLoader\<app>\` plus one slot
 script the loader probes. No per-app packaging, no per-app padding, and live
 editing during development.
 
@@ -283,15 +283,15 @@ version; UI apps as loose folders with no packaging and no padding.
 The library exists and both apps run on it; this section records what was
 built against sections 4 and 5, and where it deviates.
 
-- **Where the library lives.** Not as loose files: all six `src/ACEUIModLoaderApps.*.js`
+- **Where the library lives.** Not as loose files: all six `src/ACEUIAppLoader.*.js`
   files are appended to the stock `js/cohtml.js` inside the loader package, in
   `LIB_ORDER` (core, console, persist, panel, loop, loader). Reason: the
   console hook must run before `components.js`, which only the host can
-  guarantee, and apps may then rely on `ACEUIModLoader.*` existing synchronously.
+  guarantee, and apps may then rely on `ACEUIAppLoader.*` existing synchronously.
   The cost is a rebuild + reinstall for library changes (padding unchanged,
   it depends only on paths).
-- **Namespaces** as planned: `ACEUIModLoader` (core), `.console`, `.persist`,
-  `.panel`, `.loop`, `.loader`; flat aliases `ACEUIModLoader.ready/apps/addScript/
+- **Namespaces** as planned: `ACEUIAppLoader` (core), `.console`, `.persist`,
+  `.panel`, `.loop`, `.loader`; flat aliases `ACEUIAppLoader.ready/apps/addScript/
   addStylesheet/ROOT` keep the 0.1.0 surface.
 - **Hidden-until-placed** is an inline `visibility` style set by the panel,
   not a CSS class, so the library needs no stylesheet.
@@ -316,7 +316,7 @@ built against sections 4 and 5, and where it deviates.
 ## 10. Discovery without a manifest (loader 0.3.0, 2026-09-14)
 
 Problem: a player adding an app had to edit (or run a script to regenerate)
-`ACEUIModLoaderApps/manifest.json`, because a page cannot list folders and every
+`ACEUIAppLoader/manifest.json`, because a page cannot list folders and every
 self-registration scheme (fixed shared files, numbered or hashed slots, fonts,
 localisation) either collides between zips, needs a central registry, or does
 not exist in this Cohtml build. See ACEGameInternals/docs/game-internals.md,
@@ -324,7 +324,7 @@ not exist in this Cohtml build. See ACEGameInternals/docs/game-internals.md,
 
 Mechanism: the game lists `Saved Games/ACE/Video/*.settingspreset` for its own
 video presets menu and answers `SettingsRequestVideoPresetList` on every page.
-Each app ships an **empty** marker `Video/ACEUIModLoaderApps-<name>.settingspreset`
+Each app ships an **empty** marker `Video/ACEUIAppLoader-<name>.settingspreset`
 next to its folder; the loader sends that request at start, keeps the names with
 our prefix, and loads those apps. Two zips never touch the same file, so any
 number of apps can be unzipped in any order. The video list was chosen because it
@@ -332,7 +332,7 @@ applies no filter beyond the extension (the audio list also compares a version)
 and its menu is rarely visited.
 
 Consequences implemented:
-- `ACEUIModLoader.loader.js` wraps `engine.on` so stock handlers for
+- `ACEUIAppLoader.loader.js` wraps `engine.on` so stock handlers for
   `SettingsResponseVideoPresetList` receive a copy without markers (our own
   handler is flagged); without an engine or an answer within 1.5 s it loads nothing;
   refuses `app.json` entries that are not plain file names, because requesting a
@@ -357,7 +357,7 @@ Loader-side changes, so an app can be one folder with three files:
 - The loader creates `<div id="<name>" data-app="<name>">` in `.absolutecenter`
   (or `<body>`) before injecting the scripts, so `app.js` is unnecessary: the
   script's own boot block finds `#<name>` exactly as it does on a preview page.
-- `ACEUIModLoader.app()` / `app(name)` returns name, title, version, root, a
+- `ACEUIAppLoader.app()` / `app(name)` returns name, title, version, root, a
   prefixed logger, `hudId`, `storageKey` and `key(suffix)`; the script declares
   none of these and never repeats the version (`const VERSION` is now a kit error).
 - `tools/appkit.py` is the shared test kit (one subclass per app repo);
@@ -369,7 +369,7 @@ Loader-side changes, so an app can be one folder with three files:
 
 Found on the way: an `app.json` without `styles` made `toArray(undefined)` throw
 inside the XHR callback, leaving the app pending forever; the harness fixture
-`alpha` (no styles) caught it. Harnesses now wait on `ACEUIModLoader.ready` rather
+`alpha` (no styles) caught it. Harnesses now wait on `ACEUIAppLoader.ready` rather
 than a virtual-time deadline, with a timeout that reports a stuck loader.
 Next: strip PedalGraph and DevConsole to the new shape.
 
@@ -377,7 +377,7 @@ Follow-up (same day): the last three repeats went too. `app(name).mount(attach)`
 replaces the twelve-line boot block every script carried; the harness helpers
 (`t`/`eq`/`ok`/`near`) and the report writer live in `tests/lib/doubles.js` as
 `window.__harness`, so a harness holds only its cases; the scripts no longer
-re-export their identity (harnesses ask `ACEUIModLoader.app(name)`), and the
+re-export their identity (harnesses ask `ACEUIAppLoader.app(name)`), and the
 `source=` flag from the package era is gone from the load line. The kit rejects
 `DOMContentLoaded`/`readyState` in app scripts and requires `.mount(`. An app is
 now its script, its stylesheet, `app.json`, its own harness cases and a README.

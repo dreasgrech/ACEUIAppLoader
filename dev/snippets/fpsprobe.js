@@ -31,8 +31,8 @@
     const HITCH_MS = 33;
     const PERCENTILE = 0.95;
 
-    const loader = window.ACEUIModLoader && ACEUIModLoader.loader;
-    const drawer = window.ACEUIModLoader && ACEUIModLoader.drawer;
+    const loader = window.ACEUIAppLoader && ACEUIAppLoader.loader;
+    const drawer = window.ACEUIAppLoader && ACEUIAppLoader.drawer;
     const results = [];
 
     if (!loader || !drawer) {
@@ -183,7 +183,7 @@
     // ---- per-app cost --------------------------------------------------------------
 
     const running = function () {
-        return (ACEUIModLoader.apps || []).filter(function (entry) {
+        return (ACEUIAppLoader.apps || []).filter(function (entry) {
             return entry.status === "loaded" && drawer.isVisible(entry.name);
         });
     };
@@ -229,7 +229,7 @@
 
     const apps = running();
 
-    log("start: page " + ACEUIModLoader.page + ", loader " + ACEUIModLoader.VERSION
+    log("start: page " + ACEUIAppLoader.page + ", loader " + ACEUIAppLoader.VERSION
         + ", " + apps.length + " apps running (" + apps.map(function (e) { return e.name; }).join(", ")
         + "), game " + gameFps() + " fps -- sit still for about 25 s");
 

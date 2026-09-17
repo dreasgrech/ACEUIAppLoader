@@ -1,5 +1,5 @@
 /**
- * ACEUIModLoader.keys -- recognising a key, and binding one without stealing it.
+ * ACEUIAppLoader.keys -- recognising a key, and binding one without stealing it.
  *
  * Reading a keystroke in this engine takes more care than `e.key === "x"`, and both
  * DOOM and the dev console had grown their own copy of the same care:
@@ -14,17 +14,17 @@
  *     box eats their keystroke. `isTyping(e)` is the check every app needs and two of
  *     them had inlined.
  *
- *     const unbind = ACEUIModLoader.keys.bind(function () { return options.toggleKey; },
+ *     const unbind = ACEUIAppLoader.keys.bind(function () { return options.toggleKey; },
  *         function (e) { toggle(); e.preventDefault(); });
  *
  * The first argument is a key name or a function returning one, so a hotkey that lives in
- * ACEUIModLoader.settings follows the player's choice without rebinding. `bind` skips
+ * ACEUIAppLoader.settings follows the player's choice without rebinding. `bind` skips
  * events aimed at a text box, and returns the function that unbinds it.
  *
  * An app's hotkey is the app's to move; the player's game bindings are not ours to shadow,
  * which is why every hotkey in this project is a setting rather than a constant.
  */
-ACEUIModLoader.keys = (function () {
+ACEUIAppLoader.keys = (function () {
 
     /** Name -> legacy keyCode, for the keys apps actually bind. */
     const CODES = {
@@ -96,7 +96,7 @@ ACEUIModLoader.keys = (function () {
             handler(e);
         };
 
-        return ACEUIModLoader.dom.on(window, opts.event || "keydown", onKey, opts.capture);
+        return ACEUIAppLoader.dom.on(window, opts.event || "keydown", onKey, opts.capture);
     };
 
     return {

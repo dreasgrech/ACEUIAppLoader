@@ -1,4 +1,4 @@
-"""Runs the shared ACEUIModLoader test kit against this app (see appkit.py in the loader repo)."""
+"""Runs the shared ACEUIAppLoader test kit against this app (see appkit.py in the loader repo)."""
 import json
 import os
 import sys
@@ -11,11 +11,11 @@ ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 LOADER = os.environ.get("ACE_LOADER_DIR")
 HERE = ROOT
 while not LOADER:
-    for candidate in (HERE, os.path.join(HERE, "ACEUIModLoader")):
+    for candidate in (HERE, os.path.join(HERE, "ACEUIAppLoader")):
         if os.path.isfile(os.path.join(candidate, "tools", "appkit.py")):
             LOADER = candidate
     if not LOADER and HERE == os.path.dirname(HERE):
-        raise SystemExit("ACEUIModLoader not found: clone it next to this repo or set ACE_LOADER_DIR")
+        raise SystemExit("ACEUIAppLoader not found: clone it next to this repo or set ACE_LOADER_DIR")
     HERE = os.path.dirname(HERE)
 sys.path.insert(0, os.path.join(LOADER, "tools"))
 
@@ -53,9 +53,9 @@ class BundledAppContractTests(unittest.TestCase):
         self.assertIs(self.info.get("developer"), True)
 
     def test_the_panel_handle_is_what_it_offers_and_only_while_there_is_a_panel(self):
-        self.assertIn("ACEUIModLoader.shared.register(me.name, live);", self.js,
+        self.assertIn("ACEUIAppLoader.shared.register(me.name, live);", self.js,
                       "the registered surface is the same handle ACEUIProfiler.panel() returns")
-        self.assertIn("ACEUIModLoader.shared.unregister(me.name);", self.js)
+        self.assertIn("ACEUIAppLoader.shared.unregister(me.name);", self.js)
         self.assertLess(self.js.index("shared.unregister"), self.js.index("state.ui.stop();"),
                         "withdrawn first thing in detach: a stopped profiler has nothing to report")
 

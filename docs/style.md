@@ -26,7 +26,7 @@ The rules are narrow deliberately. They are not a style opinion so much as a way
 
 The kit also enforces what this engine will not do, which is a longer list than it looks:
 
-- `overflow: auto` does not scroll — use `ACEUIModLoader.scroll.attach`
+- `overflow: auto` does not scroll — use `ACEUIAppLoader.scroll.attach`
 - `text-transform` is ignored
 - `getComputedStyle` reports inline and initial values, not the cascade
 - `performance.now()` is frozen within a frame; `Date.now()` is the clock

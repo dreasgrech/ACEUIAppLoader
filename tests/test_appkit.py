@@ -23,11 +23,11 @@ def run_kit(repo, **attrs):
 
 class NewAppTests(unittest.TestCase):
     def setUp(self):
-        # the generated repo must sit next to a folder named ACEUIModLoader so its relative links resolve
+        # the generated repo must sit next to a folder named ACEUIAppLoader so its relative links resolve
         self.tmp = tempfile.TemporaryDirectory()
         self.parent = os.path.join(self.tmp.name, "GitHub")
         os.makedirs(self.parent)
-        link = os.path.join(self.parent, "ACEUIModLoader")
+        link = os.path.join(self.parent, "ACEUIAppLoader")
         os.makedirs(os.path.join(link, "tools"))
         os.makedirs(os.path.join(link, "tests"))
         shutil.copytree(os.path.join(ROOT, "src"), os.path.join(link, "src"))
@@ -50,7 +50,7 @@ class NewAppTests(unittest.TestCase):
                                  "fuelcalc/fuelcalc.css", "fuelcalc/fuelcalc.js",
                                  "tests/harness.html", "tests/test_app.py"])
         js = open(os.path.join(repo, "fuelcalc", "fuelcalc.js"), encoding="utf-8").read()
-        self.assertIn('ACEUIModLoader.app("fuelcalc")', js)
+        self.assertIn('ACEUIAppLoader.app("fuelcalc")', js)
         self.assertNotIn("const VERSION", js, "the version lives in app.json only")
         self.assertIn("const FuelCalc = (function () {", js)
         self.assertNotIn("__", js.replace("__clock", ""), "no unrendered template tokens")
@@ -72,7 +72,7 @@ class NewAppTests(unittest.TestCase):
         with open(path, encoding="utf-8") as f:
             js = f.read()
         with open(path, "w", encoding="utf-8") as f:
-            f.write(js.replace('const me = ACEUIModLoader.app("fuelcalc");', 'const VERSION = "0.1.0";\n    const me = ACEUIModLoader.app("fuelcalc");'))
+            f.write(js.replace('const me = ACEUIAppLoader.app("fuelcalc");', 'const VERSION = "0.1.0";\n    const me = ACEUIAppLoader.app("fuelcalc");'))
         result = run_kit(repo, MIN_CASES=3)
         failed = {str(t).split(" ")[0] for t, _ in result.failures}
         self.assertIn("test_no_legacy_boilerplate", failed)

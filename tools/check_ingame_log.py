@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-check_ingame_log.py - in-game smoke test for the ACEUIModLoader and its apps.
+check_ingame_log.py - in-game smoke test for the ACEUIAppLoader and its apps.
 
 The game writes the UI's console.log output into its own log as [gameface] lines,
 so after one launch + session we can tell whether the loader ran, which apps it
@@ -19,7 +19,7 @@ import re
 import sys
 
 LOG_DIR = os.path.join(os.path.expanduser("~"), "Saved Games", "ACE", "Logs")
-LOADER = "[ACEUIModLoader]"
+LOADER = "[ACEUIAppLoader]"
 # per-app lines worth echoing (any "[Xyz]" prefixed UI line that is not the loader)
 INTERESTING = ("script loaded", "widget attached", "position ", "script error", "sampling ok", "not attaching")
 MAX_ECHO = 12
@@ -39,6 +39,33 @@ def first_match(pattern, lines):
 
 
 PROBLEM_KEYS = (" FAILED", "failed to load", "invalid JSON", "skipped", "could not wrap")
+# What the game actually writes when its handler catches something: a "[crash] [error]"
+# block starting with this, then a stack. The two strings this looked for before --
+# "CRASH DETECTED" and "Exception thrown:" -- appear in no log this game has ever written,
+# so every run reported "no crashes" without ever having looked.
+CRASH_MARK = "Exception Detected:"
+# 0xE06D7363 through the display driver is the NVIDIA/D3D12 exception this game throws by
+# the dozen on every launch, in every session recorded since 2026-09, with or without any
+# mod installed. The game catches it and carries on, so it is noise -- but counted noise:
+# a jump in the count, or a stack through anything else, is worth seeing.
+DRIVER_MODULES = ("nvwgf2umx", "D3D12Core", "nvoglv", "amdxc")
+# how far past a crash line to look for the stack that says which module it came from
+CRASH_STACK_LINES = 30
+
+
+def classify_crashes(lines):
+    """(real, driver): exception blocks the game logged, split by what threw them.
+
+    The display-driver ones are constant background on this machine; anything else, or one
+    the log simply stops after, is what a reader needs to be shown.
+    """
+    real, driver = [], []
+    for i, line in enumerate(lines):
+        if CRASH_MARK not in line:
+            continue
+        stack = chr(10).join(lines[i:i + CRASH_STACK_LINES])
+        (driver if any(m in stack for m in DRIVER_MODULES) else real).append(line)
+    return real, driver
 
 
 def scan(loader_lines):
@@ -121,7 +148,7 @@ def main(argv):
     hud_loads = sum("Loading page hud.html" in l for l in lines)
     print(f"HUD page loads: {hud_loads}")
 
-    crashes = [l for l in lines if "CRASH DETECTED" in l or "Exception thrown:" in l]
+    crashes, driver_crashes = classify_crashes(lines)
     loader = [l for l in lines if LOADER in l]
     version = first_match(r"loader ([\d.]+) on /", loader)
     pages = scan(loader)
@@ -138,6 +165,9 @@ def main(argv):
     if len(echoed) > MAX_ECHO:
         print(f"  ... {len(echoed) - MAX_ECHO} more app lines")
 
+    if driver_crashes:
+        print(f"display-driver exceptions: {len(driver_crashes)} (0xE06D7363 through the graphics "
+              "driver; the game catches these and every session has them)")
     if crashes:
         print("CRASH / EXCEPTION lines:")
         for l in crashes[:5]:
@@ -154,6 +184,10 @@ def main(argv):
         return 2
     hud = pages["/hud.html"]
     print(f"RESULT: OK - loader on {len(pages)} page(s), on the HUD: "
+          f"{', '.join(hud['loaded']) if hud['loaded'] else 'nothing'}, "
+          f"no crashes beyond the usual {len(driver_crashes)} driver exception(s)"
+          if driver_crashes else
+          f"RESULT: OK - loader on {len(pages)} page(s), on the HUD: "
           f"{', '.join(hud['loaded']) if hud['loaded'] else 'nothing'}, no crashes")
     return 0
 

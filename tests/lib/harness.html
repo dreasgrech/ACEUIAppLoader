@@ -2,7 +2,7 @@
 <html>
 <head>
 <meta charset="utf-8">
-<title>ACEUIModLoader library tests</title>
+<title>ACEUIAppLoader library tests</title>
 <style>
   body { margin: 0; background: #222; color: #ddd; font: 12px monospace; }
   /* stand-in for the game's HUD container */
@@ -28,7 +28,7 @@ window.engine = {
         if (command !== "SettingsRequestVideoPresetList") { return; }
         window.setTimeout(function () {
             const response = { __Type: "SettingsResponseVideoPresetList", response: "OK",
-                filenames: ["ACEUIModLoaderApps-beta", "MyLowSettings", "ACEUIModLoaderApps-alpha", "ACEUIModLoaderApps-"] };
+                filenames: ["ACEUIAppLoader-beta", "MyLowSettings", "ACEUIAppLoader-alpha", "ACEUIAppLoader-"] };
             (window.__engine.handlers["SettingsResponseVideoPresetList"] || []).slice().forEach(function (e) { e.cb.call(e.ctx || window.engine, response); });
         }, 0);
     },
@@ -57,7 +57,7 @@ document.addEventListener("DOMContentLoaded", function () {
      * why this behaviour exists at all.
      */
     const scrollFixture = function (follow, onFollow) {
-        const dv = function (props) { return ACEUIModLoader.dom.div(props); };
+        const dv = function (props) { return ACEUIAppLoader.dom.div(props); };
         const box = dv({ position: "absolute", left: "0", top: "0", width: "200px" });
         const body = dv({ height: "100px", overflow: "hidden" });
         const track = dv({ height: "100px", width: "8px" });
@@ -74,7 +74,7 @@ document.addEventListener("DOMContentLoaded", function () {
             body: body,
             track: track,
             thumb: thumb,
-            scroller: ACEUIModLoader.scroll.attach({
+            scroller: ACEUIAppLoader.scroll.attach({
                 body: body,
                 track: track,
                 thumb: thumb,
@@ -100,40 +100,40 @@ document.addEventListener("DOMContentLoaded", function () {
         const root = document.createElement("div");
         root.className = "panel";
         center.appendChild(root);
-        const panel = ACEUIModLoader.panel.attach(root, Object.assign({ hudId: "hud_test", storageKey: "acetest.pos", log: function () {} }, opts || {}));
+        const panel = ACEUIAppLoader.panel.attach(root, Object.assign({ hudId: "hud_test", storageKey: "acetest.pos", log: function () {} }, opts || {}));
         return { root: root, panel: panel };
     };
-    const HUD_ID = "hud_test", KEY = "acetest.pos", WAIT = ACEUIModLoader.panel.RESTORE_WAIT_MS;
+    const HUD_ID = "hud_test", KEY = "acetest.pos", WAIT = ACEUIAppLoader.panel.RESTORE_WAIT_MS;
 
     // ---- core ---------------------------------------------------------------------------
 
     t("core: namespace, version, page, window property", function () {
-        eq(typeof ACEUIModLoader, "object"); eq(window.ACEUIModLoader, ACEUIModLoader, "window.ACEUIModLoader");
-        ok(/^\d+\.\d+\.\d+$/.test(ACEUIModLoader.VERSION), "semver"); eq(ACEUIModLoader.page, "harness.html", "page");
-        eq(ACEUIModLoader.LOG_PREFIX, "[ACEUIModLoader]"); eq(ACEUIModLoader.HUD_HIDDEN_CLASS, "hide-hud");
-        ["console", "persist", "panel", "loop", "loader"].forEach(function (ns) { eq(typeof ACEUIModLoader[ns], "object", ns); });
+        eq(typeof ACEUIAppLoader, "object"); eq(window.ACEUIAppLoader, ACEUIAppLoader, "window.ACEUIAppLoader");
+        ok(/^\d+\.\d+\.\d+$/.test(ACEUIAppLoader.VERSION), "semver"); eq(ACEUIAppLoader.page, "harness.html", "page");
+        eq(ACEUIAppLoader.LOG_PREFIX, "[ACEUIAppLoader]"); eq(ACEUIAppLoader.HUD_HIDDEN_CLASS, "hide-hud");
+        ["console", "persist", "panel", "loop", "loader"].forEach(function (ns) { eq(typeof ACEUIAppLoader[ns], "object", ns); });
     });
 
     t("core: helpers", function () {
-        eq(ACEUIModLoader.clamp(5, 0, 1), 1); eq(ACEUIModLoader.clamp(-1, 0, 1), 0); eq(ACEUIModLoader.clamp(0.5, 0, 1), 0.5);
-        eq(ACEUIModLoader.el("div", "a", { "data-x": 1 }) + ACEUIModLoader.close("div"), '<div class="a" data-x="1"></div>');
-        eq(ACEUIModLoader.percentText(0.499), "50%"); eq(ACEUIModLoader.percentText(0), "0%");
-        eq(ACEUIModLoader.toArray(document.querySelectorAll("div")).length >= 1, true);
-        eq(ACEUIModLoader.hudHidden(), false); document.body.classList.add("hide-hud"); eq(ACEUIModLoader.hudHidden(), true); document.body.classList.remove("hide-hud");
-        ACEUIModLoader.logger("[T]")("hi"); eq(last(window.__log), "[T] hi", "logger prefix"); ACEUIModLoader.log("x"); eq(last(window.__log), "[ACEUIModLoader] x");
+        eq(ACEUIAppLoader.clamp(5, 0, 1), 1); eq(ACEUIAppLoader.clamp(-1, 0, 1), 0); eq(ACEUIAppLoader.clamp(0.5, 0, 1), 0.5);
+        eq(ACEUIAppLoader.el("div", "a", { "data-x": 1 }) + ACEUIAppLoader.close("div"), '<div class="a" data-x="1"></div>');
+        eq(ACEUIAppLoader.percentText(0.499), "50%"); eq(ACEUIAppLoader.percentText(0), "0%");
+        eq(ACEUIAppLoader.toArray(document.querySelectorAll("div")).length >= 1, true);
+        eq(ACEUIAppLoader.hudHidden(), false); document.body.classList.add("hide-hud"); eq(ACEUIAppLoader.hudHidden(), true); document.body.classList.remove("hide-hud");
+        ACEUIAppLoader.logger("[T]")("hi"); eq(last(window.__log), "[T] hi", "logger prefix"); ACEUIAppLoader.log("x"); eq(last(window.__log), "[ACEUIAppLoader] x");
         const outer = document.createElement("div"), inner = document.createElement("span"); inner.setAttribute("data-nodrag", ""); outer.appendChild(inner);
         const deep = document.createElement("b"); inner.appendChild(deep);
-        eq(ACEUIModLoader.closestWithAttribute(deep, "data-nodrag", outer), inner, "closest finds ancestor"); eq(ACEUIModLoader.closestWithAttribute(outer, "data-nodrag", outer), null, "stops at root");
+        eq(ACEUIAppLoader.closestWithAttribute(deep, "data-nodrag", outer), inner, "closest finds ancestor"); eq(ACEUIAppLoader.closestWithAttribute(outer, "data-nodrag", outer), null, "stops at root");
     });
 
     // ---- console ------------------------------------------------------------------------
 
     t("console: hook captures levels and text, still calls the original", function () {
-        ACEUIModLoader.console.clear();
+        ACEUIAppLoader.console.clear();
         console.log("hello", 42, true, null);
         console.warn("careful");
         console.error(new Error("boom"));
-        const e = ACEUIModLoader.console.entries();
+        const e = ACEUIAppLoader.console.entries();
         eq(e.length, 3, "entries"); eq(e[0].level, "log"); eq(e[0].text, "hello 42 true null"); eq(e[1].level, "warn"); eq(e[1].text, "careful");
         eq(e[2].level, "error"); eq(e[2].text, "Error: boom");
         eq(last(window.__log).indexOf("hello 42 true"), 0, "original console.log reached"); eq(window.__warn.length >= 2, true, "original warn/error reached");
@@ -141,47 +141,47 @@ document.addEventListener("DOMContentLoaded", function () {
     });
 
     t("console: objects are formatted compactly and bounded", function () {
-        ACEUIModLoader.console.clear();
+        ACEUIAppLoader.console.clear();
         console.log({ a: 1, b: "x", c: [1, 2, { d: 3 }], f: function named() {} });
-        eq(ACEUIModLoader.console.entries()[0].text, '{a: 1, b: "x", c: [1, 2, {...}], f: [function named]}');
+        eq(ACEUIAppLoader.console.entries()[0].text, '{a: 1, b: "x", c: [1, 2, {...}], f: [function named]}');
         const big = {}; let i; for (i = 0; i < 30; i += 1) { big["k" + i] = i; }
         console.log(big);
-        ok(ACEUIModLoader.console.entries()[1].text.indexOf("...}") > 0, "key cap");
+        ok(ACEUIAppLoader.console.entries()[1].text.indexOf("...}") > 0, "key cap");
         console.log("x".repeat(1000));
-        eq(ACEUIModLoader.console.entries()[2].text.length, 403, "text cap");
-        eq(ACEUIModLoader.console.format([1, [2, [3]]]), "[1, [2, [...]]]", "format export");
+        eq(ACEUIAppLoader.console.entries()[2].text.length, 403, "text cap");
+        eq(ACEUIAppLoader.console.format([1, [2, [3]]]), "[1, [2, [...]]]", "format export");
     });
 
     t("console: ring buffer keeps the last MAX_ENTRIES", function () {
-        ACEUIModLoader.console.clear();
-        let i; for (i = 0; i < ACEUIModLoader.console.MAX_ENTRIES + 10; i += 1) { console.log("n" + i); }
-        eq(ACEUIModLoader.console.entries().length, ACEUIModLoader.console.MAX_ENTRIES);
-        eq(ACEUIModLoader.console.entries()[0].text, "n10", "oldest dropped");
+        ACEUIAppLoader.console.clear();
+        let i; for (i = 0; i < ACEUIAppLoader.console.MAX_ENTRIES + 10; i += 1) { console.log("n" + i); }
+        eq(ACEUIAppLoader.console.entries().length, ACEUIAppLoader.console.MAX_ENTRIES);
+        eq(ACEUIAppLoader.console.entries()[0].text, "n10", "oldest dropped");
     });
 
     t("console: subscribe / unsubscribe / capture / errors", function () {
-        ACEUIModLoader.console.clear();
+        ACEUIAppLoader.console.clear();
         const seen = [];
-        const off = ACEUIModLoader.console.subscribe(function (entry) { seen.push(entry.level + ":" + entry.text); });
-        eq(ACEUIModLoader.console.listenerCount(), 1);
-        console.log("a"); ACEUIModLoader.console.capture("input", "> 1+1");
+        const off = ACEUIAppLoader.console.subscribe(function (entry) { seen.push(entry.level + ":" + entry.text); });
+        eq(ACEUIAppLoader.console.listenerCount(), 1);
+        console.log("a"); ACEUIAppLoader.console.capture("input", "> 1+1");
         eq(seen.join("|"), "log:a|input:> 1+1");
         eq(window.__log.indexOf("> 1+1"), -1, "capture does not reach console");
         window.dispatchEvent(new ErrorEvent("error", { message: "kaboom", filename: "x.js", lineno: 7 }));
         eq(last(seen), "error:uncaught: kaboom at x.js:7");
-        off(); eq(ACEUIModLoader.console.listenerCount(), 0);
+        off(); eq(ACEUIAppLoader.console.listenerCount(), 0);
         console.log("b"); eq(seen.length, 3, "no notification after unsubscribe");
         // a listener that logs must not recurse
-        const off2 = ACEUIModLoader.console.subscribe(function () { console.log("from listener"); });
+        const off2 = ACEUIAppLoader.console.subscribe(function () { console.log("from listener"); });
         console.log("trigger"); off2();
-        eq(last(ACEUIModLoader.console.entries()).text, "from listener", "stored once, no infinite loop");
+        eq(last(ACEUIAppLoader.console.entries()).text, "from listener", "stored once, no infinite loop");
 
         /* A listener that throws used to leave the re-entry guard set, which stopped every
            later notification for the rest of the session -- the console would quietly stop
            updating with nothing in the log to say why. */
         const after = [];
-        const offBad = ACEUIModLoader.console.subscribe(function () { throw new Error("listener boom"); });
-        const offGood = ACEUIModLoader.console.subscribe(function (entry) { after.push(entry.text); });
+        const offBad = ACEUIAppLoader.console.subscribe(function () { throw new Error("listener boom"); });
+        const offGood = ACEUIAppLoader.console.subscribe(function (entry) { after.push(entry.text); });
 
         console.log("first");
         console.log("second");
@@ -193,7 +193,7 @@ document.addEventListener("DOMContentLoaded", function () {
     // ---- persist -------------------------------------------------------------------------
 
     t("core: errorText reads anything that was thrown, safely runs someone else's callback", function () {
-        const core = ACEUIModLoader;
+        const core = ACEUIAppLoader;
         const before = window.__log.length;
 
         eq(core.errorText(new Error("boom")), "Error: boom", "an Error");
@@ -206,7 +206,7 @@ document.addEventListener("DOMContentLoaded", function () {
     });
 
     t("dom: elements with inline styles, class toggles and emptying", function () {
-        const dom = ACEUIModLoader.dom;
+        const dom = ACEUIAppLoader.dom;
         const node = dom.make("span", { color: "rgb(1, 2, 3)" }, "hi");
 
         eq(node.tagName, "SPAN", "tag");
@@ -224,7 +224,7 @@ document.addEventListener("DOMContentLoaded", function () {
     });
 
     t("dom: a listener bag lets go of everything in one call", function () {
-        const dom = ACEUIModLoader.dom;
+        const dom = ACEUIAppLoader.dom;
         const bag = dom.listeners();
         const target = dom.div({});
         let hits = 0;
@@ -247,7 +247,7 @@ document.addEventListener("DOMContentLoaded", function () {
     });
 
     t("keys: a key is recognised by code, by character and by the legacy keyCode", function () {
-        const keys = ACEUIModLoader.keys;
+        const keys = ACEUIAppLoader.keys;
 
         ok(keys.is({ code: "Backquote" }, "Backquote"), "by code");
         ok(keys.is({ key: "`" }, "Backquote"), "by the character the engine sends as key");
@@ -260,7 +260,7 @@ document.addEventListener("DOMContentLoaded", function () {
     });
 
     t("keys: bind follows a key kept in settings and stays out of a text box", function () {
-        const keys = ACEUIModLoader.keys;
+        const keys = ACEUIAppLoader.keys;
         const field = document.createElement("input");
         let wanted = "Backquote";
         let fired = 0;
@@ -363,7 +363,7 @@ document.addEventListener("DOMContentLoaded", function () {
     });
 
     t("persist: whenHudReady fires as soon as the store is there, and can be cancelled", function () {
-        const persist = ACEUIModLoader.persist;
+        const persist = ACEUIAppLoader.persist;
         const hadHud = window.HUD;
         let fired = 0;
         let cancel;
@@ -381,20 +381,20 @@ document.addEventListener("DOMContentLoaded", function () {
 
     t("persist: local round trip, hud store when present", function () {
         window.HUD = null; localStorage.clear();
-        eq(ACEUIModLoader.persist.hudAvailable(), false); eq(ACEUIModLoader.persist.readHud("hud_x"), null);
-        eq(ACEUIModLoader.persist.writeHud("hud_x", { a: 1 }), false, "no HUD object");
-        eq(ACEUIModLoader.persist.writeLocal("k", { a: 1 }), true); eq(ACEUIModLoader.persist.readLocal("k").a, 1);
-        ACEUIModLoader.persist.removeLocal("k"); eq(ACEUIModLoader.persist.readLocal("k"), null);
-        eq(ACEUIModLoader.persist.save("hud_x", "k", { b: 2 }).join(","), "localStorage");
+        eq(ACEUIAppLoader.persist.hudAvailable(), false); eq(ACEUIAppLoader.persist.readHud("hud_x"), null);
+        eq(ACEUIAppLoader.persist.writeHud("hud_x", { a: 1 }), false, "no HUD object");
+        eq(ACEUIAppLoader.persist.writeLocal("k", { a: 1 }), true); eq(ACEUIAppLoader.persist.readLocal("k").a, 1);
+        ACEUIAppLoader.persist.removeLocal("k"); eq(ACEUIAppLoader.persist.readLocal("k"), null);
+        eq(ACEUIAppLoader.persist.save("hud_x", "k", { b: 2 }).join(","), "localStorage");
         window.HUD = makeHud({});
-        eq(ACEUIModLoader.persist.hudAvailable(), true);
-        eq(ACEUIModLoader.persist.save("hud_x", "k", { b: 3 }).join(","), "hud layout,localStorage");
-        eq(ACEUIModLoader.persist.readHud("hud_x").b, 3); eq(ACEUIModLoader.persist.readLocal("k").b, 3);
+        eq(ACEUIAppLoader.persist.hudAvailable(), true);
+        eq(ACEUIAppLoader.persist.save("hud_x", "k", { b: 3 }).join(","), "hud layout,localStorage");
+        eq(ACEUIAppLoader.persist.readHud("hud_x").b, 3); eq(ACEUIAppLoader.persist.readLocal("k").b, 3);
         window.HUD = null; localStorage.clear();
     });
 
     t("persist: the engine container is a third store, absent until the engine fills it", function () {
-        const P = ACEUIModLoader.persist;
+        const P = ACEUIAppLoader.persist;
         window.STORAGE = undefined;
         eq(P.storeLoaded(), false, "no container, nothing loaded");
         eq(P.readStore("acex.thing"), null, "and nothing to read");
@@ -437,17 +437,17 @@ document.addEventListener("DOMContentLoaded", function () {
             ignoreInputActions: function (on) { calls.push("actions:" + on); }
         } };
 
-        ok(ACEUIModLoader.input.available(), "the engine offers the levers");
-        ACEUIModLoader.input.capture("one");
+        ok(ACEUIAppLoader.input.available(), "the engine offers the levers");
+        ACEUIAppLoader.input.capture("one");
         eq(calls.join(" "), "chat:true actions:true", "both levers go up");
         /* is_chat_active alone left the arrow keys moving the seat, which is why the
            second lever has to be here too */
-        ok(ACEUIModLoader.input.isCaptured(), "held");
+        ok(ACEUIAppLoader.input.isCaptured(), "held");
 
         calls.length = 0;
-        ACEUIModLoader.input.release("one");
+        ACEUIAppLoader.input.release("one");
         eq(calls.join(" "), "chat:false actions:false", "and both come down");
-        eq(ACEUIModLoader.input.isCaptured(), false, "released");
+        eq(ACEUIAppLoader.input.isCaptured(), false, "released");
     });
 
     t("input: two holders share it; the flags drop only when the last lets go", function () {
@@ -459,32 +459,32 @@ document.addEventListener("DOMContentLoaded", function () {
 
         /* the console holds it while typing, DOOM while it is open: if the console
            released on blur it would yank the keyboard out from under DOOM */
-        ACEUIModLoader.input.capture("devconsole");
-        ACEUIModLoader.input.capture("doom");
+        ACEUIAppLoader.input.capture("devconsole");
+        ACEUIAppLoader.input.capture("doom");
         eq(calls.length, 1, "the engine is told once, not twice");
-        eq(ACEUIModLoader.input.holders().length, 2, "both are holding");
+        eq(ACEUIAppLoader.input.holders().length, 2, "both are holding");
 
         calls.length = 0;
-        ACEUIModLoader.input.release("devconsole");
+        ACEUIAppLoader.input.release("devconsole");
         eq(calls.length, 0, "one letting go changes nothing");
-        ok(ACEUIModLoader.input.isCaptured(), "still held by the other");
+        ok(ACEUIAppLoader.input.isCaptured(), "still held by the other");
 
-        ACEUIModLoader.input.release("doom");
+        ACEUIAppLoader.input.release("doom");
         eq(calls.join(""), "false", "released only when the last holder lets go");
-        eq(ACEUIModLoader.input.isCaptured(), false);
+        eq(ACEUIAppLoader.input.isCaptured(), false);
     });
 
     t("input: repeated capture by one owner counts once, and releasing an unknown owner is harmless", function () {
         const calls = [];
         window.ksUI = { menuState: { toggleKeyboardInput: function (on) { calls.push(on); } } };
 
-        ACEUIModLoader.input.capture("same");
-        ACEUIModLoader.input.capture("same");
-        eq(ACEUIModLoader.input.holders().length, 1, "counted once");
-        ACEUIModLoader.input.release("nobody");
-        ok(ACEUIModLoader.input.isCaptured(), "releasing a stranger does not drop it");
-        ACEUIModLoader.input.release("same");
-        eq(ACEUIModLoader.input.isCaptured(), false, "its own release does");
+        ACEUIAppLoader.input.capture("same");
+        ACEUIAppLoader.input.capture("same");
+        eq(ACEUIAppLoader.input.holders().length, 1, "counted once");
+        ACEUIAppLoader.input.release("nobody");
+        ok(ACEUIAppLoader.input.isCaptured(), "releasing a stranger does not drop it");
+        ACEUIAppLoader.input.release("same");
+        eq(ACEUIAppLoader.input.isCaptured(), false, "its own release does");
     });
 
     t("input: bindFocus holds it exactly while the element has focus, and unbinding releases", function () {
@@ -492,18 +492,18 @@ document.addEventListener("DOMContentLoaded", function () {
         const box = document.createElement("input");
         document.getElementById("center").appendChild(box);
 
-        const unbind = ACEUIModLoader.input.bindFocus(box, "boxy");
+        const unbind = ACEUIAppLoader.input.bindFocus(box, "boxy");
         box.dispatchEvent(new Event("focus"));
-        ok(ACEUIModLoader.input.isCaptured(), "held on focus");
+        ok(ACEUIAppLoader.input.isCaptured(), "held on focus");
         box.dispatchEvent(new Event("blur"));
-        eq(ACEUIModLoader.input.isCaptured(), false, "released on blur");
+        eq(ACEUIAppLoader.input.isCaptured(), false, "released on blur");
 
         box.dispatchEvent(new Event("focus"));
-        ok(ACEUIModLoader.input.isCaptured(), "held again");
+        ok(ACEUIAppLoader.input.isCaptured(), "held again");
         unbind();
-        eq(ACEUIModLoader.input.isCaptured(), false, "unbinding releases even while focused");
+        eq(ACEUIAppLoader.input.isCaptured(), false, "unbinding releases even while focused");
         box.dispatchEvent(new Event("focus"));
-        eq(ACEUIModLoader.input.isCaptured(), false, "and the listeners are gone");
+        eq(ACEUIAppLoader.input.isCaptured(), false, "and the listeners are gone");
 
         box.remove();
     });
@@ -519,25 +519,25 @@ document.addEventListener("DOMContentLoaded", function () {
 
         /* holding the keyboard for as long as a panel is open would mean never being able
            to leave it open and drive; click-to-focus is what makes coexisting possible */
-        const unbind = ACEUIModLoader.input.bindClickFocus(panel, "panelly");
-        eq(ACEUIModLoader.input.isCaptured(), false, "binding alone takes nothing");
+        const unbind = ACEUIAppLoader.input.bindClickFocus(panel, "panelly");
+        eq(ACEUIAppLoader.input.isCaptured(), false, "binding alone takes nothing");
 
         inner.dispatchEvent(new MouseEvent("mousedown", { bubbles: true }));
-        ok(ACEUIModLoader.input.isCaptured(), "a click on a descendant counts as inside");
+        ok(ACEUIAppLoader.input.isCaptured(), "a click on a descendant counts as inside");
 
         elsewhere.dispatchEvent(new MouseEvent("mousedown", { bubbles: true }));
-        eq(ACEUIModLoader.input.isCaptured(), false, "a click outside gives it back");
+        eq(ACEUIAppLoader.input.isCaptured(), false, "a click outside gives it back");
 
         panel.dispatchEvent(new MouseEvent("mousedown", { bubbles: true }));
-        ok(ACEUIModLoader.input.isCaptured(), "and clicking it again takes it back");
+        ok(ACEUIAppLoader.input.isCaptured(), "and clicking it again takes it back");
 
         unbind();
-        eq(ACEUIModLoader.input.isCaptured(), false, "unbinding releases");
+        eq(ACEUIAppLoader.input.isCaptured(), false, "unbinding releases");
         panel.dispatchEvent(new MouseEvent("mousedown", { bubbles: true }));
-        eq(ACEUIModLoader.input.isCaptured(), false, "and stops listening");
+        eq(ACEUIAppLoader.input.isCaptured(), false, "and stops listening");
 
-        eq(ACEUIModLoader.input.within(panel, inner), true, "within() walks up the tree");
-        eq(ACEUIModLoader.input.within(panel, elsewhere), false);
+        eq(ACEUIAppLoader.input.within(panel, inner), true, "within() walks up the tree");
+        eq(ACEUIAppLoader.input.within(panel, elsewhere), false);
 
         panel.remove();
         elsewhere.remove();
@@ -552,20 +552,20 @@ document.addEventListener("DOMContentLoaded", function () {
 
         /* Escape is itself a bound gameplay action, so suppressing actions suppressed the
            pause menu: a stuck capture left the game with no way to open it at all. */
-        ACEUIModLoader.input.capture("clingy");
-        ACEUIModLoader.input.capture("alsoclingy");
-        ok(ACEUIModLoader.input.isCaptured(), "two holders");
+        ACEUIAppLoader.input.capture("clingy");
+        ACEUIAppLoader.input.capture("alsoclingy");
+        ok(ACEUIAppLoader.input.isCaptured(), "two holders");
 
         calls.length = 0;
         window.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true }));
-        eq(ACEUIModLoader.input.isCaptured(), false, "Escape drops every holder");
-        eq(ACEUIModLoader.input.holders().length, 0, "nobody is left holding");
+        eq(ACEUIAppLoader.input.isCaptured(), false, "Escape drops every holder");
+        eq(ACEUIAppLoader.input.holders().length, 0, "nobody is left holding");
         eq(calls.join(""), "false", "and the engine is told");
 
         /* the legacy keyCode path too, since that is what the engine reports */
-        ACEUIModLoader.input.capture("clingy");
+        ACEUIAppLoader.input.capture("clingy");
         window.dispatchEvent(new KeyboardEvent("keydown", { keyCode: 27, bubbles: true }));
-        eq(ACEUIModLoader.input.isCaptured(), false, "keyCode 27 works as well");
+        eq(ACEUIAppLoader.input.isCaptured(), false, "keyCode 27 works as well");
     });
 
     t("input: releaseEverything clears the engine even when nothing is recorded as held", function () {
@@ -577,14 +577,14 @@ document.addEventListener("DOMContentLoaded", function () {
 
         /* the flags live in the game's menu state and survive a HUD reload, so a fresh
            page has to be able to clear a capture it never made */
-        ACEUIModLoader.input.state.owners = {};
-        ACEUIModLoader.input.state.count = 0;
-        ACEUIModLoader.input.state.applied = true;      // as if a previous page left it on
+        ACEUIAppLoader.input.state.owners = {};
+        ACEUIAppLoader.input.state.count = 0;
+        ACEUIAppLoader.input.state.applied = true;      // as if a previous page left it on
 
         calls.length = 0;
-        ok(ACEUIModLoader.input.releaseEverything("test"), "it writes");
+        ok(ACEUIAppLoader.input.releaseEverything("test"), "it writes");
         eq(calls.join(" "), "false false", "both levers cleared");
-        eq(ACEUIModLoader.input.isCaptured(), false);
+        eq(ACEUIAppLoader.input.isCaptured(), false);
     });
 
     t("input: a missed blur does not strand the capture -- a click elsewhere releases too", function () {
@@ -594,13 +594,13 @@ document.addEventListener("DOMContentLoaded", function () {
         document.getElementById("center").appendChild(box);
         document.getElementById("center").appendChild(elsewhere);
 
-        const unbind = ACEUIModLoader.input.bindFocus(box, "typer");
+        const unbind = ACEUIAppLoader.input.bindFocus(box, "typer");
         box.dispatchEvent(new Event("focus"));
-        ok(ACEUIModLoader.input.isCaptured(), "held while focused");
+        ok(ACEUIAppLoader.input.isCaptured(), "held while focused");
 
         /* no blur is fired here on purpose: that is the case that stranded it in game */
         elsewhere.dispatchEvent(new MouseEvent("mousedown", { bubbles: true }));
-        eq(ACEUIModLoader.input.isCaptured(), false, "a click elsewhere releases it anyway");
+        eq(ACEUIAppLoader.input.isCaptured(), false, "a click elsewhere releases it anyway");
 
         unbind();
         box.remove();
@@ -613,39 +613,39 @@ document.addEventListener("DOMContentLoaded", function () {
         /* A player can rebind pause off Escape, so releasing only on the Escape key would
            strand exactly the players who customised their controls. The engine reports
            bound actions by name, which is the same whatever key produced them. */
-        ACEUIModLoader.input.capture("holder");
-        ACEUIModLoader.input.onAction({ action: "InputAction_UI_Menu" });
-        eq(ACEUIModLoader.input.isCaptured(), false, "the menu action releases it");
+        ACEUIAppLoader.input.capture("holder");
+        ACEUIAppLoader.input.onAction({ action: "InputAction_UI_Menu" });
+        eq(ACEUIAppLoader.input.isCaptured(), false, "the menu action releases it");
 
-        ACEUIModLoader.input.capture("holder");
-        ACEUIModLoader.input.onAction({ action: "InputAction_UI_Cancel" });
-        eq(ACEUIModLoader.input.isCaptured(), false, "so does cancel");
+        ACEUIAppLoader.input.capture("holder");
+        ACEUIAppLoader.input.onAction({ action: "InputAction_UI_Cancel" });
+        eq(ACEUIAppLoader.input.isCaptured(), false, "so does cancel");
 
-        ACEUIModLoader.input.capture("holder");
-        ACEUIModLoader.input.onAction({ action: "InputAction_Car_Headlights" });
-        ok(ACEUIModLoader.input.isCaptured(), "an unrelated action does not");
-        ACEUIModLoader.input.onAction({});
-        ok(ACEUIModLoader.input.isCaptured(), "nor does a malformed one");
-        ACEUIModLoader.input.releaseEverything("cleanup");
+        ACEUIAppLoader.input.capture("holder");
+        ACEUIAppLoader.input.onAction({ action: "InputAction_Car_Headlights" });
+        ok(ACEUIAppLoader.input.isCaptured(), "an unrelated action does not");
+        ACEUIAppLoader.input.onAction({});
+        ok(ACEUIAppLoader.input.isCaptured(), "nor does a malformed one");
+        ACEUIAppLoader.input.releaseEverything("cleanup");
     });
 
     t("input: losing window focus releases it, so alt-tab cannot strand the game", function () {
         window.ksUI = { menuState: { toggleKeyboardInput: function () {}, ignoreInputActions: function () {} } };
-        ACEUIModLoader.input.capture("holder");
+        ACEUIAppLoader.input.capture("holder");
         window.dispatchEvent(new Event("blur"));
-        eq(ACEUIModLoader.input.isCaptured(), false, "released on alt-tab");
+        eq(ACEUIAppLoader.input.isCaptured(), false, "released on alt-tab");
     });
 
     t("input: outside the game there is nothing to capture, and it says so", function () {
         delete window.ksUI;
-        eq(ACEUIModLoader.input.available(), false, "no levers");
-        ACEUIModLoader.input.capture("nowhere");
-        ACEUIModLoader.input.release("nowhere");
-        eq(ACEUIModLoader.input.isCaptured(), false, "and nothing is left holding");
+        eq(ACEUIAppLoader.input.available(), false, "no levers");
+        ACEUIAppLoader.input.capture("nowhere");
+        ACEUIAppLoader.input.release("nowhere");
+        eq(ACEUIAppLoader.input.isCaptured(), false, "and nothing is left holding");
     });
 
     t("window: open gives a handle with a body to fill, a title bar and a close button", function () {
-        const W = ACEUIModLoader.window;
+        const W = ACEUIAppLoader.window;
         const win = W.open("demo.help", { title: "Demo help", width: "12rem" });
 
         ok(win, "a handle comes back");
@@ -669,7 +669,7 @@ document.addEventListener("DOMContentLoaded", function () {
     });
 
     t("window: opening the same id twice returns the one window, and toggle flips it", function () {
-        const W = ACEUIModLoader.window;
+        const W = ACEUIAppLoader.window;
         const first = W.open("demo.twice", { title: "Twice" });
         const second = W.open("demo.twice", { title: "Twice" });
 
@@ -683,7 +683,7 @@ document.addEventListener("DOMContentLoaded", function () {
     });
 
     t("window: onOpen and onClose are called, and a throwing one does not break the window", function () {
-        const W = ACEUIModLoader.window;
+        const W = ACEUIAppLoader.window;
         const seen = [];
 
         const win = W.open("demo.hooks", {
@@ -701,7 +701,7 @@ document.addEventListener("DOMContentLoaded", function () {
     });
 
     t("window: closeAll shuts every one, and the frame loop only runs while some are open", function () {
-        const W = ACEUIModLoader.window;
+        const W = ACEUIAppLoader.window;
         const before = clock.queue.length;
 
         W.open("demo.a", { title: "A" });
@@ -720,7 +720,7 @@ document.addEventListener("DOMContentLoaded", function () {
 
     t("settings: define returns live values, merging what was stored over the defaults", function () {
         window.HUD = makeHud({});
-        const S = ACEUIModLoader.settings;
+        const S = ACEUIAppLoader.settings;
 
         const values = S.define("demo", [
             { key: "scale", type: "range", label: "Scale", value: 1, min: 0.5, max: 2, step: 0.5 },
@@ -745,7 +745,7 @@ document.addEventListener("DOMContentLoaded", function () {
     });
 
     t("settings: values are coerced back into the shape the spec promises", function () {
-        const S = ACEUIModLoader.settings;
+        const S = ACEUIAppLoader.settings;
         S.define("coerce", [
             { key: "n", type: "range", value: 5, min: 0, max: 10 },
             { key: "b", type: "toggle", value: false },
@@ -764,7 +764,7 @@ document.addEventListener("DOMContentLoaded", function () {
     });
 
     t("settings: listeners can be counted, so an app can prove its detach unsubscribed", function () {
-        const S = ACEUIModLoader.settings;
+        const S = ACEUIAppLoader.settings;
 
         S.define("counted", [{ key: "x", type: "toggle", label: "X", value: false }]);
         eq(S.listenerCount("counted"), 0);
@@ -779,7 +779,7 @@ document.addEventListener("DOMContentLoaded", function () {
 
     t("settings: changes are announced to the app and survive as stored values", function () {
         window.HUD = makeHud({});
-        const S = ACEUIModLoader.settings;
+        const S = ACEUIAppLoader.settings;
         const seen = [];
 
         S.define("announce", [{ key: "size", type: "range", value: 2, min: 1, max: 5, step: 1 }]);
@@ -791,8 +791,8 @@ document.addEventListener("DOMContentLoaded", function () {
         eq(seen.length, 1, "an unchanged value says nothing");
 
         /* both stores, because localStorage dies with the game */
-        ok(ACEUIModLoader.persist.readLocal(S.localKey("announce")), "written to localStorage");
-        ok(ACEUIModLoader.persist.readHud(S.hudId("announce")), "and to the HUD store, which reaches disk");
+        ok(ACEUIAppLoader.persist.readLocal(S.localKey("announce")), "written to localStorage");
+        ok(ACEUIAppLoader.persist.readHud(S.hudId("announce")), "and to the HUD store, which reaches disk");
 
         off();
         S.set("announce", "size", 4);
@@ -801,7 +801,7 @@ document.addEventListener("DOMContentLoaded", function () {
     });
 
     t("settings: render draws a control per setting and the controls change the value", function () {
-        const S = ACEUIModLoader.settings;
+        const S = ACEUIAppLoader.settings;
         const pane = document.createElement("div");
         document.getElementById("center").appendChild(pane);
 
@@ -830,7 +830,7 @@ document.addEventListener("DOMContentLoaded", function () {
        key pressed anywhere -- W, driving away from the menu -- was swallowed and became
        the app's hotkey. */
     t("settings: a key control can be cancelled, and Escape is not a hotkey", function () {
-        const S = ACEUIModLoader.settings;
+        const S = ACEUIAppLoader.settings;
         const pane = document.createElement("div");
         const center = document.getElementById("center");
         const press = function (code) {
@@ -841,7 +841,7 @@ document.addEventListener("DOMContentLoaded", function () {
         S.define("bindy", [{ key: "toggleKey", type: "key", label: "Toggle key", value: "Backquote" }]);
         S.render("bindy", pane);
 
-        const control = ACEUIModLoader.toArray(pane.querySelectorAll("span")).filter(function (n) {
+        const control = ACEUIAppLoader.toArray(pane.querySelectorAll("span")).filter(function (n) {
             return n.textContent === "Backquote";
         })[0];
         ok(control, "the control shows the key it holds");
@@ -869,10 +869,10 @@ document.addEventListener("DOMContentLoaded", function () {
     });
 
     /* A control that binds beyond its own element (a text box takes the keyboard through
-       ACEUIModLoader.input, which listens on the window too) has to give that back when
+       ACEUIAppLoader.input, which listens on the window too) has to give that back when
        the pane goes, or opening settings a few times leaves a pile of them behind. */
     t("settings: closing a settings window gives back what its controls bound", function () {
-        const S = ACEUIModLoader.settings;
+        const S = ACEUIAppLoader.settings;
         const pane = document.createElement("div");
 
         document.getElementById("center").appendChild(pane);
@@ -882,7 +882,7 @@ document.addEventListener("DOMContentLoaded", function () {
         ]);
         S.render("leaky", pane);
 
-        const control = ACEUIModLoader.toArray(pane.querySelectorAll("span")).filter(function (n) {
+        const control = ACEUIAppLoader.toArray(pane.querySelectorAll("span")).filter(function (n) {
             return n.textContent === "F8";
         })[0];
 
@@ -900,8 +900,8 @@ document.addEventListener("DOMContentLoaded", function () {
     });
 
     t("settings: an app with settings gets a way in from the drawer, opening its own window", function () {
-        const S = ACEUIModLoader.settings;
-        const d = ACEUIModLoader.drawer;
+        const S = ACEUIAppLoader.settings;
+        const d = ACEUIAppLoader.drawer;
 
         d.build([{ name: "geary", info: { title: "Geary" }, status: "loaded" }]);
         const app = d.state.apps.filter(function (a) { return a.name === "geary"; })[0];
@@ -953,7 +953,7 @@ document.addEventListener("DOMContentLoaded", function () {
         ok(!root.classList.contains("dragging"));
         const saved = JSON.parse(localStorage.getItem(KEY));
         near(saved.fx, 500 / c.width, 0.001, "fx"); near(saved.fy, 350 / c.height, 0.001, "fy"); eq(saved.x, "500px"); eq(saved.y, "350px");
-        ACEUIModLoader.panel.detach(p.panel); root.remove();
+        ACEUIAppLoader.panel.detach(p.panel); root.remove();
     });
 
     t("panel: data-nodrag descendants do not start a drag; onSaved fires with the HUD store written", function () {
@@ -968,7 +968,7 @@ document.addEventListener("DOMContentLoaded", function () {
         mouse("mousedown", 105, 105, root); mouse("mousemove", 125, 115); mouse("mouseup", 0, 0);
         const entry = window.HUD.StoredData.layouts.default.elements[HUD_ID];
         ok(entry, "HUD store entry"); eq(entry.x, "120px"); eq(entry.y, "110px"); ok(savedPos && savedPos.x === "120px", "onSaved");
-        ACEUIModLoader.panel.detach(p.panel); root.remove(); window.HUD = null;
+        ACEUIAppLoader.panel.detach(p.panel); root.remove(); window.HUD = null;
     });
 
     t("panel: localStorage position applied synchronously at attach, HUD store keeps the last word", function () {
@@ -977,45 +977,45 @@ document.addEventListener("DOMContentLoaded", function () {
         eq(p.root.style.left, Math.round(0.2 * c.width) + "px", "placed immediately"); eq(p.root.style.visibility, "", "visible right away");
         ok(!p.panel.restored, "not settled yet");
         window.HUD = makeHud({}); window.HUD.StoredData.layouts.default.elements[HUD_ID] = { fx: 0.5, fy: 0.5 };
-        ACEUIModLoader.panel.update(p.panel, 1000);
+        ACEUIAppLoader.panel.update(p.panel, 1000);
         eq(p.root.style.left, Math.round(0.5 * c.width) + "px", "HUD store wins"); ok(p.panel.restored);
-        ACEUIModLoader.panel.detach(p.panel); p.root.remove(); localStorage.clear(); window.HUD = null;
+        ACEUIAppLoader.panel.detach(p.panel); p.root.remove(); localStorage.clear(); window.HUD = null;
     });
 
     t("panel: nothing stored: hidden until the HUD store was consulted, then default", function () {
         window.HUD = null; localStorage.clear();
         const p = makePanel();
         eq(p.root.style.visibility, "hidden"); eq(p.root.style.left, "", "nothing applied");
-        ACEUIModLoader.panel.update(p.panel, 1000); eq(p.panel.restored, false, "waiting for HUD");
-        window.HUD = makeHud({}); ACEUIModLoader.panel.update(p.panel, 1016);
+        ACEUIAppLoader.panel.update(p.panel, 1000); eq(p.panel.restored, false, "waiting for HUD");
+        window.HUD = makeHud({}); ACEUIAppLoader.panel.update(p.panel, 1016);
         eq(p.root.style.left, "", "stylesheet default kept"); ok(p.panel.restored); eq(p.root.style.visibility, "", "shown");
-        ACEUIModLoader.panel.detach(p.panel); p.root.remove(); window.HUD = null;
+        ACEUIAppLoader.panel.detach(p.panel); p.root.remove(); window.HUD = null;
     });
 
     t("panel: no HUD object at all: localStorage fallback after the wait window", function () {
         window.HUD = null; localStorage.clear();
         const p = makePanel();
         localStorage.setItem(KEY, JSON.stringify({ fx: 0.3, fy: 0.4 }));   // saved later in the session
-        ACEUIModLoader.panel.update(p.panel, 5000); ACEUIModLoader.panel.update(p.panel, 5000 + WAIT - 1);
-        eq(p.root.style.left, "", "not yet"); ACEUIModLoader.panel.update(p.panel, 5000 + WAIT);
+        ACEUIAppLoader.panel.update(p.panel, 5000); ACEUIAppLoader.panel.update(p.panel, 5000 + WAIT - 1);
+        eq(p.root.style.left, "", "not yet"); ACEUIAppLoader.panel.update(p.panel, 5000 + WAIT);
         const c = center.getBoundingClientRect(); eq(p.root.style.left, Math.round(0.3 * c.width) + "px", "fallback applied"); ok(p.panel.restored);
-        ACEUIModLoader.panel.detach(p.panel); p.root.remove(); localStorage.clear();
+        ACEUIAppLoader.panel.detach(p.panel); p.root.remove(); localStorage.clear();
     });
 
     t("panel: legacy/invalid stored positions are ignored; zero-size parent defers", function () {
         window.HUD = makeHud({}); localStorage.setItem(KEY, JSON.stringify({ left: "5px" }));
         const p = makePanel(); eq(p.root.style.left, "", "nothing applied synchronously");
-        ACEUIModLoader.panel.update(p.panel, 100); eq(p.root.style.left, ""); ok(p.panel.restored, "gave up cleanly");
-        ACEUIModLoader.panel.detach(p.panel); p.root.remove(); localStorage.clear();
+        ACEUIAppLoader.panel.update(p.panel, 100); eq(p.root.style.left, ""); ok(p.panel.restored, "gave up cleanly");
+        ACEUIAppLoader.panel.detach(p.panel); p.root.remove(); localStorage.clear();
         window.HUD.StoredData.layouts.default.elements[HUD_ID] = { fx: 0.5, fy: 0.5 };
         const hidden = document.createElement("div"); hidden.className = "absolutecenter"; hidden.style.display = "none"; document.body.appendChild(hidden);
         const root = document.createElement("div"); root.className = "panel"; hidden.appendChild(root);
-        const panel = ACEUIModLoader.panel.attach(root, { hudId: HUD_ID, storageKey: KEY, log: function () {} });
-        ACEUIModLoader.panel.update(panel, 200); ACEUIModLoader.panel.update(panel, 200 + WAIT + 100);
+        const panel = ACEUIAppLoader.panel.attach(root, { hudId: HUD_ID, storageKey: KEY, log: function () {} });
+        ACEUIAppLoader.panel.update(panel, 200); ACEUIAppLoader.panel.update(panel, 200 + WAIT + 100);
         eq(root.style.left, "", "nothing while the container has no size"); ok(!panel.restored);
-        hidden.style.display = "block"; ACEUIModLoader.panel.update(panel, 200 + WAIT + 200);
+        hidden.style.display = "block"; ACEUIAppLoader.panel.update(panel, 200 + WAIT + 200);
         eq(root.style.left, Math.round(0.5 * hidden.getBoundingClientRect().width) + "px", "applied once laid out"); ok(panel.restored);
-        ACEUIModLoader.panel.detach(panel); hidden.remove(); window.HUD = null;
+        ACEUIAppLoader.panel.detach(panel); hidden.remove(); window.HUD = null;
     });
 
     t("panel: a click without movement saves nothing", function () {
@@ -1024,13 +1024,13 @@ document.addEventListener("DOMContentLoaded", function () {
         mouse("mousedown", 15, 15, p.root); ok(p.root.classList.contains("dragging")); mouse("mouseup", 0, 0);
         ok(!p.root.classList.contains("dragging")); eq(localStorage.getItem(KEY), null, "no localStorage write");
         eq(window.HUD.StoredData.layouts.default.elements[HUD_ID], undefined, "no HUD store write");
-        ACEUIModLoader.panel.detach(p.panel); p.root.remove(); window.HUD = null;
+        ACEUIAppLoader.panel.detach(p.panel); p.root.remove(); window.HUD = null;
     });
 
     t("panel: detach releases listeners and shows the root", function () {
         window.HUD = null; localStorage.clear();
         const p = makePanel(); p.root.style.left = "10px"; p.root.style.top = "10px";
-        ACEUIModLoader.panel.detach(p.panel);
+        ACEUIAppLoader.panel.detach(p.panel);
         eq(p.root.style.visibility, "", "shown");
         mouse("mousedown", 15, 15, p.root); mouse("mousemove", 500, 500); mouse("mouseup", 0, 0);
         eq(p.root.style.left, "10px", "listeners released"); eq(localStorage.getItem(KEY), null, "nothing saved");
@@ -1047,7 +1047,7 @@ document.addEventListener("DOMContentLoaded", function () {
      */
     t("app: panel() places the widget, drives its frame loop and stops both in one call", function () {
         const root = document.createElement("div");
-        const me = ACEUIModLoader.app("lifecycle");
+        const me = ACEUIAppLoader.app("lifecycle");
         const frames = [];
         let ui;
 
@@ -1082,7 +1082,7 @@ document.addEventListener("DOMContentLoaded", function () {
     });
 
     t("settings: a spec the loader cannot draw is named in the log, not dropped in silence", function () {
-        const S = ACEUIModLoader.settings;
+        const S = ACEUIAppLoader.settings;
         const before = window.__log.length;
         const values = S.define("noisy", [
             { key: "good", type: "toggle", label: "Good", value: true },
@@ -1104,13 +1104,13 @@ document.addEventListener("DOMContentLoaded", function () {
      * root whose insides are em scales the lot, which is the part worth sharing.
      */
     t("app: scale sizes a panel, follows its setting and stays inside its bounds", function () {
-        const me = ACEUIModLoader.app("scaler");
+        const me = ACEUIAppLoader.app("scaler");
         const root = document.createElement("div");
         const seen = [];
         let scale;
 
         center.appendChild(root);
-        ACEUIModLoader.settings.define("scaler", [me.scaleSpec({ min: 0.8, max: 1.5, value: 1 })]);
+        ACEUIAppLoader.settings.define("scaler", [me.scaleSpec({ min: 0.8, max: 1.5, value: 1 })]);
 
         scale = me.scale(root, { min: 0.8, max: 1.5, onScale: function (v) { seen.push(v); } });
 
@@ -1118,9 +1118,9 @@ document.addEventListener("DOMContentLoaded", function () {
         eq(scale.value(), 1, "and reported");
         eq(scale.nudge(1), 1.1, "a step up");
         eq(root.style.fontSize, "1.1rem", "reaches the panel");
-        eq(ACEUIModLoader.settings.get("scaler", "scale"), 1.1, "and the setting the window shows");
+        eq(ACEUIAppLoader.settings.get("scaler", "scale"), 1.1, "and the setting the window shows");
 
-        ACEUIModLoader.settings.set("scaler", "scale", 1.3);
+        ACEUIAppLoader.settings.set("scaler", "scale", 1.3);
         eq(scale.value(), 1.3, "moving it in the settings window moves the panel");
         eq(root.style.fontSize, "1.3rem", "which is the same value, not a second copy");
 
@@ -1129,13 +1129,13 @@ document.addEventListener("DOMContentLoaded", function () {
         ok(seen.length >= 4, "every change was announced to the app: " + seen.join(", "));
 
         scale.stop();
-        ACEUIModLoader.settings.set("scaler", "scale", 1.2);
+        ACEUIAppLoader.settings.set("scaler", "scale", 1.2);
         eq(scale.value(), 0.8, "after stop it no longer follows the setting");
         root.parentNode.removeChild(root);
     });
 
     t("app: scale works for an app that declared no settings at all", function () {
-        const me = ACEUIModLoader.app("quietscaler");
+        const me = ACEUIAppLoader.app("quietscaler");
         const root = document.createElement("div");
         const scale = me.scale(root);
 
@@ -1147,7 +1147,7 @@ document.addEventListener("DOMContentLoaded", function () {
     });
 
     t("app: recall and remember keep a small value under the app's own key", function () {
-        const me = ACEUIModLoader.app("keeper");
+        const me = ACEUIAppLoader.app("keeper");
 
         eq(me.recall("open", true), true, "nothing stored: the fallback");
         me.remember("open", false);
@@ -1161,49 +1161,49 @@ document.addEventListener("DOMContentLoaded", function () {
 
     t("loop: start schedules frames before the callback, stop cancels", function () {
         const seen = [];
-        const h = ACEUIModLoader.loop.start(function (now) { seen.push(now); if (now === 2) { throw new Error("frame error"); } });
+        const h = ACEUIAppLoader.loop.start(function (now) { seen.push(now); if (now === 2) { throw new Error("frame error"); } });
         eq(clock.queue.length, 1, "first frame queued");
         clock.step(1); eq(seen.join(","), "1"); eq(clock.queue.length, 1, "next frame queued");
         try { clock.step(2); } catch (ignore) { /* the throw escapes the fake clock; the loop must survive */ }
         eq(clock.queue.length, 1, "loop survived a throwing frame");
         const cancelled = clock.cancelled;
-        ACEUIModLoader.loop.stop(h);
+        ACEUIAppLoader.loop.stop(h);
         eq(clock.cancelled, cancelled + 1); eq(clock.queue.length, 0); eq(h.rafId, 0); eq(h.running, false);
         clock.step(3); eq(seen.length, 2, "no frames after stop");
     });
 
     t("loop: sampler commits at the fixed rate, catches up, resets after a stall", function () {
-        const s = ACEUIModLoader.loop.sampler(50, 5000);   // 20 ms period, 5 s max gap
+        const s = ACEUIAppLoader.loop.sampler(50, 5000);   // 20 ms period, 5 s max gap
         let commits = 0; const commit = function () { commits += 1; };
-        near(ACEUIModLoader.loop.advance(s, 1000, commit), 0, 1e-9, "first call starts the clock"); eq(commits, 0);
-        near(ACEUIModLoader.loop.advance(s, 1010, commit), 0.5, 1e-9, "half way"); eq(commits, 0);
-        near(ACEUIModLoader.loop.advance(s, 1020, commit), 0, 1e-9); eq(commits, 1, "one sample due");
-        ACEUIModLoader.loop.advance(s, 1020 + 20 * 5, commit); eq(commits, 6, "catch up after a hitch");
-        ACEUIModLoader.loop.advance(s, 1120 + 20000, commit); eq(commits, 6, "stall restarts the clock instead of replaying");
-        ACEUIModLoader.loop.advance(s, 21120 + 20, commit); eq(commits, 7);
-        ACEUIModLoader.loop.reset(s); eq(s.lastSampleAt, 0);
-        near(ACEUIModLoader.loop.advance(s, 50000, commit), 0, 1e-9); eq(commits, 7, "reset: fresh start");
+        near(ACEUIAppLoader.loop.advance(s, 1000, commit), 0, 1e-9, "first call starts the clock"); eq(commits, 0);
+        near(ACEUIAppLoader.loop.advance(s, 1010, commit), 0.5, 1e-9, "half way"); eq(commits, 0);
+        near(ACEUIAppLoader.loop.advance(s, 1020, commit), 0, 1e-9); eq(commits, 1, "one sample due");
+        ACEUIAppLoader.loop.advance(s, 1020 + 20 * 5, commit); eq(commits, 6, "catch up after a hitch");
+        ACEUIAppLoader.loop.advance(s, 1120 + 20000, commit); eq(commits, 6, "stall restarts the clock instead of replaying");
+        ACEUIAppLoader.loop.advance(s, 21120 + 20, commit); eq(commits, 7);
+        ACEUIAppLoader.loop.reset(s); eq(s.lastSampleAt, 0);
+        near(ACEUIAppLoader.loop.advance(s, 50000, commit), 0, 1e-9); eq(commits, 7, "reset: fresh start");
     });
 
     // ---- loader ---------------------------------------------------------------------------
 
     t("loader: constants, aliases, and it announced itself", function () {
-        const L = ACEUIModLoader.loader;
-        eq(L.ROOT, "ACEUIModLoaderApps/"); eq(ACEUIModLoader.ROOT, "ACEUIModLoaderApps/"); eq(L.APP_FILE, "app.json");
-        eq(L.BUILTIN_ROOT, "ACEUIModLoaderBuiltIn/", "bundled apps live apart from installed ones: loose files never beat packed ones");
+        const L = ACEUIAppLoader.loader;
+        eq(L.ROOT, "ACEUIAppLoader/"); eq(ACEUIAppLoader.ROOT, "ACEUIAppLoader/"); eq(L.APP_FILE, "app.json");
+        eq(L.BUILTIN_ROOT, "ACEUIAppLoaderBuiltIn/", "bundled apps live apart from installed ones: loose files never beat packed ones");
         eq(L.BUILTIN_INDEX, "apps.json");
         eq(L.DEFAULT_PAGES.join(","), "hud.html");
         eq(L.PRESET_REQUEST, "SettingsRequestVideoPresetList"); eq(L.PRESET_RESPONSE, "SettingsResponseVideoPresetList");
-        eq(L.MARKER_PREFIX, "ACEUIModLoaderApps-"); eq(L.MARKER_EXT, ".settingspreset");
-        eq(ACEUIModLoader.ready, L.ready); eq(ACEUIModLoader.apps, L.apps); eq(typeof ACEUIModLoader.addScript, "function");
-        ok(window.__log.some(function (l) { return l === "[ACEUIModLoader] loader " + ACEUIModLoader.VERSION + " on /harness.html"; }), "boot line");
+        eq(L.MARKER_PREFIX, "ACEUIAppLoader-"); eq(L.MARKER_EXT, ".settingspreset");
+        eq(ACEUIAppLoader.ready, L.ready); eq(ACEUIAppLoader.apps, L.apps); eq(typeof ACEUIAppLoader.addScript, "function");
+        ok(window.__log.some(function (l) { return l === "[ACEUIAppLoader] loader " + ACEUIAppLoader.VERSION + " on /harness.html"; }), "boot line");
     });
 
     t("loader: marker helpers and the file-name guard", function () {
-        const L = ACEUIModLoader.loader;
-        eq(L.markerNames(["ACEUIModLoaderApps-b", "Other", "ACEUIModLoaderApps-a", "ACEUIModLoaderApps-", 7]).join(","), "a,b");
+        const L = ACEUIAppLoader.loader;
+        eq(L.markerNames(["ACEUIAppLoader-b", "Other", "ACEUIAppLoader-a", "ACEUIAppLoader-", 7]).join(","), "a,b");
         eq(L.markerNames(null).length, 0);
-        const r = L.withoutMarkers({ __Type: "x", response: "OK", filenames: ["ACEUIModLoaderApps-a", "Mine"] });
+        const r = L.withoutMarkers({ __Type: "x", response: "OK", filenames: ["ACEUIAppLoader-a", "Mine"] });
         eq(r.filenames.join(","), "Mine"); eq(r.response, "OK"); eq(r.__Type, "x");
         eq(L.withoutMarkers(null), null);
         ["a.js", "pedal-graph.css", "app.json"].forEach(function (f) { ok(L.isFileName(f), f); });
@@ -1211,29 +1211,29 @@ document.addEventListener("DOMContentLoaded", function () {
     });
 
     t("loader: an installed app replaces the bundled app of the same name", function () {
-        const merge = ACEUIModLoader.loader.merge;
+        const merge = ACEUIAppLoader.loader.merge;
         const shape = function (list) {
             return list.map(function (w) { return w.name + "@" + w.root; }).join(" ");
         };
-        eq(shape(merge([{ name: "a", version: "1.0.0" }], ["b"])), "a@ACEUIModLoaderBuiltIn/ b@ACEUIModLoaderApps/",
+        eq(shape(merge([{ name: "a", version: "1.0.0" }], ["b"])), "a@ACEUIAppLoaderBuiltIn/ b@ACEUIAppLoader/",
             "bundled first, then installed");
-        eq(shape(merge([{ name: "a", version: "1.0.0" }], ["a"])), "a@ACEUIModLoaderApps/",
+        eq(shape(merge([{ name: "a", version: "1.0.0" }], ["a"])), "a@ACEUIAppLoader/",
             "the same name is one app, and the installed copy is the one that runs");
-        eq(shape(merge([], ["a"])), "a@ACEUIModLoaderApps/");
-        eq(shape(merge([{ name: "a", version: "1.0.0" }], [])), "a@ACEUIModLoaderBuiltIn/");
+        eq(shape(merge([], ["a"])), "a@ACEUIAppLoader/");
+        eq(shape(merge([{ name: "a", version: "1.0.0" }], [])), "a@ACEUIAppLoaderBuiltIn/");
     });
 
     t("loader: it asked the game for the video preset list", function () {
         const sent = window.__engine.triggered.filter(function (x) { return x[0] === "OnUICommand" && x[1] === "SettingsRequestVideoPresetList"; });
         eq(sent.length, 1, "one request"); eq(sent[0][2].__Type, "SettingsRequestVideoPresetList"); eq(sent[0][2].version, 0);
-        ok(ACEUIModLoader.loader.filtering(), "engine.on wrapped");
+        ok(ACEUIAppLoader.loader.filtering(), "engine.on wrapped");
     });
 
     // Discovery finishes asynchronously (the fake engine answers on a timer, app.json
     // fetches are XHRs), so the remaining cases wait for it before the report is written.
     const finish = function () {
-        const loaderLines = window.__log.filter(function (l) { return l.indexOf("[ACEUIModLoader]") === 0 || l.indexOf("[Alpha]") === 0; });
-        const statuses = ACEUIModLoader.loader.apps.map(function (m) { return m.name + "=" + m.status; }).join(" ");
+        const loaderLines = window.__log.filter(function (l) { return l.indexOf("[ACEUIAppLoader]") === 0 || l.indexOf("[Alpha]") === 0; });
+        const statuses = ACEUIAppLoader.loader.apps.map(function (m) { return m.name + "=" + m.status; }).join(" ");
 
         H.finish(["loader log: " + loaderLines.join(" | "), "apps: " + statuses, "errors: " + window.__warn.slice(-3).join(" | ")]);
     };
@@ -1242,26 +1242,26 @@ document.addEventListener("DOMContentLoaded", function () {
         window.setTimeout(function () { waitFor(cond, then, deadline); }, 10);
     };
 
-    // ACEUIModLoader.ready fires once every discovered app has been processed (scripts loaded or skipped).
+    // ACEUIAppLoader.ready fires once every discovered app has been processed (scripts loaded or skipped).
     // If it never does, report that as a failure instead of producing no report at all.
     let readyFired = false;
     window.setTimeout(function () {
         if (readyFired) { return; }
-        t("loader: became ready", function () { throw new Error("ACEUIModLoader.ready never fired; apps: " + ACEUIModLoader.loader.apps.map(function (m) { return m.name + "=" + m.status; }).join(" ")); });
+        t("loader: became ready", function () { throw new Error("ACEUIAppLoader.ready never fired; apps: " + ACEUIAppLoader.loader.apps.map(function (m) { return m.name + "=" + m.status; }).join(" ")); });
         finish();
     }, 5000);
-    ACEUIModLoader.ready(function () {
+    ACEUIAppLoader.ready(function () {
         readyFired = true;
         t("loader: discovered the apps from the game's answer, not a manifest", function () {
-            const apps = ACEUIModLoader.loader.apps;
-            eq(ACEUIModLoader.loader.source(), "presets");
+            const apps = ACEUIAppLoader.loader.apps;
+            eq(ACEUIAppLoader.loader.source(), "presets");
             eq(apps.map(function (m) { return m.name; }).join(","), "gadget,alpha,beta",
                 "the bundled app, then the markers with the prefix stripped, sorted");
             eq(apps[0].status, "loaded", "gadget is bundled in the package");
             eq(apps[1].status, "loaded", "alpha has a folder with app.json in the harness");
             eq(apps[2].status, "missing", "beta has none");
-            ok(window.__log.indexOf("[ACEUIModLoader] presets: 2 app(s)") >= 0, "discovery line");
-            ok(window.__log.indexOf("[ACEUIModLoader] app alpha 1.2.3: loading 1 script(s), 0 stylesheet(s)") >= 0, "version from app.json");
+            ok(window.__log.indexOf("[ACEUIAppLoader] presets: 2 app(s)") >= 0, "discovery line");
+            ok(window.__log.indexOf("[ACEUIAppLoader] app alpha 1.2.3: loading 1 script(s), 0 stylesheet(s)") >= 0, "version from app.json");
             ok(!window.__log.some(function (l) { return l.indexOf("nothing to load") >= 0; }), "no give-up line");
         });
 
@@ -1269,41 +1269,41 @@ document.addEventListener("DOMContentLoaded", function () {
             const a = window.__alpha;
             ok(a, "alpha.js ran");
             eq(a.name, "alpha"); eq(a.title, "Alpha", "title from app.json"); eq(a.version, "1.2.3"); eq(a.loaded, true);
-            eq(a.base, "ACEUIModLoaderApps/alpha/");
+            eq(a.base, "ACEUIAppLoader/alpha/");
             eq(a.hudId, "hud_alpha"); eq(a.storageKey, "acealpha.pos"); eq(a.filterKey, "acealpha.filters");
             ok(a.rootPresent, "root existed while the script ran"); eq(a.rootParent, "center", "inside .absolutecenter"); eq(a.rootAttr, "alpha");
             eq(document.querySelectorAll("#alpha").length, 1, "exactly one root");
             ok(window.__log.indexOf("[Alpha] alpha script ran") >= 0, "prefixed logger uses the title");
-            const later = ACEUIModLoader.app("alpha");
+            const later = ACEUIAppLoader.app("alpha");
             eq(later.version, "1.2.3"); eq(later.root, document.getElementById("alpha"), "root by id later on");
-            eq(ACEUIModLoader.app, ACEUIModLoader.loader.app, "alias");
-            const dev = ACEUIModLoader.app("zzz");
-            eq(dev.version, ACEUIModLoader.loader.DEV_VERSION); eq(dev.loaded, false); eq(dev.base, ""); eq(dev.name, "zzz"); eq(dev.hudId, "hud_zzz");
-            eq(ACEUIModLoader.app("beta").version, "dev", "listed but not loaded reads as dev");
+            eq(ACEUIAppLoader.app, ACEUIAppLoader.loader.app, "alias");
+            const dev = ACEUIAppLoader.app("zzz");
+            eq(dev.version, ACEUIAppLoader.loader.DEV_VERSION); eq(dev.loaded, false); eq(dev.base, ""); eq(dev.name, "zzz"); eq(dev.hudId, "hud_zzz");
+            eq(ACEUIAppLoader.app("beta").version, "dev", "listed but not loaded reads as dev");
         });
 
         t("loader: an app bundled in the package loads with no marker, and an installed copy of the same name wins", function () {
             const g = window.__gadget;
-            const entry = ACEUIModLoader.loader.apps.filter(function (m) { return m.name === "gadget"; })[0];
+            const entry = ACEUIAppLoader.loader.apps.filter(function (m) { return m.name === "gadget"; })[0];
             ok(g, "gadget.js ran");
-            eq(g.base, "ACEUIModLoaderBuiltIn/gadget/", "loaded from the bundled root, not the installed one");
+            eq(g.base, "ACEUIAppLoaderBuiltIn/gadget/", "loaded from the bundled root, not the installed one");
             eq(g.version, "0.1.0"); eq(g.developer, true, "its app.json calls it a developer tool");
             eq(entry.builtin, true); eq(entry.status, "loaded");
-            ok(window.__log.indexOf("[ACEUIModLoader] bundled: 2 app(s)") >= 0, "the index line");
-            ok(window.__log.indexOf("[ACEUIModLoader] alpha: installed copy overrides the bundled 9.9.9") >= 0, "and it said which copy won");
-            eq(window.__alpha.base, "ACEUIModLoaderApps/alpha/", "alpha really is the installed one");
-            eq(ACEUIModLoader.loader.isDeveloper("gadget"), true); eq(ACEUIModLoader.loader.isDeveloper("alpha"), false);
-            eq(ACEUIModLoader.shared.get("gadget").answer, 42, "it offered its surface to the other apps");
-            ok(ACEUIModLoader.shared.has("gadget")); eq(ACEUIModLoader.shared.get("nope"), null, "asking for a stranger is not an error");
-            ok(ACEUIModLoader.shared.names().indexOf("gadget") >= 0);
+            ok(window.__log.indexOf("[ACEUIAppLoader] bundled: 2 app(s)") >= 0, "the index line");
+            ok(window.__log.indexOf("[ACEUIAppLoader] alpha: installed copy overrides the bundled 9.9.9") >= 0, "and it said which copy won");
+            eq(window.__alpha.base, "ACEUIAppLoader/alpha/", "alpha really is the installed one");
+            eq(ACEUIAppLoader.loader.isDeveloper("gadget"), true); eq(ACEUIAppLoader.loader.isDeveloper("alpha"), false);
+            eq(ACEUIAppLoader.shared.get("gadget").answer, 42, "it offered its surface to the other apps");
+            ok(ACEUIAppLoader.shared.has("gadget")); eq(ACEUIAppLoader.shared.get("nope"), null, "asking for a stranger is not an error");
+            ok(ACEUIAppLoader.shared.names().indexOf("gadget") >= 0);
         });
 
         t("drawer: a developer app is loaded but not started, and its hotkey cannot put it on screen", function () {
-            const drawer = ACEUIModLoader.drawer;
+            const drawer = ACEUIAppLoader.drawer;
             eq(drawer.developerShown(), false, "the developer switch is off until someone asks for it");
             eq(window.__gadget.attached, 0, "loaded, but never started");
             eq(drawer.isVisible("gadget"), false);
-            eq(ACEUIModLoader.app("gadget").show(true), false, "which is what the hotkey and a close button go through");
+            eq(ACEUIAppLoader.app("gadget").show(true), false, "which is what the hotkey and a close button go through");
             ok(window.__log.some(function (l) { return l.indexOf("[Gadget] not shown: developer apps are switched off") === 0; }), "and it says why");
             eq(window.__gadget.attached, 0, "still not started");
             eq(drawer.setDeveloper(true), true);
@@ -1312,19 +1312,19 @@ document.addEventListener("DOMContentLoaded", function () {
             eq(drawer.setDeveloper(false), false);
             eq(window.__gadget.detached, 1, "and hiding them stops them again, rather than leaving them running unreachable");
             eq(document.getElementById("gadget").style.display, "none");
-            eq(ACEUIModLoader.persist.readLocal(drawer.DEV_STORE_KEY).on, false, "the choice is remembered");
+            eq(ACEUIAppLoader.persist.readLocal(drawer.DEV_STORE_KEY).on, false, "the choice is remembered");
         });
 
         t("loader: app(name).mount(attach) attaches once to #name when the DOM has it, and is a no-op otherwise", function () {
             let calls = [];
             const attach = function (root) { calls.push(root); };
-            ACEUIModLoader.app("gamma").mount(attach);
+            ACEUIAppLoader.app("gamma").mount(attach);
             eq(calls.length, 0, "no #gamma yet: nothing happens");
             const gamma = document.createElement("div"); gamma.id = "gamma"; center.appendChild(gamma);
-            ACEUIModLoader.app("gamma").mount(attach);
+            ACEUIAppLoader.app("gamma").mount(attach);
             eq(calls.length, 1, "attached once the root exists"); eq(calls[0], gamma, "with the root");
-            ok(gamma.hasAttribute(ACEUIModLoader.loader.MOUNTED_ATTR), "marked as mounted");
-            ACEUIModLoader.app("gamma").mount(attach);
+            ok(gamma.hasAttribute(ACEUIAppLoader.loader.MOUNTED_ATTR), "marked as mounted");
+            ACEUIAppLoader.app("gamma").mount(attach);
             eq(calls.length, 1, "a second mount is a no-op");
             gamma.remove();
         });
@@ -1336,22 +1336,22 @@ document.addEventListener("DOMContentLoaded", function () {
         engine.trigger("OnUICommand", "SettingsRequestVideoPresetList", { __Type: "SettingsRequestVideoPresetList", version: 0 });
 
         t("drawer: builds a row per app, parked off-screen behind a right-edge hot zone", function () {
-            const panel = ACEUIModLoader.drawer.build([
+            const panel = ACEUIAppLoader.drawer.build([
                 { name: "alpha", info: { title: "Alpha App" }, status: "loaded" },
                 { name: "beta", info: { title: "Beta App" }, status: "failed" }
             ]);
             eq(panel.style.transform, "translateX(100%)", "starts closed, off the right edge");
             eq(panel.style.opacity, "0", "and transparent, so it fades in rather than only sliding");
             eq(panel.style.position, "fixed", "fixed to the screen, not the HUD layout");
-            ok(ACEUIModLoader.drawer.state.hot, "hot zone created");
-            eq(ACEUIModLoader.drawer.state.hot.style.right, "0px", "hot zone sits on the right edge");
-            eq(ACEUIModLoader.drawer.state.apps.length, 2, "one app per app");
+            ok(ACEUIAppLoader.drawer.state.hot, "hot zone created");
+            eq(ACEUIAppLoader.drawer.state.hot.style.right, "0px", "hot zone sits on the right edge");
+            eq(ACEUIAppLoader.drawer.state.apps.length, 2, "one app per app");
             ok(panel.textContent.indexOf("Alpha App") >= 0, "uses the app's title");
             ok(panel.textContent.indexOf("failed") >= 0, "an app that did not load says so");
         });
 
         t("drawer: the hot zone opens it, leaving closes it after a delay", function () {
-            const d = ACEUIModLoader.drawer;
+            const d = ACEUIAppLoader.drawer;
             d.close();
             d.state.hot.dispatchEvent(new Event("mouseenter"));
             eq(d.state.open, true, "pointer at the edge opens it");
@@ -1374,7 +1374,7 @@ document.addEventListener("DOMContentLoaded", function () {
          * that width. This is the guard against quietly shortening it again.
          */
         t("drawer: the slide is long enough to have frames to animate in", function () {
-            const d = ACEUIModLoader.drawer;
+            const d = ACEUIAppLoader.drawer;
             const FRAME_MS = 1000 / 58.5;
             const frames = d.SLIDE_MS / FRAME_MS;
 
@@ -1384,7 +1384,7 @@ document.addEventListener("DOMContentLoaded", function () {
         });
 
         t("drawer: a switch hides the app's own root element and remembers the choice", function () {
-            const d = ACEUIModLoader.drawer;
+            const d = ACEUIAppLoader.drawer;
             let root = document.getElementById("alpha");
             if (!root) {
                 root = document.createElement("div");
@@ -1396,7 +1396,7 @@ document.addEventListener("DOMContentLoaded", function () {
             d.toggleApp("alpha");
             eq(d.isVisible("alpha"), false, "switched off");
             eq(root.style.display, "none", "the app's root is hidden");
-            eq(ACEUIModLoader.persist.readLocal(d.STORE_KEY).alpha, false, "and the choice is persisted");
+            eq(ACEUIAppLoader.persist.readLocal(d.STORE_KEY).alpha, false, "and the choice is persisted");
 
             d.toggleApp("alpha");
             eq(root.style.display, "", "switched back on, the app's own CSS decides again");
@@ -1404,7 +1404,7 @@ document.addEventListener("DOMContentLoaded", function () {
         });
 
         t("drawer: a switched-off app is hidden the instant its root is created, not when the drawer builds", function () {
-            const d = ACEUIModLoader.drawer;
+            const d = ACEUIAppLoader.drawer;
             /* The drawer builds on ready(), which fires only after EVERY app has loaded, so
                anything that waits for build() leaves a switched-off app visible for that
                whole time -- about a second with a big app in the queue, seen in game as the
@@ -1425,8 +1425,8 @@ document.addEventListener("DOMContentLoaded", function () {
         });
 
         t("drawer: switches survive a game restart, because they go to the HUD store too", function () {
-            const d = ACEUIModLoader.drawer;
-            const P = ACEUIModLoader.persist;
+            const d = ACEUIAppLoader.drawer;
+            const P = ACEUIAppLoader.persist;
             window.HUD = makeHud({});     // the earlier panel cases leave it null
             /* localStorage dies with the game; the stock HUD layout container is the one
                the game writes to disk. Saving only to localStorage meant every app came
@@ -1456,8 +1456,8 @@ document.addEventListener("DOMContentLoaded", function () {
            game, and the HUD store is not there yet when the library loads, so a player who
            turned the developer apps on found them off again every launch. */
         t("drawer: the developer switch survives a game restart too", function () {
-            const d = ACEUIModLoader.drawer;
-            const P = ACEUIModLoader.persist;
+            const d = ACEUIAppLoader.drawer;
+            const P = ACEUIAppLoader.persist;
 
             window.HUD = makeHud({});
             d.setDeveloper(true);
@@ -1479,8 +1479,8 @@ document.addEventListener("DOMContentLoaded", function () {
         });
 
         t("drawer: a switch flipped before the HUD store arrives wins, and is written to it", function () {
-            const d = ACEUIModLoader.drawer;
-            const P = ACEUIModLoader.persist;
+            const d = ACEUIAppLoader.drawer;
+            const P = ACEUIAppLoader.persist;
 
             window.HUD = makeHud({ hud_acedrawer: { racy: true } });   // the copy from disk
             d.setVisible("racy", false);          // the user acts first
@@ -1496,7 +1496,7 @@ document.addEventListener("DOMContentLoaded", function () {
         });
 
         t("drawer: switching an app off stops it, not just hides it", function () {
-            const d = ACEUIModLoader.drawer;
+            const d = ACEUIAppLoader.drawer;
             /* Hiding the root left the app's key handlers, frame loop and sounds running:
                DOOM still answered Insert and played music while "disabled". */
             const root = document.createElement("div");
@@ -1505,7 +1505,7 @@ document.addEventListener("DOMContentLoaded", function () {
 
             let attached = 0, detached = 0;
             const entry = { name: "lively", info: { title: "Lively" }, status: "loaded" };
-            ACEUIModLoader.loader.apps.push(entry);
+            ACEUIAppLoader.loader.apps.push(entry);
             entry.attach = function () { attached += 1; return { live: true }; };
             entry.detach = function () { detached += 1; };
             entry.instance = entry.attach(root);
@@ -1524,24 +1524,24 @@ document.addEventListener("DOMContentLoaded", function () {
             eq(root.style.display, "", "and visible again");
 
             root.parentNode.removeChild(root);
-            ACEUIModLoader.loader.apps.splice(ACEUIModLoader.loader.apps.indexOf(entry), 1);
+            ACEUIAppLoader.loader.apps.splice(ACEUIAppLoader.loader.apps.indexOf(entry), 1);
         });
 
         t("drawer: an app that gave the loader no detach is still only hidden", function () {
-            const d = ACEUIModLoader.drawer;
+            const d = ACEUIAppLoader.drawer;
             const root = document.createElement("div");
             root.id = "stubborn";
             document.getElementById("center").appendChild(root);
 
             const entry = { name: "stubborn", info: {}, status: "loaded", instance: {} };
-            ACEUIModLoader.loader.apps.push(entry);
+            ACEUIAppLoader.loader.apps.push(entry);
 
-            eq(ACEUIModLoader.loader.deactivate("stubborn"), false, "nothing to stop it with");
+            eq(ACEUIAppLoader.loader.deactivate("stubborn"), false, "nothing to stop it with");
             d.setVisible("stubborn", false);
             eq(root.style.display, "none", "so hiding is all the drawer can do");
 
             root.parentNode.removeChild(root);
-            ACEUIModLoader.loader.apps.splice(ACEUIModLoader.loader.apps.indexOf(entry), 1);
+            ACEUIAppLoader.loader.apps.splice(ACEUIAppLoader.loader.apps.indexOf(entry), 1);
         });
 
         /*
@@ -1550,7 +1550,7 @@ document.addEventListener("DOMContentLoaded", function () {
          * with a dozen apps it was unusable; it is gone, and this is the one way in.
          */
         t("drawer: the OPTIONS button opens what the app registered, and a throwing one does not take the drawer down", function () {
-            const d = ACEUIModLoader.drawer;
+            const d = ACEUIAppLoader.drawer;
             const app = d.state.apps.filter(function (a) { return a.name === "alpha"; })[0];
             const bad = d.state.apps.filter(function (a) { return a.name === "beta"; })[0];
             let opened = 0;
@@ -1570,8 +1570,8 @@ document.addEventListener("DOMContentLoaded", function () {
         });
 
         t("drawer: registerOptions is gone; an app opens its own window instead", function () {
-            eq(typeof ACEUIModLoader.drawer.registerOptions, "undefined", "one way in, not two");
-            eq(typeof ACEUIModLoader.input.releaseAll, "undefined", "and release() has no alias");
+            eq(typeof ACEUIAppLoader.drawer.registerOptions, "undefined", "one way in, not two");
+            eq(typeof ACEUIAppLoader.input.releaseAll, "undefined", "and release() has no alias");
         });
 
         waitFor(function () { return seen !== null; }, function () {
@@ -1579,7 +1579,7 @@ document.addEventListener("DOMContentLoaded", function () {
                 ok(seen, "stock handler ran");
                 eq(seen.filenames.join(","), "MyLowSettings");
                 eq(seen.response, "OK");
-                eq(ACEUIModLoader.loader.apps.length, 3, "the loader's own handler was cleared after discovery: gadget, alpha and beta, not a second round");
+                eq(ACEUIAppLoader.loader.apps.length, 3, "the loader's own handler was cleared after discovery: gadget, alpha and beta, not a second round");
                 handle.clear();
                 eq((window.__engine.handlers["SettingsResponseVideoPresetList"] || []).length, 0, "clear() still works through the wrapper");
             });

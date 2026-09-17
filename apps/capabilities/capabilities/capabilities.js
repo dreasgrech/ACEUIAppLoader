@@ -1,7 +1,7 @@
 /**
  * ACE UI Capabilities Probe -- a capability probe for the Assetto Corsa EVO Gameface HUD.
  *
- * A loose UI app, loaded into the HUD page by the ACEUIModLoader, whose only job is
+ * A loose UI app, loaded into the HUD page by the ACEUIAppLoader, whose only job is
  * to answer "what can JavaScript actually do inside the game's Cohtml/V8?" It runs
  * a wide battery of feature detections -- language and engine, timers, storage,
  * network, the pixel path (canvas, pixel readback, the Blob route ACEDOOM presents
@@ -27,27 +27,27 @@
  * Rows are rewritten once, when a probe settles, not on a loop.
  *
  * Identity (name, version, title, root, logger, storage keys) comes from
- * ACEUIModLoader.app("capabilities"); styling lives in capabilities.css.
+ * ACEUIAppLoader.app("capabilities"); styling lives in capabilities.css.
  */
 const CapabilitiesProbe = (function () {
 
-    const me = ACEUIModLoader.app("capabilities");
+    const me = ACEUIAppLoader.app("capabilities");
 
-    const el = ACEUIModLoader.el;
-    const close = ACEUIModLoader.close;
-    const toArray = ACEUIModLoader.toArray;
-    const clamp = ACEUIModLoader.clamp;
-    const persist = ACEUIModLoader.persist;
+    const el = ACEUIAppLoader.el;
+    const close = ACEUIAppLoader.close;
+    const toArray = ACEUIAppLoader.toArray;
+    const clamp = ACEUIAppLoader.clamp;
+    const persist = ACEUIAppLoader.persist;
     const log = me.log;
 
     const FILTER_ATTR = "data-filter";
 
     /**
      * Scrolling: Cohtml does not scroll an overflowing box by itself, and the wheel's sign
-     * is inverted here. Both are ACEUIModLoader.scroll's business now -- this panel used to
+     * is inverted here. Both are ACEUIAppLoader.scroll's business now -- this panel used to
      * carry its own copy of the dev console's version.
      */
-    const scrolling = ACEUIModLoader.scroll;
+    const scrolling = ACEUIAppLoader.scroll;
 
     /** Result states, shared with the stylesheet through STATUS_CLASS. */
     const YES = "yes";
@@ -931,7 +931,7 @@ const CapabilitiesProbe = (function () {
             results: [],
             pending: 0,
             run: 0,                     // which run the results belong to; see runAll
-            scroller: null,             // ACEUIModLoader.scroll handle (wheel, thumb, track)
+            scroller: null,             // ACEUIAppLoader.scroll handle (wheel, thumb, track)
             laidOut: false,             // the scrollbar has been sized once layout exists
             bag: null,                  // every listener this panel added, for detach
             ui: null                    // me.panel handle: the panel and its frame loop
@@ -971,7 +971,7 @@ const CapabilitiesProbe = (function () {
     const logSummary = function (state, label) {
         const counts = recount(state);
 
-        log(label + " on " + ACEUIModLoader.page + ": " + counts.yes + " yes, " + counts.no + " no, " + counts.partial + " partial, " + counts.warn + " warn");
+        log(label + " on " + ACEUIAppLoader.page + ": " + counts.yes + " yes, " + counts.no + " no, " + counts.partial + " partial, " + counts.warn + " warn");
 
         const missing = names(state.results, NO);
         const partial = names(state.results, PARTIAL);
@@ -982,7 +982,7 @@ const CapabilitiesProbe = (function () {
     };
 
     const logAll = function (state) {
-        log("--- full report (" + CHECKS.length + " checks, " + ACEUIModLoader.page + ") ---");
+        log("--- full report (" + CHECKS.length + " checks, " + ACEUIAppLoader.page + ") ---");
 
         state.results.forEach(function (r) {
             if (r) { log(r.name + " = " + r.status + " -- " + r.detail); }
@@ -1130,7 +1130,7 @@ const CapabilitiesProbe = (function () {
     // ---- lifecycle -----------------------------------------------------------------
 
     const onClick = function (state, e) {
-        const btn = ACEUIModLoader.closestWithAttribute(e.target, ACT_ATTR, state.root);
+        const btn = ACEUIAppLoader.closestWithAttribute(e.target, ACT_ATTR, state.root);
 
         if (btn) {
             const act = btn.getAttribute(ACT_ATTR);
@@ -1145,7 +1145,7 @@ const CapabilitiesProbe = (function () {
             return;
         }
 
-        const chip = ACEUIModLoader.closestWithAttribute(e.target, FILTER_ATTR, state.root);
+        const chip = ACEUIAppLoader.closestWithAttribute(e.target, FILTER_ATTR, state.root);
 
         if (chip) {
             const id = chip.getAttribute(FILTER_ATTR);
@@ -1157,7 +1157,7 @@ const CapabilitiesProbe = (function () {
     /**
      * What another app can ask the probe, rather than probing again for itself:
      *
-     *     const probe = ACEUIModLoader.shared.get("capabilities");
+     *     const probe = ACEUIAppLoader.shared.get("capabilities");
      *     if (probe && probe.status("WebSocket") === "yes") { ... }
      *
      * It is offered while the probe is attached and withdrawn when it is not, because the
@@ -1191,7 +1191,7 @@ const CapabilitiesProbe = (function () {
             log: log
         });
 
-        state.bag = ACEUIModLoader.dom.listeners();
+        state.bag = ACEUIAppLoader.dom.listeners();
         state.bag.on(root, "click", function (e) { onClick(state, e); });
         state.bag.on(state.search, "input", function () { onSearchChange(state); });
         state.bag.on(state.search, "keyup", function () { onSearchChange(state); });
@@ -1199,14 +1199,14 @@ const CapabilitiesProbe = (function () {
         state.ui = me.panel(root, function () { tick(state); });
 
         runAll(state);
-        ACEUIModLoader.shared.register(me.name, surface(state));
-        log("attached, " + CHECKS.length + " checks, lib=" + ACEUIModLoader.VERSION);
+        ACEUIAppLoader.shared.register(me.name, surface(state));
+        log("attached, " + CHECKS.length + " checks, lib=" + ACEUIAppLoader.VERSION);
 
         return state;
     };
 
     const detach = function (state) {
-        ACEUIModLoader.shared.unregister(me.name);
+        ACEUIAppLoader.shared.unregister(me.name);
         state.ui.stop();
 
         // kept, not nulled: the probe's own checks finish after a detach and still
@@ -1232,4 +1232,4 @@ const CapabilitiesProbe = (function () {
 }());
 
 /* Attach to #capabilities: the loader creates it in game, the preview page carries it. */
-ACEUIModLoader.app("capabilities").mount(CapabilitiesProbe.attach, CapabilitiesProbe.detach);
+ACEUIAppLoader.app("capabilities").mount(CapabilitiesProbe.attach, CapabilitiesProbe.detach);

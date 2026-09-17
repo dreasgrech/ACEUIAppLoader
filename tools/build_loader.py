@@ -1,23 +1,23 @@
 #!/usr/bin/env python3
 """
-build_loader.py - build the ACEUIModLoader package.
+build_loader.py - build the ACEUIAppLoader package.
 
 1. Extract the stock `uiresources/js/cohtml.js` from the installed content.kspkg
    (never committed; it is Kunos'/Coherent's file).
-2. Append the library files in LIB_ORDER (src/ACEUIModLoaderApps.*.js) to it
+2. Append the library files in LIB_ORDER (src/ACEUIAppLoader.*.js) to it
    -> build/uiresources/js/cohtml.js. The order matters: core defines the
    namespace, console hooks console.* before the stock bundle runs, loader
    comes second to last and starts loading apps once the DOM exists, and the
-   drawer comes last because it registers an ACEUIModLoader.ready callback.
+   drawer comes last because it registers an ACEUIAppLoader.ready callback.
 3. Copy the bundled apps -- the developer tools in apps/, the manifest-listed files
-   and nothing else -- to build/uiresources/ACEUIModLoaderBuiltIn/<name>/, and write the
-   index the loader reads, ACEUIModLoaderBuiltIn/apps.json. They go in as NEW paths, which
+   and nothing else -- to build/uiresources/ACEUIAppLoaderBuiltIn/<name>/, and write the
+   index the loader reads, ACEUIAppLoaderBuiltIn/apps.json. They go in as NEW paths, which
    always resolve whatever the package layout turns out to be; only cohtml.js is an
    override. They are deliberately not at the installed apps' path: loose files never
    beat packed files, so a bundled app there could never be overridden, and iterating on
    one with install_app.py would silently do nothing.
 4. Pack build/ with tools/pack_kspkg.py (which adds the padding that makes this
-   single override win the game's lookup) -> dist/ACEUIModLoader.kspkg.
+   single override win the game's lookup) -> dist/ACEUIAppLoader.kspkg.
 5. --install copies it to the game's mods folder.
 
 Usage:
@@ -55,32 +55,32 @@ HOST_PATH = "uiresources/js/cohtml.js"
 # and the script it adds sits at a new path, which always resolves whatever the merged
 # layout turns out to be. The loader runs if either tie falls our way.
 PAGE_PATH = "uiresources/hud.html"
-BOOT_PATH = "uiresources/ACEUIModLoaderBuiltIn/loader.js"
+BOOT_PATH = "uiresources/ACEUIAppLoaderBuiltIn/loader.js"
 PAGE_ANCHOR = "<script src='js/cohtml.js'></script>"
-PAGE_TAG = "<script src='ACEUIModLoaderBuiltIn/loader.js'></script>"
+PAGE_TAG = "<script src='ACEUIAppLoaderBuiltIn/loader.js'></script>"
 TARGETS = (HOST_PATH, PAGE_PATH)   # the overrides that carry duplicate records
 APPS_DIR = os.path.join(_repos.REPO, "apps")
-BUILTIN_PATH = "uiresources/ACEUIModLoaderBuiltIn"
+BUILTIN_PATH = "uiresources/ACEUIAppLoaderBuiltIn"
 BUILTIN_INDEX = "apps.json"
 SRC_DIR = os.path.join(_repos.REPO, "src")
 LIB_ORDER = [
-    "ACEUIModLoader.core.js",
-    "ACEUIModLoader.console.js",
-    "ACEUIModLoader.dom.js",
-    "ACEUIModLoader.keys.js",
-    "ACEUIModLoader.scroll.js",
-    "ACEUIModLoader.persist.js",
-    "ACEUIModLoader.panel.js",
-    "ACEUIModLoader.loop.js",
-    "ACEUIModLoader.input.js",
-    "ACEUIModLoader.shared.js",
-    "ACEUIModLoader.loader.js",
-    "ACEUIModLoader.drawer.js",
-    "ACEUIModLoader.window.js",
-    "ACEUIModLoader.settings.js",
+    "ACEUIAppLoader.core.js",
+    "ACEUIAppLoader.console.js",
+    "ACEUIAppLoader.dom.js",
+    "ACEUIAppLoader.keys.js",
+    "ACEUIAppLoader.scroll.js",
+    "ACEUIAppLoader.persist.js",
+    "ACEUIAppLoader.panel.js",
+    "ACEUIAppLoader.loop.js",
+    "ACEUIAppLoader.input.js",
+    "ACEUIAppLoader.shared.js",
+    "ACEUIAppLoader.loader.js",
+    "ACEUIAppLoader.drawer.js",
+    "ACEUIAppLoader.window.js",
+    "ACEUIAppLoader.settings.js",
 ]
 BUILD_DIR = os.path.join(_repos.REPO, "build")
-OUT = os.path.join(_repos.REPO, "dist", "ACEUIModLoader.kspkg")
+OUT = os.path.join(_repos.REPO, "dist", "ACEUIAppLoader.kspkg")
 DUPS_FILE = os.path.join(_repos.REPO, "dups.json")
 
 
@@ -90,7 +90,7 @@ def read_version():
 
 
 def marker(name):
-    return f"\n\n/* ---- {name} (ACEUIModLoader {read_version()}, appended by ACEUIModLoader/tools/build_loader.py) ---- */\n"
+    return f"\n\n/* ---- {name} (ACEUIAppLoader {read_version()}, appended by ACEUIAppLoader/tools/build_loader.py) ---- */\n"
 
 
 GAME_VERSION_RE = re.compile(rb"\d+\.\d+\.\d+\+release\.\d+")
@@ -122,7 +122,7 @@ def stamp(version):
         return ""
     return ("\n\n/* the game build this package was made for; the loader compares it with\n"
             "   ModelUIState.game_version and says so when they differ */\n"
-            f'ACEUIModLoader.builtFor = "{version}";\n')
+            f'ACEUIAppLoader.builtFor = "{version}";\n')
 
 
 def library_sources():
@@ -135,9 +135,9 @@ def library_sources():
             raise SystemExit(f"missing library file {path}")
         with open(path, encoding="utf-8") as f:
             out.append((name, f.read()))
-    core = dict(out)["ACEUIModLoader.core.js"]
+    core = dict(out)["ACEUIAppLoader.core.js"]
     if f'const VERSION = "{version}";' not in core:
-        raise SystemExit(f"src/ACEUIModLoader.core.js VERSION does not match VERSION file ({version})")
+        raise SystemExit(f"src/ACEUIAppLoader.core.js VERSION does not match VERSION file ({version})")
     unlisted = sorted(n for n in os.listdir(SRC_DIR) if n.endswith(".js") and n not in LIB_ORDER)
     if unlisted:
         raise SystemExit(f"src/ has files not in LIB_ORDER: {unlisted}")
@@ -217,9 +217,9 @@ def assemble_page(build_dir, base_pkg, sources, built_for=""):
     boot = os.path.join(build_dir, *BOOT_PATH.split("/"))
     os.makedirs(os.path.dirname(boot), exist_ok=True)
     with open(boot, "w", encoding="utf-8", newline="\n") as f:
-        f.write("/* ACEUIModLoader %s -- the library, loaded by our copy of hud.html.\n"
+        f.write("/* ACEUIAppLoader %s -- the library, loaded by our copy of hud.html.\n"
                 "   Does nothing when the cohtml.js override already won its tie. */\n"
-                "(function () {\n    if (window.ACEUIModLoader) { return; }\n" % read_version())
+                "(function () {\n    if (window.ACEUIAppLoader) { return; }\n" % read_version())
         for name, text in sources:
             f.write(marker(name))
             f.write(text)

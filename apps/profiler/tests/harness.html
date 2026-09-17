@@ -89,8 +89,8 @@
         ok(S.recording(), "recording");
         ok(button.classList.contains("on"), "the button says so");
 
-        const busy = ACEUIModLoader.loop.start(function () { burn(2); }, "busymod");
-        const quiet = ACEUIModLoader.loop.start(function () { return 0; }, "quietmod");
+        const busy = ACEUIAppLoader.loop.start(function () { burn(2); }, "busymod");
+        const quiet = ACEUIAppLoader.loop.start(function () { return 0; }, "quietmod");
 
         for (i = 0; i < 30; i += 1) { nextFrame(); }
 
@@ -102,8 +102,8 @@
         ok(names.indexOf("quietmod") >= 0, "so is the quiet one");
         ok(names.indexOf("busymod") < names.indexOf("quietmod"), "costliest first");
         ok(names.indexOf("profiler") >= 0, "and the profiler itself, which is only fair");
-        ACEUIModLoader.loop.stop(busy);
-        ACEUIModLoader.loop.stop(quiet);
+        ACEUIAppLoader.loop.stop(busy);
+        ACEUIAppLoader.loop.stop(quiet);
     });
 
     t("the table reports cost per frame and a share of the frame, not one frame's reading", function () {
@@ -141,7 +141,7 @@
        unreachable except by its hotkey. Closing is switching off, and the key that brings it
        back is held by the loader, because an app that is off is not running to hold it. */
     t("pausing stops recording; closing switches the app off, where the drawer can see it", function () {
-        const drawer = ACEUIModLoader.drawer;
+        const drawer = ACEUIAppLoader.drawer;
 
         root.querySelector('[data-act="record"]').dispatchEvent(new MouseEvent("click", { bubbles: true }));
         eq(S.recording(), false, "paused");
@@ -169,7 +169,7 @@
 
         root.querySelector('[data-act="record"]').dispatchEvent(new MouseEvent("click", { bubbles: true }));
 
-        const spiky = ACEUIModLoader.loop.start(function () {
+        const spiky = ACEUIAppLoader.loop.start(function () {
             i += 1;
 
             if (i === 5) { burn(20); }
@@ -192,7 +192,7 @@
 
         root.querySelector('[data-act="mode"][data-value="window"]').dispatchEvent(new MouseEvent("click", { bubbles: true }));
         ok(!button.classList.contains("on"), "picking another view releases this one");
-        ACEUIModLoader.loop.stop(spiky);
+        ACEUIAppLoader.loop.stop(spiky);
     });
 
     t("LOG puts the table in the game log, where this project does its debugging", function () {
@@ -212,13 +212,13 @@
         root.querySelector('[data-act="record"]').dispatchEvent(new MouseEvent("click", { bubbles: true }));
         eq(S.recording(), false, "stopped recording first");
 
-        ACEUIModLoader.settings.set("profiler", "widgets", true);
+        ACEUIAppLoader.settings.set("profiler", "widgets", true);
         root.querySelector('[data-act="record"]').dispatchEvent(new MouseEvent("click", { bubbles: true }));
         ok(S.widgets().length >= 1, "the stock widget's methods were wrapped: " + S.widgets().join(", "));
         ok(S.widgets()[0].indexOf("ks-hudtyres.") === 0, "by tag and method");
 
         root.querySelector('[data-act="record"]').dispatchEvent(new MouseEvent("click", { bubbles: true }));
-        ACEUIModLoader.settings.set("profiler", "widgets", false);
+        ACEUIAppLoader.settings.set("profiler", "widgets", false);
     });
 
     /* A frame's wall time is the gap between animation-frame timestamps, so a spike is a
@@ -226,11 +226,11 @@
     t("a frame over the threshold stops the recording and shows that frame", function () {
         let i;
 
-        ACEUIModLoader.settings.set("profiler", "spikeMs", 30);
+        ACEUIAppLoader.settings.set("profiler", "spikeMs", 30);
         root.querySelector('[data-act="record"]').dispatchEvent(new MouseEvent("click", { bubbles: true }));
         ok(S.recording(), "recording");
 
-        const spiky = ACEUIModLoader.loop.start(function () { return 0; }, "spiker");
+        const spiky = ACEUIAppLoader.loop.start(function () { return 0; }, "spiker");
 
         for (i = 0; i < 4; i += 1) { nextFrame(); }
 
@@ -244,8 +244,8 @@
         ok(window.__log.some(function (l) { return l.indexOf("[profiler] frame of") === 0; }), "and said so");
         ok(rowTexts().length > 0, "with that frame's rows on show");
 
-        ACEUIModLoader.loop.stop(spiky);
-        ACEUIModLoader.settings.set("profiler", "spikeMs", 0);
+        ACEUIAppLoader.loop.stop(spiky);
+        ACEUIAppLoader.settings.set("profiler", "spikeMs", 0);
         P.setMode(state, P.MODE_WINDOW);
     });
 
@@ -261,8 +261,8 @@
 
         root.querySelector('[data-act="record"]').dispatchEvent(new MouseEvent("click", { bubbles: true }));
 
-        const deep = ACEUIModLoader.loop.start(function () {
-            ACEUIModLoader.section("inner work", function () { burn(1); });
+        const deep = ACEUIAppLoader.loop.start(function () {
+            ACEUIAppLoader.section("inner work", function () { burn(1); });
         }, "deepmod");
 
         for (i = 0; i < 12; i += 1) { nextFrame(); }
@@ -289,7 +289,7 @@
         ok(names.indexOf("deepmod") < names.indexOf("inner work"), "and the parent comes first");
 
         root.querySelector('[data-act="mode"][data-value="window"]').dispatchEvent(new MouseEvent("click", { bubbles: true }));
-        ACEUIModLoader.loop.stop(deep);
+        ACEUIAppLoader.loop.stop(deep);
         root.querySelector('[data-act="record"]').dispatchEvent(new MouseEvent("click", { bubbles: true }));
     });
 
@@ -304,7 +304,7 @@
 
         root.querySelector('[data-act="record"]').dispatchEvent(new MouseEvent("click", { bubbles: true }));
 
-        const busy = ACEUIModLoader.loop.start(function () { burn(1); }, "bandmod");
+        const busy = ACEUIAppLoader.loop.start(function () { burn(1); }, "bandmod");
 
         for (i = 0; i < 20; i += 1) { nextFrame(); }
 
@@ -322,11 +322,11 @@
         ok(engine.classList.contains("off"), "and the legend says so");
         ok(!rowTexts().some(function (n) { return n.indexOf("engine") === 0; }),
             "the table dropped it too: " + rowTexts().join(" | "));
-        eq(ACEUIModLoader.app("profiler").recall("bands", {}).other, false, "and the choice is remembered");
+        eq(ACEUIAppLoader.app("profiler").recall("bands", {}).other, false, "and the choice is remembered");
 
         engine.dispatchEvent(new MouseEvent("click", { bubbles: true }));
         eq(state.bands.other, true, "clicking again brings it back");
-        ACEUIModLoader.loop.stop(busy);
+        ACEUIAppLoader.loop.stop(busy);
         P.setMode(state, P.MODE_WINDOW);
         root.querySelector('[data-act="record"]').dispatchEvent(new MouseEvent("click", { bubbles: true }));
     });
@@ -338,8 +338,8 @@
 
         root.querySelector('[data-act="record"]').dispatchEvent(new MouseEvent("click", { bubbles: true }));
 
-        const outer = ACEUIModLoader.loop.start(function () {
-            ACEUIModLoader.section("inner", function () { burn(2); });
+        const outer = ACEUIAppLoader.loop.start(function () {
+            ACEUIAppLoader.section("inner", function () { burn(2); });
         }, "selfmod");
 
         for (i = 0; i < 24; i += 1) { nextFrame(); }
@@ -360,7 +360,7 @@
         const cell = root.querySelector(".pr-row:not(.pr-hidden) .pr-self");
 
         ok(cell && cell.textContent.length, "and the column is drawn: " + (cell && cell.textContent));
-        ACEUIModLoader.loop.stop(outer);
+        ACEUIAppLoader.loop.stop(outer);
         P.setMode(state, P.MODE_WINDOW);
         root.querySelector('[data-act="record"]').dispatchEvent(new MouseEvent("click", { bubbles: true }));
     });
@@ -373,8 +373,8 @@
 
         root.querySelector('[data-act="record"]').dispatchEvent(new MouseEvent("click", { bubbles: true }));
 
-        const busy = ACEUIModLoader.loop.start(function () { burn(2); }, "sortbusy");
-        const quiet = ACEUIModLoader.loop.start(function () { return 0; }, "sortquiet");
+        const busy = ACEUIAppLoader.loop.start(function () { burn(2); }, "sortbusy");
+        const quiet = ACEUIAppLoader.loop.start(function () { return 0; }, "sortquiet");
 
         for (i = 0; i < 24; i += 1) { nextFrame(); }
 
@@ -402,8 +402,8 @@
         ok(!header.classList.contains("sorted"), "and the old one stops claiming it");
 
         header.dispatchEvent(new MouseEvent("click", { bubbles: true }));
-        ACEUIModLoader.loop.stop(busy);
-        ACEUIModLoader.loop.stop(quiet);
+        ACEUIAppLoader.loop.stop(busy);
+        ACEUIAppLoader.loop.stop(quiet);
         root.querySelector('[data-act="record"]').dispatchEvent(new MouseEvent("click", { bubbles: true }));
     });
 
@@ -417,7 +417,7 @@
 
         root.querySelector('[data-act="record"]').dispatchEvent(new MouseEvent("click", { bubbles: true }));
 
-        const heavy = ACEUIModLoader.loop.start(function () { burn(22); }, "scalemod");
+        const heavy = ACEUIAppLoader.loop.start(function () { burn(22); }, "scalemod");
 
         for (i = 0; i < 10; i += 1) { nextFrame(); }
 
@@ -427,7 +427,7 @@
         ok(state.scaleTop.textContent.indexOf(String(state.fullMs)) === 0,
             "and the top of the graph says what it now means: " + state.scaleTop.textContent);
 
-        ACEUIModLoader.loop.stop(heavy);
+        ACEUIAppLoader.loop.stop(heavy);
         root.querySelector('[data-act="record"]').dispatchEvent(new MouseEvent("click", { bubbles: true }));
     });
 
@@ -467,14 +467,14 @@
         root.querySelector('[data-act="larger"]').dispatchEvent(new MouseEvent("click", { bubbles: true }));
         ok(state.scaler.value() > was, "the + button grew it: " + state.scaler.value());
         eq(root.style.fontSize, state.scaler.value() + "rem", "which is a font-size on the root");
-        eq(ACEUIModLoader.settings.get("profiler", "scale"), state.scaler.value(),
+        eq(ACEUIAppLoader.settings.get("profiler", "scale"), state.scaler.value(),
             "and the same value the settings window shows");
         root.querySelector('[data-act="smaller"]').dispatchEvent(new MouseEvent("click", { bubbles: true }));
         eq(state.scaler.value(), was, "and back down again");
     });
 
     t("the other apps can reach the panel by name while it is attached", function () {
-        const handle = ACEUIModLoader.shared.get("profiler");
+        const handle = ACEUIAppLoader.shared.get("profiler");
 
         eq(handle, ACEUIProfiler.panel(), "the registered surface is the panel's own handle");
         eq(handle.record(true), true, "so an app can start a recording without knowing our global");
@@ -485,7 +485,7 @@
         const cancelled = clock.cancelled;
 
         P.detach(state);
-        eq(ACEUIModLoader.shared.get("profiler"), null, "and it stops answering: the handle was this panel's");
+        eq(ACEUIAppLoader.shared.get("profiler"), null, "and it stops answering: the handle was this panel's");
         eq(clock.cancelled, cancelled + 1, "the frame was cancelled");
         eq(state.ui.loop.running, false, "loop stopped");
         eq(S.wrapped(), false, "and nothing of ours is left wrapped around the page");

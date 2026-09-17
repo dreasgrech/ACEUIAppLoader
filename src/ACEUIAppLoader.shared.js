@@ -1,16 +1,16 @@
 /**
- * ACEUIModLoader.shared -- what one app offers another.
+ * ACEUIAppLoader.shared -- what one app offers another.
  *
  * An app that has something other apps can use registers it here, under its own name:
  *
- *     ACEUIModLoader.shared.register("profiler", { mark: mark, report: report });
+ *     ACEUIAppLoader.shared.register("profiler", { mark: mark, report: report });
  *
- *     const profiler = ACEUIModLoader.shared.get("profiler");
+ *     const profiler = ACEUIAppLoader.shared.get("profiler");
  *     if (profiler) { profiler.mark("my slow bit"); }
  *
  * Why a registry rather than a global each. Globals work -- `DevConsole`, `ACEUIProfiler`
  * and `CapabilitiesProbe` are all still there for anyone already using them -- but they
- * collide: `ACEUIModLoader.console` is this library's console hook, so the dev console
+ * collide: `ACEUIAppLoader.console` is this library's console hook, so the dev console
  * could never have taken that name. One table, keyed by the app name the loader already
  * knows, has room for everyone's, including apps we have never heard of.
  *
@@ -23,9 +23,9 @@
  *
  * Nothing here talks to the DOM or the engine: it is a table with a log line.
  */
-ACEUIModLoader.shared = (function () {
+ACEUIAppLoader.shared = (function () {
 
-    const log = ACEUIModLoader.log;
+    const log = ACEUIAppLoader.log;
 
     /** name -> whatever that app handed us. */
     const registry = {};

@@ -12,7 +12,7 @@ build, because the padding lives in each package's own repo -- so this needs to 
 to rebuild each one. That is the registry, a JSON file beside the mods folder:
 
     {
-      "ACEUIModLoaderApps-doom.kspkg": {
+      "ACEUIAppLoader-doom.kspkg": {
         "repo": "C:/Users/User/Documents/GitHub/ACEDOOM",
         "command": ["python", "tools/build_audio.py", "--install"]
       }

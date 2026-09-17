@@ -1,5 +1,5 @@
 /*
- * ACE UI Profiler -- stylesheet. Linked by the ACEUIModLoader after the stock CSS, so
+ * ACE UI Profiler -- stylesheet. Linked by the ACEUIAppLoader after the stock CSS, so
  * --font-family-main is the game's. Stock HUD widget look: black panel, solid #1c1e1f
  * header, #bd0000 accents. No var() fallbacks (Cohtml drops the whole declaration).
  *

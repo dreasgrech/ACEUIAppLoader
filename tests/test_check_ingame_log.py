@@ -15,7 +15,7 @@ sys.path.insert(0, os.path.join(ROOT, "tools"))
 
 import check_ingame_log as check  # noqa: E402
 
-PREFIX = "[2026-09-16 02:13:06.949] [gameface] [info] [ACEUIModLoader] "
+PREFIX = "[2026-09-16 02:13:06.949] [gameface] [info] [ACEUIAppLoader] "
 
 
 def log(*loader_lines, **kwargs):
@@ -131,12 +131,27 @@ class CheckIngameLogTests(unittest.TestCase):
         self.assertIn("skipped", out)
 
     def test_a_crash_fails_whatever_else_happened(self):
+        """The wording is the game's, copied from a real log. This case asserted
+        "********** CRASH DETECTED **********" for months -- a string this game has never
+        written -- so the check passed every run without ever finding anything."""
         code, out = run(log(HUD, "presets: 0 app(s)", "bundled: 3 app(s)",
                             "app devconsole 0.11.0: loading 1 script(s), 1 stylesheet(s)",
                             "app devconsole loaded",
-                            extra=["[2026-09-16 02:14:00.000] ********** CRASH DETECTED **********"]))
+                            extra=["[2026-09-16 02:14:00.000] [crash] [error] Exception Detected: 0xC0000005 (Access Violation)",
+                                   "[2026-09-16 02:14:00.000] [crash] [error]     AssettoCorsaEVO!Something+0x10"]))
         self.assertEqual(code, 2, out)
         self.assertIn("CRASH", out)
+
+    def test_the_display_driver_exceptions_do_not_fail_the_run(self):
+        """Every launch throws dozens of these, with or without anything installed. Failing
+        on them would make the gate useless; hiding them would lose a real signal."""
+        code, out = run(log(HUD, "presets: 0 app(s)", "bundled: 3 app(s)",
+                            "app devconsole 0.11.0: loading 1 script(s), 1 stylesheet(s)",
+                            "app devconsole loaded",
+                            extra=["[2026-09-16 02:14:00.000] [crash] [error] Exception Detected: 0xE06D7363 (C++)",
+                                   "[2026-09-16 02:14:00.000] [crash] [error]     nvwgf2umx!NVAPI_DirectMethods+0x1"]))
+        self.assertEqual(code, 0, out)
+        self.assertIn("display-driver exceptions: 1", out)
 
     def test_a_log_without_the_loader_says_the_package_is_not_applied(self):
         code, out = run(["[2026-09-16 02:12:43.000] Build release x, version 0.9.1, revision 1",
@@ -149,6 +164,32 @@ class CheckIngameLogTests(unittest.TestCase):
         self.assertEqual(code, 3, out)
         self.assertIn("HUD never loaded", out)
 
+
+
+class CrashDetectionTests(unittest.TestCase):
+    """The two strings this used to look for appear in no log the game has ever written, so
+    every run said "no crashes" without having looked. These pin the real wording down."""
+
+    DRIVER = ["[crash] [error] Exception Detected: 0xE06D7363 (C++)",
+              "[crash] [error]     D3D12Core! ?? +0x0",
+              "[crash] [error]     nvwgf2umx!NVAPI_DirectMethods+0x1"]
+    OURS = ["[crash] [error] Exception Detected: 0xC0000005 (Access Violation)",
+            "[crash] [error]     AssettoCorsaEVO!Something+0x10"]
+
+    def test_the_display_driver_exceptions_are_counted_not_failed(self):
+        real, driver = check.classify_crashes(self.DRIVER * 3)
+        self.assertEqual(len(driver), 3, "every launch throws these; they are noise")
+        self.assertEqual(real, [], "and they must not fail the run")
+
+    def test_anything_else_is_a_real_crash(self):
+        real, driver = check.classify_crashes(self.OURS)
+        self.assertEqual(len(real), 1)
+        self.assertEqual(driver, [])
+
+    def test_a_driver_block_does_not_shield_a_later_real_one(self):
+        real, driver = check.classify_crashes(self.DRIVER + ["x"] * 40 + self.OURS)
+        self.assertEqual((len(real), len(driver)), (1, 1),
+                         "the stack window must not reach past its own block")
 
 if __name__ == "__main__":
     unittest.main()

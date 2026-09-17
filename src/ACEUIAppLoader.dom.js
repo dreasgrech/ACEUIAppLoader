@@ -1,5 +1,5 @@
 /**
- * ACEUIModLoader.dom -- building elements, and letting go of them again.
+ * ACEUIAppLoader.dom -- building elements, and letting go of them again.
  *
  * Three things every UI surface in this project had rewritten for itself:
  *
@@ -13,7 +13,7 @@
  *     and the dev console had fourteen pairs to keep in step by hand. `listeners()` is a
  *     bag that remembers what it added:
  *
- *         const bag = ACEUIModLoader.dom.listeners();
+ *         const bag = ACEUIAppLoader.dom.listeners();
  *         bag.on(window, "keydown", onKey);
  *         bag.on(root, "click", onClick);
  *         ...
@@ -23,7 +23,7 @@
  * This is for the surfaces that cannot have one, and for detach paths that must not
  * leak a listener into a HUD that reloads on every Escape.
  */
-ACEUIModLoader.dom = (function () {
+ACEUIAppLoader.dom = (function () {
 
     /**
      * The library's own palette. Apps are free to ignore it, but anything the loader

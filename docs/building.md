@@ -40,7 +40,7 @@ The browser cases run in a headless Edge or Chrome with its own throwaway profil
 ## Layout
 
 ```
-VERSION                    loader and library version; ACEUIModLoader.core.js must agree (tested)
+VERSION                    loader and library version; ACEUIAppLoader.core.js must agree (tested)
 dups.json                  how many records each override carries, measured, per build mode
 src/                       the library, one namespace per file; LIB_ORDER in build_loader.py is the load order
 apps/<name>/               a developer app shipped inside the package, laid out as its own repo was

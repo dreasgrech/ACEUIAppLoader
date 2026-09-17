@@ -32,10 +32,10 @@ Scripts run in order as classic scripts, and the loader waits for each before ad
 
 ## The lifecycle
 
-Before your scripts run, the loader creates the app's root — `<div id="<name>" data-app="<name>">` — inside the HUD's positioning container. `ACEUIModLoader.app("<name>")` then tells the app who it is, so its script declares none of it:
+Before your scripts run, the loader creates the app's root — `<div id="<name>" data-app="<name>">` — inside the HUD's positioning container. `ACEUIAppLoader.app("<name>")` then tells the app who it is, so its script declares none of it:
 
 ```js
-const me = ACEUIModLoader.app("myapp");
+const me = ACEUIAppLoader.app("myapp");
 
 const attach = function (root) {
     const state = create(root);
@@ -56,7 +56,7 @@ me.toggle(function () { return options.toggleKey; });   // shows and hides the a
 | `name`, `title`, `version` | from the folder and `app.json` (`version` is `"dev"` on pages the loader did not load the app on, e.g. a preview) |
 | `root` | the `#<name>` element |
 | `log`, `prefix` | a logger writing `[Title] ...` |
-| `hudId`, `storageKey`, `key(suffix)` | `hud_<name>`, `ace<name>.pos`, `ace<name>.<suffix>`: the HUD layout id and storage keys for `ACEUIModLoader.panel` / `.persist` |
+| `hudId`, `storageKey`, `key(suffix)` | `hud_<name>`, `ace<name>.pos`, `ace<name>.<suffix>`: the HUD layout id and storage keys for `ACEUIAppLoader.panel` / `.persist` |
 | `base`, `loaded` | the app folder's URL — whichever root it came from, bundled or installed; whether this loader instance loaded it |
 | `developer` | whether its `app.json` calls it a developer tool |
 | `panel(root, onFrame)` | the whole widget lifecycle: a draggable panel that remembers its position plus the frame loop that drives it. Returns a handle with `panel`, `loop` and `stop()` (safe to call twice) |
@@ -81,12 +81,12 @@ Five things every panel in this project needed, and that two or three apps had e
 
 | you want to | use |
 |---|---|
-| scroll a list (Cohtml ignores `overflow: auto`) | `ACEUIModLoader.scroll.attach(...)` |
-| a hotkey that respects the player's setting and stays out of text boxes | `ACEUIModLoader.keys.bind(...)` |
-| recognise a key the engine may report three ways | `ACEUIModLoader.keys.is(e, "Backquote")` |
-| let go of every listener in `detach` | `ACEUIModLoader.dom.listeners()` |
-| a switch, a slider, a hotkey or a button in your own settings window | `ACEUIModLoader.settings.define(...)` |
-| a draggable panel that remembers where it was, and its frame loop | `ACEUIModLoader.app("x").panel(root, onFrame)` |
+| scroll a list (Cohtml ignores `overflow: auto`) | `ACEUIAppLoader.scroll.attach(...)` |
+| a hotkey that respects the player's setting and stays out of text boxes | `ACEUIAppLoader.keys.bind(...)` |
+| recognise a key the engine may report three ways | `ACEUIAppLoader.keys.is(e, "Backquote")` |
+| let go of every listener in `detach` | `ACEUIAppLoader.dom.listeners()` |
+| a switch, a slider, a hotkey or a button in your own settings window | `ACEUIAppLoader.settings.define(...)` |
+| a draggable panel that remembers where it was, and its frame loop | `ACEUIAppLoader.app("x").panel(root, onFrame)` |
 | keep a small value across the Escape/resume reload | `me.remember(key, value)` / `me.recall(key, fallback)` |
 
 The last one matters most: a declared setting is stored in both stores, drawn in the app's own window, reachable from the app drawer, and announced to the app when it changes. A hand-built toggle is markup, a class, a click handler and a storage key that you then have to keep in step — which is what PedalGraph's attract mode was until it became four lines of `define`.
@@ -96,7 +96,7 @@ The last one matters most: a declared setting is stored in both stores, drawn in
 A profiler can see what the page schedules — animation frames, timers, events — because those go through globals it can replace. It cannot see inside your frame callback: those are closures in your IIFE, so the best it can say on its own is "this app cost 2 ms". Name the parts worth separating and it can say where the 2 ms went:
 
 ```js
-ACEUIModLoader.section("render", function () { renderFrame(state, v, frac); });
+ACEUIAppLoader.section("render", function () { renderFrame(state, v, frac); });
 ```
 
 Sections nest, so a section inside a section is a child in the tree. With no profiler attached this is a property read and a call through, which is all an app pays for being profilable when nobody is profiling it.
@@ -107,7 +107,7 @@ Sections nest, so a section inside a section is a child in the tree. With no pro
 python tools/install_app.py <repo>/<name>
 ```
 
-copies the folder into `Saved Games\ACE\mods\uiresources\ACEUIModLoaderApps\` and writes the empty marker. Escape and resume in the car reloads the HUD and picks up changes.
+copies the folder into `Saved Games\ACE\mods\uiresources\ACEUIAppLoader\` and writes the empty marker. Escape and resume in the car reloads the HUD and picks up changes.
 
 `ACEPedalGraph` is the reference app; `apps/devconsole` and `apps/profiler` are the same shape one level in.
 

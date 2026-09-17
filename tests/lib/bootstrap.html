@@ -25,40 +25,40 @@
 <!-- The real build artefact, loaded exactly as our copy of hud.html loads it -- and then
      loaded again, because both ways into the page can win their ties at once. The stamp
      between the two loads is how a failed guard would be caught: every module would run
-     again and window.ACEUIModLoader would be a different object, without the stamp. -->
+     again and window.ACEUIAppLoader would be a different object, without the stamp. -->
 <script src="loader.js"></script>
 <script>
-    window.__first = window.ACEUIModLoader;
-    if (window.ACEUIModLoader) { window.ACEUIModLoader.__stamp = "first"; }
+    window.__first = window.ACEUIAppLoader;
+    if (window.ACEUIAppLoader) { window.ACEUIAppLoader.__stamp = "first"; }
 </script>
 <script src="loader.js"></script>
 
 <script>
     t("the guarded bundle parses and defines the namespace", function () {
-        if (!window.ACEUIModLoader) { throw new Error("window.ACEUIModLoader is missing"); }
+        if (!window.ACEUIAppLoader) { throw new Error("window.ACEUIAppLoader is missing"); }
     });
     t("it reports the built version", function () {
-        if (!window.ACEUIModLoader.VERSION) { throw new Error("no VERSION"); }
+        if (!window.ACEUIAppLoader.VERSION) { throw new Error("no VERSION"); }
     });
     t("the namespaces the library promises are all there", function () {
         const want = ["console", "dom", "keys", "scroll", "persist", "panel", "loop",
                       "input", "apps", "loader", "drawer", "window", "settings"];
-        const missing = want.filter(function (n) { return !window.ACEUIModLoader[n]; });
+        const missing = want.filter(function (n) { return !window.ACEUIAppLoader[n]; });
         if (missing.length) { throw new Error("missing: " + missing.join(", ")); }
     });
     t("a second load leaves the first library in place", function () {
-        if (window.ACEUIModLoader !== window.__first) {
+        if (window.ACEUIAppLoader !== window.__first) {
             throw new Error("the second load replaced the namespace: the guard did not hold");
         }
     });
     t("a second load does not re-run the modules", function () {
-        if (window.ACEUIModLoader.__stamp !== "first") {
+        if (window.ACEUIAppLoader.__stamp !== "first") {
             throw new Error("the stamp is gone, so the modules ran again");
         }
     });
     t("the bare identifier resolves through the window property", function () {
         /* jshint evil:true */
-        if (typeof ACEUIModLoader === "undefined") { throw new Error("bare name unresolved"); }
+        if (typeof ACEUIAppLoader === "undefined") { throw new Error("bare name unresolved"); }
     });
     document.getElementById("results").textContent =
         window.__lines.join("\n") + "\nSUMMARY " + window.__pass + "/" + window.__total;

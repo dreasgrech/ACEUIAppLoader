@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <title>DevConsole preview</title>
 <!--
-  Out-of-game preview. Loads the ACEUIModLoader library from the sibling checkout of the loader
+  Out-of-game preview. Loads the ACEUIAppLoader library from the sibling checkout of the loader
   repo, then the real stylesheet and script from devconsole/, inside a 16:9 stand-in
   for the game's HUD container, with buttons that produce log lines and a fake
   ModelCurrentCar to poke at from the prompt. Open this file directly in Edge or
@@ -51,7 +51,7 @@
     <button id="btn-flood" class="on">flood (1 line/s)</button>
     <button id="btn-hide">hide HUD</button>
     <button id="btn-reset">reset position</button>
-    <span class="dim">backquote toggles; try <code>ModelCurrentCar</code> or <code>ACEUIModLoader.apps</code> in the prompt</span>
+    <span class="dim">backquote toggles; try <code>ModelCurrentCar</code> or <code>ACEUIAppLoader.apps</code> in the prompt</span>
 </div>
 
 <script>
@@ -99,9 +99,9 @@ const Preview = (function () {
     };
 
     const wire = function () {
-        q("#version").textContent = ACEUIModLoader.app("devconsole").version;
+        q("#version").textContent = ACEUIAppLoader.app("devconsole").version;
 
-        ACEUIModLoader.toArray(document.querySelectorAll("[data-emit]")).forEach(function (button) {
+        ACEUIAppLoader.toArray(document.querySelectorAll("[data-emit]")).forEach(function (button) {
             button.addEventListener("click", function () { emit(button.getAttribute("data-emit")); });
         });
 
@@ -111,13 +111,13 @@ const Preview = (function () {
         });
 
         q("#btn-hide").addEventListener("click", function () {
-            const hidden = document.body.classList.toggle(ACEUIModLoader.HUD_HIDDEN_CLASS);
+            const hidden = document.body.classList.toggle(ACEUIAppLoader.HUD_HIDDEN_CLASS);
 
             q("#btn-hide").classList.toggle("on", hidden);
         });
 
         q("#btn-reset").addEventListener("click", function () {
-            ACEUIModLoader.persist.removeLocal(DevConsole.STORAGE_KEY);
+            ACEUIAppLoader.persist.removeLocal(DevConsole.STORAGE_KEY);
             location.reload();
         });
 

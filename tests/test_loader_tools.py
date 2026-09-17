@@ -60,20 +60,20 @@ class LibrarySourceTests(unittest.TestCase):
 
     def test_every_source_file_is_in_load_order_and_present(self):
         self.assertEqual(sorted(n for n in os.listdir(SRC) if n.endswith(".js")), sorted(build_loader.LIB_ORDER))
-        self.assertEqual(build_loader.LIB_ORDER[0], "ACEUIModLoader.core.js", "core defines the namespace")
-        self.assertEqual(build_loader.LIB_ORDER[1], "ACEUIModLoader.console.js", "console hook must run before the stock bundle")
-        self.assertEqual(build_loader.LIB_ORDER[-4], "ACEUIModLoader.loader.js", "loader starts apps")
-        # the drawer registers an ACEUIModLoader.ready callback, so it must load after the loader
-        self.assertEqual(build_loader.LIB_ORDER[-3], "ACEUIModLoader.drawer.js", "drawer needs ready()")
+        self.assertEqual(build_loader.LIB_ORDER[0], "ACEUIAppLoader.core.js", "core defines the namespace")
+        self.assertEqual(build_loader.LIB_ORDER[1], "ACEUIAppLoader.console.js", "console hook must run before the stock bundle")
+        self.assertEqual(build_loader.LIB_ORDER[-4], "ACEUIAppLoader.loader.js", "loader starts apps")
+        # the drawer registers an ACEUIAppLoader.ready callback, so it must load after the loader
+        self.assertEqual(build_loader.LIB_ORDER[-3], "ACEUIAppLoader.drawer.js", "drawer needs ready()")
         # settings registers its pane with the drawer, so it loads after it
-        # settings opens its pane as an ACEUIModLoader.window, so windows load before it
-        self.assertEqual(build_loader.LIB_ORDER[-2], "ACEUIModLoader.window.js", "settings builds on window")
-        self.assertEqual(build_loader.LIB_ORDER[-1], "ACEUIModLoader.settings.js", "settings needs the drawer")
+        # settings opens its pane as an ACEUIAppLoader.window, so windows load before it
+        self.assertEqual(build_loader.LIB_ORDER[-2], "ACEUIAppLoader.window.js", "settings builds on window")
+        self.assertEqual(build_loader.LIB_ORDER[-1], "ACEUIAppLoader.settings.js", "settings needs the drawer")
 
     def test_version_matches_version_file_and_readme(self):
         v = read(os.path.join(ROOT, "VERSION")).strip()
         self.assertRegex(v, r"^\d+\.\d+\.\d+$")
-        self.assertIn(f'const VERSION = "{v}";', self.files["ACEUIModLoader.core.js"])
+        self.assertIn(f'const VERSION = "{v}";', self.files["ACEUIAppLoader.core.js"])
         self.assertIn(v, read(os.path.join(ROOT, "README.md")))
 
     def test_style_rules(self):
@@ -94,21 +94,21 @@ class LibrarySourceTests(unittest.TestCase):
             self.assertEqual(re.findall(r"^[^\"'\n]*'", strip_comments(js), re.M), [], f"{name}: single-quoted literal")
 
     def test_module_shapes(self):
-        self.assertIn("const ACEUIModLoader = (function () {", self.files["ACEUIModLoader.core.js"])
-        self.assertIn("\nwindow.ACEUIModLoader = ACEUIModLoader;\n", self.files["ACEUIModLoader.core.js"])
+        self.assertIn("const ACEUIAppLoader = (function () {", self.files["ACEUIAppLoader.core.js"])
+        self.assertIn("\nwindow.ACEUIAppLoader = ACEUIAppLoader;\n", self.files["ACEUIAppLoader.core.js"])
         for name in build_loader.LIB_ORDER[1:]:
             ns = name.split(".")[1]
-            self.assertIn(f"ACEUIModLoader.{ns} = (function () {{", self.files[name], f"{name} must define ACEUIModLoader.{ns}")
-            self.assertNotIn("const ACEUIModLoader", self.files[name], f"{name} must not redefine the namespace")
+            self.assertIn(f"ACEUIAppLoader.{ns} = (function () {{", self.files[name], f"{name} must define ACEUIAppLoader.{ns}")
+            self.assertNotIn("const ACEUIAppLoader", self.files[name], f"{name} must not redefine the namespace")
 
     def test_core_exports(self):
-        core = self.files["ACEUIModLoader.core.js"]
+        core = self.files["ACEUIAppLoader.core.js"]
         for name in ("VERSION", "LOG_PREFIX", "HUD_HIDDEN_CLASS", "page", "log", "logger", "clamp", "el", "close",
                      "toArray", "percentText", "hudHidden", "closestWithAttribute"):
             self.assertRegex(core, rf"\n\s+{name}: [A-Za-z_.()]+,?\n", f"core.{name} not exported")
 
     def test_console_hook_chains_and_never_echoes(self):
-        js = self.files["ACEUIModLoader.console.js"]
+        js = self.files["ACEUIAppLoader.console.js"]
         # trace/dir/table are wrapped too: this file runs BEFORE the stock bundle, so when
         # the bundle wraps console.trace itself its wrapper calls ours, which calls the
         # original -- the line is captured once and the bundle's behaviour is unchanged.
@@ -128,17 +128,17 @@ class LibrarySourceTests(unittest.TestCase):
         # the drawer builds on ready(), which fires only after every app has loaded, so a
         # switched-off app stayed visible for that whole window and appeared to flash on
         # and off again after a pause-menu reload
-        js = self.files["ACEUIModLoader.loader.js"]
-        self.assertIn("if (ACEUIModLoader.drawer) { ACEUIModLoader.drawer.applyStored(name); }", js,
+        js = self.files["ACEUIAppLoader.loader.js"]
+        self.assertIn("if (ACEUIAppLoader.drawer) { ACEUIAppLoader.drawer.applyStored(name); }", js,
                       "mountRoot must apply the saved switch as soon as it creates the root")
-        self.assertLess(js.find("ACEUIModLoader.drawer.applyStored(name)"), js.find("return root;"),
+        self.assertLess(js.find("ACEUIAppLoader.drawer.applyStored(name)"), js.find("return root;"),
                         "applied before the root is handed back and the app's scripts run")
-        drawer = self.files["ACEUIModLoader.drawer.js"]
+        drawer = self.files["ACEUIAppLoader.drawer.js"]
         self.assertIn("loadStored();", drawer, "the saved switches are read as the library loads")
         self.assertIn("applyStored: applyStored,", drawer, "and exported for the loader to call")
 
     def test_panel_contract(self):
-        js = self.files["ACEUIModLoader.panel.js"]
+        js = self.files["ACEUIAppLoader.panel.js"]
         self.assertIn('const NO_DRAG_ATTR = "data-nodrag";', js)
         self.assertIn('const DRAGGING_CLASS = "dragging";', js)
         self.assertIn("const RESTORE_WAIT_MS = 2000;", js)
@@ -149,22 +149,22 @@ class LibrarySourceTests(unittest.TestCase):
         self.assertIn('window.removeEventListener("mousemove", panel.handlers.move);', js)
 
     def test_loader_contract(self):
-        js = self.files["ACEUIModLoader.loader.js"]
-        self.assertIn('const ROOT = "ACEUIModLoaderApps/";', js)
+        js = self.files["ACEUIAppLoader.loader.js"]
+        self.assertIn('const ROOT = "ACEUIAppLoader/";', js)
         # the two roots must differ: loose files never beat packed files, so a bundled app
         # sitting at the installed path could never be overridden to work on it
-        self.assertIn('const BUILTIN_ROOT = "ACEUIModLoaderBuiltIn/";', js)
+        self.assertIn('const BUILTIN_ROOT = "ACEUIAppLoaderBuiltIn/";', js)
         self.assertIn('const BUILTIN_INDEX = "apps.json";', js)
-        self.assertNotEqual('ACEUIModLoaderBuiltIn/', 'ACEUIModLoaderApps/')
+        self.assertNotEqual('ACEUIAppLoaderBuiltIn/', 'ACEUIAppLoader/')
         self.assertNotIn("manifest", js.lower(), "the game's preset list is the only source of app names")
         self.assertIn('const APP_FILE = "app.json";', js)
         self.assertIn('const DEFAULT_PAGES = ["hud.html"];', js)
         self.assertIn('const PRESET_REQUEST = "SettingsRequestVideoPresetList";', js)
         self.assertIn('const PRESET_RESPONSE = "SettingsResponseVideoPresetList";', js)
-        self.assertIn('const MARKER_PREFIX = "ACEUIModLoaderApps-";', js)
+        self.assertIn('const MARKER_PREFIX = "ACEUIAppLoader-";', js)
         self.assertIn('const MARKER_EXT = ".settingspreset";', js)
         self.assertIn('engine.trigger("OnUICommand", PRESET_REQUEST, { __Type: PRESET_REQUEST, version: 0 });', js)
-        for line in ('"loader " + ACEUIModLoader.VERSION + " on /"', 'source + ": " + names.length + " app(s)"', '" loaded"',
+        for line in ('"loader " + ACEUIAppLoader.VERSION + " on /"', 'source + ": " + names.length + " app(s)"', '" loaded"',
                      '" FAILED"', '"; no installed apps"', '"nothing to load"', '"no engine on this page"', '"could not wrap engine.on'):
             self.assertIn(line, js, line)
         self.assertIn("loadScripts(base, files, index + 1, onDone)", js, "scripts load sequentially")
@@ -174,7 +174,7 @@ class LibrarySourceTests(unittest.TestCase):
                      "APP_ATTR", "DEV_VERSION", "app", "BUILTIN_ROOT", "BUILTIN_INDEX", "merge", "isDeveloper"):
             self.assertRegex(js, rf"\n\s+{name}: [A-Za-z_.]+,?\n", f"loader.{name} not exported")
         for alias in ("ROOT", "apps", "app", "ready", "addStylesheet", "addScript"):
-            self.assertIn(f"ACEUIModLoader.{alias} = ACEUIModLoader.loader.{alias};", js)
+            self.assertIn(f"ACEUIAppLoader.{alias} = ACEUIAppLoader.loader.{alias};", js)
         self.assertIn('const CONTAINER_SELECTOR = ".absolutecenter";', js)
         self.assertIn("mountRoot(name, info);\n            state.current = entry;\n            loadScripts(", js,
                       "root exists and app() knows the current app before its scripts run")
@@ -184,13 +184,13 @@ class LibrarySourceTests(unittest.TestCase):
     def test_browser_pages_share_doubles_and_the_library_load_order(self):
         lib_js = read(os.path.join(ROOT, "tests", "lib", "lib.js"))
         names = re.search(r"const FILES = \[([^\]]*)\];", lib_js).group(1)
-        files = [f"ACEUIModLoader.{n.strip().strip(chr(34))}.js" for n in names.split(",")]
+        files = [f"ACEUIAppLoader.{n.strip().strip(chr(34))}.js" for n in names.split(",")]
         self.assertEqual(files, build_loader.LIB_ORDER, "tests/lib/lib.js must load the library in LIB_ORDER")
         self.assertTrue(os.path.exists(os.path.join(ROOT, "tests", "lib", "doubles.js")))
         harness = read(os.path.join(ROOT, "tests", "lib", "harness.html"))
         self.assertIn('<script src="doubles.js"></script>', harness)
         self.assertIn('<script src="lib.js"></script>', harness)
-        self.assertNotIn("ACEUIModLoader.core.js", harness, "the harness must not list library files itself")
+        self.assertNotIn("ACEUIAppLoader.core.js", harness, "the harness must not list library files itself")
 
     def test_manifest_keys_match_between_the_install_tool_and_the_test_kit(self):
         """Both read an app.json, and a key one accepts and the other rejects is an app that
@@ -202,11 +202,11 @@ class LibrarySourceTests(unittest.TestCase):
         self.assertIn("developer", install_app.KNOWN_KEYS, "the app drawer's developer switch reads it")
 
     def test_marker_naming_matches_between_loader_and_install_tool(self):
-        js = self.files["ACEUIModLoader.loader.js"]
+        js = self.files["ACEUIAppLoader.loader.js"]
         self.assertIn(f'const MARKER_PREFIX = "{install_app.MARKER_PREFIX}";', js)
         self.assertIn(f'const MARKER_EXT = "{install_app.MARKER_EXT}";', js)
         self.assertEqual(install_app.MARKER_DIR, "Video", "the game lists Saved Games/ACE/Video for SettingsRequestVideoPresetList")
-        self.assertEqual(install_app.APPS_SUBDIR.replace(os.sep, "/") + "/", "uiresources/" + "ACEUIModLoaderApps/")
+        self.assertEqual(install_app.APPS_SUBDIR.replace(os.sep, "/") + "/", "uiresources/" + "ACEUIAppLoader/")
 
     def test_no_per_frame_geometry_or_css_in_library(self):
         for name, js in self.files.items():
@@ -232,10 +232,10 @@ class InstallAppTests(unittest.TestCase):
 
     def test_install_copies_files_and_writes_an_empty_marker(self):
         dest = install_app.install(self.src, self.mods)
-        self.assertEqual(dest, os.path.join(self.mods, "uiresources", "ACEUIModLoaderApps", "myapp"))
+        self.assertEqual(dest, os.path.join(self.mods, "uiresources", "ACEUIAppLoader", "myapp"))
         self.assertEqual(sorted(os.listdir(dest)), ["a.css", "a.js", "app.json", "b.js"], "junk must not be copied")
         marker = install_app.marker_path("myapp", self.mods)
-        self.assertEqual(marker, os.path.join(self.tmp.name, "Video", "ACEUIModLoaderApps-myapp.settingspreset"),
+        self.assertEqual(marker, os.path.join(self.tmp.name, "Video", "ACEUIAppLoader-myapp.settingspreset"),
                          "marker lives next to the mods folder, where the game lists video presets")
         self.assertTrue(os.path.isfile(marker))
         self.assertEqual(os.path.getsize(marker), 0, "the game deserialises every listed file; only an empty one is safe")
@@ -243,36 +243,46 @@ class InstallAppTests(unittest.TestCase):
         self.assertEqual(install_app.marker_names(self.mods), ["myapp"])
         self.assertFalse(os.path.exists(os.path.join(install_app.apps_root_dir(self.mods), "manifest.json")), "no manifest any more")
 
-    def test_installing_clears_the_copy_left_at_the_pre_rename_path(self):
-        """An app installed while apps were called mods sits somewhere the loader no longer
-        reads, so it is invisible rather than broken. Installing again has to clear it."""
-        old = os.path.join(self.mods, "uiresources", "ACEUIModLoaderMods", "myapp")
-        os.makedirs(old)
-        write(os.path.join(old, "mod.json"), "{}")
-        old_marker = os.path.join(self.tmp.name, "Video", "ACEUIModLoaderMods-myapp.settingspreset")
-        os.makedirs(os.path.dirname(old_marker), exist_ok=True)
-        write(old_marker, "")
+    def plant_legacy(self, name="myapp"):
+        """One folder and one marker at every path apps have ever been installed to."""
+        planted = []
+        for sub, prefix in install_app.LEGACY_LAYOUTS:
+            folder = os.path.join(self.mods, sub, name)
+            os.makedirs(folder, exist_ok=True)
+            write(os.path.join(folder, "mod.json"), "{}")
+            marker = os.path.join(self.tmp.name, "Video", prefix + name + ".settingspreset")
+            os.makedirs(os.path.dirname(marker), exist_ok=True)
+            write(marker, "")
+            planted += [folder, marker]
+        return planted
+
+    def test_installing_clears_every_copy_left_at_an_older_path(self):
+        """Apps were renamed twice (mod -> app, then the loader itself). A copy at either old
+        path sits somewhere the loader no longer reads, so it is invisible rather than broken
+        -- which is worse, because nothing says why the app is missing."""
+        planted = self.plant_legacy()
+        self.assertTrue(len(planted) >= 4, "more than one old layout to clear")
 
         install_app.install(self.src, self.mods)
 
-        self.assertFalse(os.path.isdir(old), "the old folder is gone")
-        self.assertFalse(os.path.exists(old_marker), "and so is the old marker")
+        for path in planted:
+            self.assertFalse(os.path.exists(path), f"still there: {path}")
         self.assertTrue(os.path.isdir(os.path.join(install_app.apps_root_dir(self.mods), "myapp")))
 
-    def test_remove_clears_both_paths_so_nothing_lingers(self):
-        old = os.path.join(self.mods, "uiresources", "ACEUIModLoaderMods", "myapp")
+    def test_remove_clears_every_path_so_nothing_lingers(self):
         install_app.install(self.src, self.mods)
-        os.makedirs(old, exist_ok=True)
+        planted = self.plant_legacy()
 
         install_app.remove("myapp", self.mods)
 
-        self.assertFalse(os.path.isdir(old))
+        for path in planted:
+            self.assertFalse(os.path.exists(path), f"still there: {path}")
         self.assertEqual(install_app.marker_names(self.mods), [])
 
     def test_remove_deletes_folder_and_marker(self):
         install_app.install(self.src, self.mods)
         install_app.remove("myapp", self.mods)
-        self.assertFalse(os.path.isdir(os.path.join(self.mods, "uiresources", "ACEUIModLoaderApps", "myapp")))
+        self.assertFalse(os.path.isdir(os.path.join(self.mods, "uiresources", "ACEUIAppLoader", "myapp")))
         self.assertFalse(os.path.exists(install_app.marker_path("myapp", self.mods)))
         self.assertEqual(install_app.marker_names(self.mods), [])
 
@@ -311,7 +321,7 @@ class InstallAppTests(unittest.TestCase):
     def test_marker_names_ignore_the_players_own_presets(self):
         folder = install_app.marker_dir(self.mods)
         os.makedirs(folder)
-        for name in ("MyLowSettings.settingspreset", "ACEUIModLoaderApps-other.settingspreset", "ACEUIModLoaderApps-x.txt"):
+        for name in ("MyLowSettings.settingspreset", "ACEUIAppLoader-other.settingspreset", "ACEUIAppLoader-x.txt"):
             with open(os.path.join(folder, name), "wb"):
                 pass
         self.assertEqual(install_app.marker_names(self.mods), ["other"])
@@ -375,8 +385,8 @@ class BuildLoaderTests(unittest.TestCase):
             self.assertTrue(data.startswith(stock), "host must start with the untouched stock file")
             positions = [data.index(f"/* ---- {name} ".encode()) for name in build_loader.LIB_ORDER]
             self.assertEqual(positions, sorted(positions), "library files must be appended in LIB_ORDER")
-            self.assertIn(b"const ACEUIModLoader = (function () {", data)
-            self.assertIn(b"ACEUIModLoader.loader = (function () {", data)
+            self.assertIn(b"const ACEUIAppLoader = (function () {", data)
+            self.assertIn(b"ACEUIAppLoader.loader = (function () {", data)
             out = os.path.join(tmp, "loader.kspkg")
             # Pack for a stock install. The padding is planned against whatever packages the
             # mods folder holds, and `winners` below models base + ours and nothing else --
@@ -520,21 +530,21 @@ class SecondEntryPointTests(unittest.TestCase):
         self.assertRegex(version, r"^\d+\.\d+\.\d+\+release\.\d+$", "no game version read from the exe")
         host = read(os.path.join(self.build, *build_loader.HOST_PATH.split("/")))
         for where, text in (("the appended host", host), ("the bootstrap", self.boot)):
-            self.assertIn('ACEUIModLoader.builtFor = "%s";' % version, text, where)
+            self.assertIn('ACEUIAppLoader.builtFor = "%s";' % version, text, where)
         self.assertLess(self.boot.index("builtFor"), self.boot.rindex("}());"),
                         "the stamp must be inside the guard, or a second load would reset it")
 
     def test_the_loader_compares_the_stamp_with_the_running_game(self):
-        js = read(os.path.join(SRC, "ACEUIModLoader.loader.js"))
-        self.assertIn("ACEUIModLoader.builtFor", js)
+        js = read(os.path.join(SRC, "ACEUIAppLoader.loader.js"))
+        self.assertIn("ACEUIAppLoader.builtFor", js)
         self.assertIn("ModelUIState", js, "the running version comes from the model the game publishes")
         self.assertIn("warnIfGameMoved();", js, "and the check has to actually be called")
 
     def test_the_bootstrap_carries_the_library_behind_a_guard(self):
-        self.assertIn("if (window.ACEUIModLoader) { return; }", self.boot)
-        self.assertIn("const ACEUIModLoader = (function () {", self.boot)
-        self.assertLess(self.boot.index("if (window.ACEUIModLoader) { return; }"),
-                        self.boot.index("const ACEUIModLoader = (function () {"),
+        self.assertIn("if (window.ACEUIAppLoader) { return; }", self.boot)
+        self.assertIn("const ACEUIAppLoader = (function () {", self.boot)
+        self.assertLess(self.boot.index("if (window.ACEUIAppLoader) { return; }"),
+                        self.boot.index("const ACEUIAppLoader = (function () {"),
                         "the guard must come before anything it is meant to skip")
         for name in build_loader.LIB_ORDER:
             self.assertIn(f"/* ---- {name} ", self.boot, "the bootstrap is the whole library")

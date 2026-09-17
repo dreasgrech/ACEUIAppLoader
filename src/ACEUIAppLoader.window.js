@@ -1,19 +1,19 @@
 /**
- * ACEUIModLoader.window -- floating windows for apps, with a title bar and a close button.
+ * ACEUIAppLoader.window -- floating windows for apps, with a title bar and a close button.
  *
  * An app that needs a second surface -- settings, help, a picker, a report -- should not
  * have to hand-build a panel, wire dragging, remember where the player put it and manage
  * a frame loop. This does all of that:
  *
- *     const win = ACEUIModLoader.window.open("doom.help", { title: "DOOM help" });
+ *     const win = ACEUIAppLoader.window.open("doom.help", { title: "DOOM help" });
  *     win.body.appendChild(myContent);      // fill it with whatever you like
  *     win.setTitle("DOOM help (page 2)");
  *     win.close();
  *
- *     ACEUIModLoader.window.toggle("doom.help", { title: "DOOM help" });
- *     ACEUIModLoader.window.isOpen("doom.help");
- *     ACEUIModLoader.window.get("doom.help");
- *     ACEUIModLoader.window.closeAll();
+ *     ACEUIAppLoader.window.toggle("doom.help", { title: "DOOM help" });
+ *     ACEUIAppLoader.window.isOpen("doom.help");
+ *     ACEUIAppLoader.window.get("doom.help");
+ *     ACEUIAppLoader.window.closeAll();
  *
  * The id is yours to choose and should be unique per window, not per app -- an app can
  * have several. It is also the storage key, so a window remembers its own position:
@@ -21,7 +21,7 @@
  *
  * Options, all optional: `title`, `width`, `left`, `top`, `onClose`, `onOpen`.
  *
- * Dragging and position persistence come from ACEUIModLoader.panel, which settles a
+ * Dragging and position persistence come from ACEUIAppLoader.panel, which settles a
  * restored position over a few frames, so an open window needs a frame loop. One loop is
  * shared by every open window and it stops when the last one closes -- nothing runs while
  * they are all shut.
@@ -29,7 +29,7 @@
  * Styling is inline for the same reason as the app drawer: the loader ships as a single
  * overriding file inside a package whose layout is delicate, so it carries no stylesheet.
  */
-ACEUIModLoader.window = (function () {
+ACEUIAppLoader.window = (function () {
 
     const DEFAULT_WIDTH = "17rem";
     const DEFAULT_LEFT = "30%";
@@ -43,15 +43,15 @@ ACEUIModLoader.window = (function () {
     const HUD_SUFFIX = "_window";
     const LOCAL_PREFIX = "acewindow.";
 
-    const THEME = ACEUIModLoader.dom.THEME;
+    const THEME = ACEUIAppLoader.dom.THEME;
 
-    const NO_DRAG_ATTR = ACEUIModLoader.panel.NO_DRAG_ATTR;
+    const NO_DRAG_ATTR = ACEUIAppLoader.panel.NO_DRAG_ATTR;
 
     /** id -> { id, root, header, body, panel, options } */
     const open_windows = {};
     let loop = null;
 
-    const make = ACEUIModLoader.dom.make;
+    const make = ACEUIAppLoader.dom.make;
 
     const ids = function () {
         return Object.keys(open_windows);
@@ -67,17 +67,17 @@ ACEUIModLoader.window = (function () {
 
     /** One loop for all open windows; it only exists while at least one is open. */
     const startLoop = function () {
-        if (loop || !ACEUIModLoader.loop) { return; }
+        if (loop || !ACEUIAppLoader.loop) { return; }
 
-        loop = ACEUIModLoader.loop.start(function (now) {
-            ids().forEach(function (id) { ACEUIModLoader.panel.update(open_windows[id].panel, now); });
+        loop = ACEUIAppLoader.loop.start(function (now) {
+            ids().forEach(function (id) { ACEUIAppLoader.panel.update(open_windows[id].panel, now); });
         });
     };
 
     const stopLoop = function () {
         if (!loop || ids().length) { return; }
 
-        ACEUIModLoader.loop.stop(loop);
+        ACEUIAppLoader.loop.stop(loop);
         loop = null;
     };
 
@@ -86,7 +86,7 @@ ACEUIModLoader.window = (function () {
 
         if (!win) { return false; }
 
-        ACEUIModLoader.panel.detach(win.panel);
+        ACEUIAppLoader.panel.detach(win.panel);
 
         if (win.root.parentNode) { win.root.parentNode.removeChild(win.root); }
 
@@ -94,7 +94,7 @@ ACEUIModLoader.window = (function () {
         stopLoop();
 
         if (typeof win.options.onClose === "function") {
-            ACEUIModLoader.safely("[window] " + id + " onClose", function () { win.options.onClose(id); });
+            ACEUIAppLoader.safely("[window] " + id + " onClose", function () { win.options.onClose(id); });
         }
 
         return true;
@@ -105,7 +105,7 @@ ACEUIModLoader.window = (function () {
     };
 
     const container = function () {
-        const selector = ACEUIModLoader.loader ? ACEUIModLoader.loader.CONTAINER_SELECTOR : "";
+        const selector = ACEUIAppLoader.loader ? ACEUIAppLoader.loader.CONTAINER_SELECTOR : "";
 
         return (selector && document.querySelector(selector)) || document.body;
     };
@@ -183,10 +183,10 @@ ACEUIModLoader.window = (function () {
             setTitle: function (text) { titleNode.textContent = text; return win; },
             isOpen: function () { return isOpen(id); },
             close: function () { return close(id); },
-            panel: ACEUIModLoader.panel.attach(root, {
+            panel: ACEUIAppLoader.panel.attach(root, {
                 hudId: HUD_PREFIX + id + HUD_SUFFIX,
                 storageKey: LOCAL_PREFIX + id,
-                log: ACEUIModLoader.log
+                log: ACEUIAppLoader.log
             })
         };
 
@@ -194,7 +194,7 @@ ACEUIModLoader.window = (function () {
         startLoop();
 
         if (typeof opts.onOpen === "function") {
-            ACEUIModLoader.safely("[window] " + id + " onOpen", function () { opts.onOpen(win); });
+            ACEUIAppLoader.safely("[window] " + id + " onOpen", function () { opts.onOpen(win); });
         }
 
         return win;
