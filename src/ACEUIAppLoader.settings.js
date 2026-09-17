@@ -43,6 +43,18 @@
  *
  *     { key: "inputs", type: "section", label: "Inputs", columns: 2, collapsed: false },
  *
+ * `order` is a list the player reorders by dragging; its value is the array of item keys,
+ * top first. Mouse events, not HTML5 drag-and-drop, which this engine is not known to
+ * support: the panel drag proves mousedown/mousemove/mouseup are enough.
+ *
+ *     { key: "stack", type: "order", label: "Draw order", value: ["gas", "brake"],
+ *       items: [{ key: "gas", label: "Throttle" }, { key: "brake", label: "Brake" }] }
+ *
+ * Any row, and any order item, can carry a `swatch` drawn before its label: a colour
+ * (`swatch: "#44ea78"`) or, for an app whose colours live in its stylesheet, a class and
+ * attributes for the stylesheet to key on (`swatch: { className, attrs }`). A row of
+ * switches named after coloured things is skimmed by colour, not read.
+ *
  * Values are written to both stores (see ACEUIAppLoader.persist): the HUD layout
  * container, which the game writes to disk and is the only thing that survives a restart,
  * and localStorage, which is read synchronously so a value is there the moment an app asks.
@@ -54,8 +66,10 @@ ACEUIAppLoader.settings = (function () {
      * is a line of text the app computes. They are here because a settings page that can
      * only hold values forces an app back to hand-building a pane for one button.
      */
-    const TYPES = ["toggle", "range", "choice", "text", "key", "action", "info", "section"];
-    const VALUE_TYPES = ["toggle", "range", "choice", "text", "key"];
+    const TYPES = ["toggle", "range", "choice", "text", "key", "order", "action", "info", "section"];
+    const VALUE_TYPES = ["toggle", "range", "choice", "text", "key", "order"];
+    /** Controls drawn as a block under their label rather than beside it. */
+    const BLOCK_TYPES = ["order"];
     const HUD_PREFIX = "hud_";
     const HUD_SUFFIX = "_settings";
     const LOCAL_PREFIX = "ace";
@@ -66,6 +80,9 @@ ACEUIAppLoader.settings = (function () {
     /** Pressing this while a key control is waiting cancels it rather than binding it. */
     const CANCEL_KEY = "Escape";
     const CLEAR_TEXT = "Reset to defaults";
+
+    /** The order control: how a row looks while it is being dragged. */
+    const DRAG_BG = "rgba(255, 255, 255, 0.22)";
 
     /** Sections: the glyph on a header for open and folded, the widest layout, and where the folds are kept. */
     const OPEN_GLYPH = "\u2212";
@@ -173,11 +190,37 @@ ACEUIAppLoader.settings = (function () {
         return out;
     };
 
+    /**
+     * A stored order, made whole: unknown keys dropped, duplicates dropped, and any item
+     * it lacks appended in the default order -- an update that adds a channel must not
+     * make it vanish, and a stored list must always be a permutation of the items.
+     */
+    const coerceOrder = function (spec, value) {
+        const keys = (spec.items || []).map(function (item) { return item.key; });
+        const fallback = Array.isArray(spec.value) ? spec.value : keys;
+        const kept = (Array.isArray(value) ? value : []).filter(function (key, at, list) {
+            return keys.indexOf(key) >= 0 && list.indexOf(key) === at;
+        });
+
+        return kept.concat(fallback.concat(keys).filter(function (key, at, list) {
+            return keys.indexOf(key) >= 0 && kept.indexOf(key) < 0 && list.indexOf(key) === at;
+        }));
+    };
+
+    /** Equal as values: arrays (an order) by content, everything else by identity. */
+    const same = function (a, b) {
+        if (Array.isArray(a) && Array.isArray(b)) { return a.join(",") === b.join(","); }
+
+        return a === b;
+    };
+
     /** Force a stored value back into the shape its spec promises. */
     const coerce = function (spec, value) {
         if (value === undefined || value === null) { return spec.value; }
 
         if (spec.type === "toggle") { return Boolean(value); }
+
+        if (spec.type === "order") { return coerceOrder(spec, value); }
 
         if (spec.type === "range") { return clampNumber(spec, value); }
 
@@ -230,7 +273,8 @@ ACEUIAppLoader.settings = (function () {
 
         const next = coerce(spec, value);
 
-        if (held.values[key] === next) { return next; }
+        // the value the app holds, not a fresh copy of it: an order is an array
+        if (same(held.values[key], next)) { return held.values[key]; }
 
         held.values[key] = next;
         save(app);
@@ -281,11 +325,14 @@ ACEUIAppLoader.settings = (function () {
 
     // ---- controls ------------------------------------------------------------------
 
+    /**
+     * A row is swatch (optional), label, control; the label grows to push the control to
+     * the right edge, so the layout is the same with or without a swatch.
+     */
     const rowStyle = {
         display: "flex",
         flexDirection: "row",
         alignItems: "center",
-        justifyContent: "space-between",
         padding: "0.2rem 0",
         fontSize: "0.68rem",
         color: THEME.ink
@@ -300,6 +347,50 @@ ACEUIAppLoader.settings = (function () {
         color: "#fff",
         cursor: "pointer",
         userSelect: "none"
+    };
+
+    const swatchStyle = {
+        display: "inline-block",
+        flexShrink: "0",
+        width: "0.55rem",
+        height: "0.55rem",
+        borderRadius: "0.12rem",
+        marginRight: "0.4rem"
+    };
+
+    /** A colour chip before a label: a colour string, or a class and attributes the app's stylesheet colours. */
+    const swatch = function (def) {
+        const node = make("span", swatchStyle);
+
+        if (typeof def === "string") {
+            node.style.background = def;
+
+            return node;
+        }
+
+        if (def.className) { node.className = def.className; }
+
+        if (def.color) { node.style.background = def.color; }
+
+        Object.keys(def.attrs || {}).forEach(function (name) { node.setAttribute(name, def.attrs[name]); });
+
+        return node;
+    };
+
+    /**
+     * The drag handle on an order row: two hairlines drawn with borders, because the
+     * glyph for it (U+2261) is not in the game's typeface and rendered as a box.
+     */
+    const grip = function () {
+        return make("span", {
+            display: "inline-block",
+            flexShrink: "0",
+            width: "0.5rem",
+            height: "0.22rem",
+            borderTop: "1px solid " + THEME.inkOff,
+            borderBottom: "1px solid " + THEME.inkOff,
+            marginRight: "0.45rem"
+        });
     };
 
     const button = function (text, onClick) {
@@ -524,7 +615,127 @@ ACEUIAppLoader.settings = (function () {
         return body;
     };
 
+    /**
+     * A list the player reorders by dragging a row: `{ type: "order", label, items: [{ key,
+     * label }], value: [keys, top first] }`. Rows are moved in the DOM as the cursor passes
+     * their middles, so the list reorders live under the hand; the value is written once,
+     * on release. The window listeners are undone with the pane, like the key control's.
+     */
+    const orderControl = function (app, spec, repaint) {
+        const held = entry(app);
+        const items = spec.items || [];
+        const list = make("div", { display: "flex", flexDirection: "column", width: "100%", marginTop: "0.1rem", fontSize: rowStyle.fontSize });
+        const rows = {};
+        /**
+         * `top` and `pitch` are the slot geometry, measured once when the row is pressed.
+         * The first version measured the rows on every move, but moving a row in the DOM
+         * changes what is under the cursor, which moved it back -- and in Cohtml the rects
+         * after a DOM move are stale until the next frame anyway. The slots do not move
+         * while the rows are being shuffled between them, so they are what to measure.
+         */
+        const drag = { key: null, order: null, top: 0, pitch: 0 };
+
+        const rowOf = function (item) {
+            const row = make("div", {
+                display: "flex",
+                flexDirection: "row",
+                alignItems: "center",
+                padding: "0.1rem 0.35rem",
+                marginBottom: "0.1rem",
+                background: THEME.controlBg,
+                border: THEME.controlBorder,
+                borderRadius: "0.2rem",
+                cursor: "grab",
+                userSelect: "none"
+            });
+
+            row.appendChild(grip());
+
+            if (item.swatch) { row.appendChild(swatch(item.swatch)); }
+
+            row.appendChild(make("span", { color: THEME.ink }, item.label || item.key));
+
+            return row;
+        };
+
+        /** Put the rows in the DOM in `order`. */
+        const arrange = function (order) {
+            order.forEach(function (key) {
+                if (rows[key]) { list.appendChild(rows[key]); }
+            });
+        };
+
+        /** The slot the cursor is over, from the geometry measured when the drag began. */
+        const indexAt = function (y, order) {
+            if (drag.pitch <= 0) { return order.indexOf(drag.key); }
+
+            return ACEUIAppLoader.clamp(Math.floor((y - drag.top) / drag.pitch), 0, order.length - 1);
+        };
+
+        const moved = function (order, from, to) {
+            const next = order.slice();
+
+            next.splice(to, 0, next.splice(from, 1)[0]);
+
+            return next;
+        };
+
+        const onMove = function (e) {
+            const from = drag.order.indexOf(drag.key);
+            const to = indexAt(e.clientY, drag.order);
+
+            if (to !== from) {
+                drag.order = moved(drag.order, from, to);
+                arrange(drag.order);
+            }
+        };
+
+        const finish = function () {
+            if (!drag.key) { return; }
+
+            const done = drag.order;
+
+            window.removeEventListener("mousemove", onMove, true);
+            window.removeEventListener("mouseup", finish, true);
+            rows[drag.key].style.background = THEME.controlBg;
+            drag.key = null;
+            drag.order = null;
+            set(app, spec.key, done);
+        };
+
+        const start = function (key, e) {
+            if (drag.key) { return; }
+
+            const box = list.getBoundingClientRect();
+
+            e.preventDefault();
+            drag.key = key;
+            drag.order = (get(app, spec.key) || []).slice();
+            drag.top = box.top;
+            drag.pitch = drag.order.length > 0 ? box.height / drag.order.length : 0;
+            rows[key].style.background = DRAG_BG;
+            window.addEventListener("mousemove", onMove, true);
+            window.addEventListener("mouseup", finish, true);
+
+            // a pane torn down mid-drag must not leave the window listeners behind
+            if (held) { held.undo.push(finish); }
+        };
+
+        items.forEach(function (item) {
+            rows[item.key] = rowOf(item);
+            rows[item.key].addEventListener("mousedown", function (e) { start(item.key, e); });
+        });
+
+        // a reset or a set from elsewhere re-sorts the rows; not under a hand mid-drag
+        repaint.push(function () {
+            if (!drag.key) { arrange(get(app, spec.key) || []); }
+        });
+
+        return list;
+    };
+
     const CONTROLS = {
+        order: orderControl,
         action: actionControl,
         info: infoControl,
         toggle: toggleControl,
@@ -582,11 +793,16 @@ ACEUIAppLoader.settings = (function () {
                 css(row, { width: "50%", boxSizing: "border-box", paddingRight: "0.6rem" });
             }
 
-            row.appendChild(make("span", { color: THEME.inkDim, marginRight: "0.5rem" }, spec.label || spec.key));
+            if (spec.swatch) { row.appendChild(swatch(spec.swatch)); }
 
-            if (control) { row.appendChild(control(app, spec, held.repaint)); }
+            row.appendChild(make("span", { color: THEME.inkDim, marginRight: "0.5rem", flex: "1 1 auto" }, spec.label || spec.key));
+
+            if (control && BLOCK_TYPES.indexOf(spec.type) < 0) { row.appendChild(control(app, spec, held.repaint)); }
 
             target.body.appendChild(row);
+
+            // a block control (a list) goes under its label, the full width of the pane
+            if (control && BLOCK_TYPES.indexOf(spec.type) >= 0) { target.body.appendChild(control(app, spec, held.repaint)); }
 
             if (spec.hint) {
                 target.body.appendChild(make("div", { color: THEME.inkDim, fontSize: "0.6rem", paddingBottom: "0.2rem", width: "100%" }, spec.hint));

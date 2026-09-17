@@ -806,7 +806,7 @@ document.addEventListener("DOMContentLoaded", function () {
         document.getElementById("center").appendChild(pane);
 
         S.define("drawn", [
-            { key: "follow", type: "toggle", label: "Follow", value: false },
+            { key: "follow", type: "toggle", label: "Follow", value: false, swatch: "#ff1418" },
             { key: "scale", type: "range", label: "Scale", value: 1, min: 0, max: 4, step: 1, digits: 0 },
             { key: "theme", type: "choice", label: "Theme", value: "dark", options: ["dark", "light"] }
         ]);
@@ -816,7 +816,8 @@ document.addEventListener("DOMContentLoaded", function () {
         ok(rows.length >= 3, "a row per setting");
         ok(pane.textContent.indexOf("Follow") >= 0 && pane.textContent.indexOf("Reset to defaults") >= 0, "labels and a reset");
 
-        /* the toggle box is the first clickable thing in the first row */
+        eq(rows[0].children.length, 3, "swatch, label, control"); eq(rows[0].children[0].style.background, "rgb(255, 20, 24)", "the swatch before the label");
+        /* the toggle box is the last thing in the first row */
         rows[0].querySelector("span:last-child").dispatchEvent(new MouseEvent("click", { bubbles: true }));
         eq(S.get("drawn", "follow"), true, "clicking the box flips it");
 
@@ -867,6 +868,62 @@ document.addEventListener("DOMContentLoaded", function () {
         eq(S.isCollapsed("sectioned", "inputs"), true, "and comes back after define"); eq(S.isCollapsed("sectioned", "demo"), false);
         S.setCollapsed("sectioned", "inputs", false);
         eq(S.isCollapsed("sectioned", "inputs"), false, "setCollapsed drives it directly");
+        pane.remove();
+    });
+
+    t("settings: an order control is a permutation of its items, dragged into shape with the mouse", function () {
+        const S = ACEUIAppLoader.settings;
+        const pane = document.createElement("div");
+        document.getElementById("center").appendChild(pane);
+        const items = [{ key: "a", label: "Alpha", swatch: "#44ea78" }, { key: "b", label: "Bravo", swatch: { className: "sw", attrs: { "data-trace": 2 } } }, { key: "c", label: "Charlie" }];
+
+        localStorage.setItem(S.localKey("ordered"), JSON.stringify({ stack: ["c", "zzz", "a", "a"] }));
+        const v = S.define("ordered", [{ key: "stack", type: "order", label: "Stack", value: ["a", "b", "c"], items: items }]);
+        eq(v.stack.join(","), "c,a,b", "stored order kept, unknown and duplicate keys dropped, the missing item appended");
+        eq(S.set("ordered", "stack", ["b"]).join(","), "b,a,c", "a partial value is completed in the default order");
+        eq(S.set("ordered", "stack", "junk").join(","), "a,b,c", "a non-array is the default");
+        const before = S.get("ordered", "stack");
+        eq(S.set("ordered", "stack", ["a", "b", "c"]), before, "setting the same order is a no-op (compared by content)");
+
+        S.render("ordered", pane);
+        const labelRow = pane.children[0], list = pane.children[1];
+        ok(labelRow.textContent.indexOf("Stack") >= 0, "the label has its own row");
+        eq(list.children.length, 3, "and the list sits under it");
+        const texts = function () { return Array.prototype.slice.call(list.children).map(function (r) { return r.lastChild.textContent; }).join(","); };
+        eq(texts(), "Alpha,Bravo,Charlie", "rows in value order");
+        eq(list.children[0].children.length, 3, "grip, swatch, label"); eq(list.children[2].children.length, 2, "grip and label when there is no swatch");
+        eq(list.children[0].children[1].style.background, "rgb(68, 234, 120)", "a colour swatch");
+        eq(list.children[1].children[1].className, "sw", "a stylesheet-keyed swatch carries its class"); eq(list.children[1].children[1].getAttribute("data-trace"), "2", "and its attributes");
+        eq(list.children[0].children[0].textContent, "", "the grip is drawn, not a glyph (the game's font has none)");
+
+        // drag Alpha below Charlie: press on it, move past Charlie's middle, release
+        const rowC = list.children[2];
+        const rc = rowC.getBoundingClientRect();
+        list.children[0].dispatchEvent(new MouseEvent("mousedown", { bubbles: true, clientX: rc.left + 5, clientY: rc.top - 30 }));
+        eq(list.children[0].style.background, "rgba(255, 255, 255, 0.22)", "the held row is highlighted");
+        const ra = list.children[0].getBoundingClientRect();
+        window.dispatchEvent(new MouseEvent("mousemove", { clientX: rc.left + 5, clientY: ra.top + ra.height / 2 }));
+        eq(texts(), "Alpha,Bravo,Charlie", "moving inside the held row's own slot changes nothing");
+        window.dispatchEvent(new MouseEvent("mousemove", { clientX: rc.left + 5, clientY: rc.bottom - 1 }));
+        eq(texts(), "Bravo,Charlie,Alpha", "the list reorders live under the cursor");
+        window.dispatchEvent(new MouseEvent("mousemove", { clientX: rc.left + 5, clientY: rc.bottom - 2 }));
+        eq(texts(), "Bravo,Charlie,Alpha", "and holds there: the slots are measured once, not from the rows just moved");
+        window.dispatchEvent(new MouseEvent("mousemove", { clientX: rc.left + 5, clientY: rc.bottom + 500 }));
+        eq(texts(), "Bravo,Charlie,Alpha", "below the list is the last slot");
+        eq(S.get("ordered", "stack").join(","), "a,b,c", "but nothing is written until release");
+        window.dispatchEvent(new MouseEvent("mouseup", {}));
+        eq(S.get("ordered", "stack").join(","), "b,c,a", "release writes the new order");
+        eq(list.children[2].style.background, "rgba(255, 255, 255, 0.08)", "highlight gone");
+        eq(JSON.parse(localStorage.getItem(S.localKey("ordered"))).stack.join(","), "b,c,a", "persisted");
+
+        S.reset("ordered");
+        eq(texts(), "Alpha,Bravo,Charlie", "reset re-sorts the rows");
+        // a drag left hanging when the pane goes: teardown must release the window listeners
+        list.children[1].dispatchEvent(new MouseEvent("mousedown", { bubbles: true, clientX: 0, clientY: 0 }));
+        ok(S.teardown("ordered") >= 1, "the pending drag is among what teardown undoes");
+        window.dispatchEvent(new MouseEvent("mousemove", { clientX: 0, clientY: 0 }));
+        window.dispatchEvent(new MouseEvent("mouseup", {}));
+        eq(S.get("ordered", "stack").join(","), "a,b,c", "and a release afterwards changes nothing");
         pane.remove();
     });
 

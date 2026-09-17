@@ -151,6 +151,22 @@ with `columns: 2` lays its rows out at half width, which halves a run of toggles
 { key: "demo", type: "section", label: "Demo", collapsed: true },
 ```
 
+**`order`** is a list the player reorders by dragging a row. Its value is the array of
+item keys, top first, stored and reset like any other value; a stored list is made whole
+on load (unknown keys dropped, an item the app added since appended), so it is always a
+permutation of `items`. The drag is mouse events, not HTML5 drag-and-drop, which this
+engine is not known to support.
+
+```js
+{ key: "stack", type: "order", label: "Draw order", value: ["gas", "brake"],
+  items: [{ key: "gas", label: "Throttle" }, { key: "brake", label: "Brake" }] }
+```
+
+Any row, and any `order` item, can carry a **`swatch`** drawn before its label: a colour
+(`swatch: "#44ea78"`), or `{ className, attrs }` for an app whose colours live in its
+stylesheet, which then keys on them (PedalGraph puts `data-trace` on it). A section of
+switches named after coloured things is skimmed by colour rather than read.
+
 **Types are limited to controls this engine is known to render.** Cohtml is not a browser:
 `<input type="range">` and `<select>` are unproven here, so a `range` is a pair of −/+
 buttons and a `choice` cycles on click — both patterns already proven in the dev console
