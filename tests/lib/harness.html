@@ -223,6 +223,29 @@ document.addEventListener("DOMContentLoaded", function () {
         ok(typeof dom.THEME.ink === "string", "the palette is here once, not once per surface");
     });
 
+    t("dom: snapToPixels moves a box's four edges onto whole pixels by growing its margins, and is idempotent", function () {
+        const D = ACEUIAppLoader.dom;
+        const host = document.createElement("div");
+        host.style.cssText = "position:absolute;left:10.4px;top:20.7px;width:200px;height:100px;display:flex;align-items:stretch";
+        document.getElementById("center").appendChild(host);
+        const box = document.createElement("div");
+        box.style.cssText = "flex:1 1 auto;margin-left:0.3px";
+        host.appendChild(box);
+        const before = box.getBoundingClientRect();
+        ok(before.left % 1 !== 0 && before.right % 1 !== 0 && before.top % 1 !== 0, "starts on fractions: " + before.left + " " + before.right + " " + before.top);
+        const fix = D.snapToPixels(box);
+        ok(fix && fix.left > 0 && fix.right > 0 && fix.top > 0, "corrections for the fractional edges: " + JSON.stringify(fix));
+        const after = box.getBoundingClientRect();
+        [after.left, after.right, after.top, after.bottom].forEach(function (edge, i) { near(edge, Math.round(edge), 1 / 32, ["left", "right", "top", "bottom"][i] + " on a whole pixel (to Chromium's 1/64 px layout unit)"); });
+        ok(after.left > before.left && after.right < before.right, "the box shrank inward, it did not move outward");
+        eq(box.style.marginLeft, (0.3 + fix.left).toFixed(3) + "px", "an existing margin is grown, not replaced");
+        const again = D.snapToPixels(box);
+        eq(JSON.stringify(again), JSON.stringify({ left: 0, top: 0, right: 0, bottom: 0 }), "a snapped box needs nothing: idempotent");
+        const empty = document.createElement("div"); host.appendChild(empty);
+        eq(D.snapToPixels(empty), null, "no size yet: nothing to snap, null");
+        host.remove();
+    });
+
     t("dom: a listener bag lets go of everything in one call", function () {
         const dom = ACEUIAppLoader.dom;
         const bag = dom.listeners();

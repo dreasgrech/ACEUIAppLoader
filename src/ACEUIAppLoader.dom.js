@@ -77,6 +77,59 @@ ACEUIAppLoader.dom = (function () {
         return node;
     };
 
+    /**
+     * Fractions this small count as a whole pixel: Chromium lays out in 1/64 px units, so
+     * a snapped edge can come back at n + 1/64, which blends 1.5 % and is invisible, and
+     * chasing it would grow the margin by a full pixel.
+     */
+    const SNAP_EPSILON = 1 / 32;
+    const SNAP_DECIMALS = 3;
+
+    const fraction = function (x) {
+        const f = x - Math.floor(x);
+
+        return f < SNAP_EPSILON || f > 1 - SNAP_EPSILON ? 0 : f;
+    };
+
+    const pxOf = function (value) {
+        return parseFloat(value) || 0;
+    };
+
+    /**
+     * Nudge a box so all four edges fall on whole pixels. A box that clips animated
+     * content -- a graph, a screen -- and sits at a fractional position gets its edge
+     * columns and rows antialiased: the last pixel is a blend of content and background,
+     * which reads as a hairline the whole height of the box, in the content's colour.
+     * Layout in em puts almost every edge at a fraction. This measures the box and grows
+     * its margins by the fractions, so it shrinks to start and end on whole pixels. Call
+     * it once layout exists and again after anything that moves or resizes the box; it
+     * is idempotent, a snapped box gets corrections of 0. The box's size must be free to
+     * give (a flex item, or auto-sized), not a fixed height or width. Returns the
+     * corrections applied in px, or null before the box has a size.
+     */
+    const snapToPixels = function (node) {
+        const r = node.getBoundingClientRect();
+
+        if (r.width === 0 || r.height === 0) { return null; }
+
+        const fix = {
+            left: fraction(r.left) === 0 ? 0 : 1 - fraction(r.left),
+            top: fraction(r.top) === 0 ? 0 : 1 - fraction(r.top),
+            right: fraction(r.right),
+            bottom: fraction(r.bottom)
+        };
+
+        Object.keys(fix).forEach(function (side) {
+            if (fix[side] === 0) { return; }
+
+            const prop = "margin" + side.charAt(0).toUpperCase() + side.slice(1);
+
+            node.style[prop] = (pxOf(node.style[prop]) + fix[side]).toFixed(SNAP_DECIMALS) + "px";
+        });
+
+        return fix;
+    };
+
     /** Remove every child, for a surface that is rebuilt rather than updated. */
     const clear = function (node) {
         while (node && node.firstChild) { node.removeChild(node.firstChild); }
@@ -132,6 +185,7 @@ ACEUIAppLoader.dom = (function () {
         make: make,
         div: div,
         setClass: setClass,
+        snapToPixels: snapToPixels,
         clear: clear,
         on: on,
         listeners: listeners
