@@ -10,7 +10,7 @@ One file to install. One file to delete.
 [![Downloads](https://img.shields.io/github/downloads/dreasgrech/ACEUIModLoader/total?style=flat-square&color=555)](../../releases)
 [![Issues](https://img.shields.io/github/issues/dreasgrech/ACEUIModLoader?style=flat-square&color=555)](../../issues)
 
-[Install](#install) · [Mods](#mods) · [Troubleshooting](#if-something-isnt-right) · [Uninstall](#uninstalling) · [Is it safe?](#is-it-safe) · [Developers](#for-developers)
+[Why](#why-this-exists) · [Features](#what-you-get) · [Install](#install) · [Mods](#mods) · [Help](#if-something-isnt-right) · [Safety](#is-it-safe) · [Developers](#for-developers)
 
 </div>
 
@@ -20,9 +20,41 @@ Assetto Corsa EVO builds its interface out of web pages. This lets other people'
 in there alongside the game's own screens — a pedal graph, a lap delta, a telemetry
 readout — and gives you one place to switch them on and off.
 
-Nothing is added to the game's own folder. No launcher, no program running in the
-background, no setting to change. It is one file in your Saved Games folder, and deleting
-it puts everything back exactly as it was.
+No launcher, no installer, nothing running in the background. It is one file in your
+Saved Games folder, and deleting it puts the game back exactly as it was.
+
+---
+
+## Why this exists
+
+Assetto Corsa EVO has no mod support for its interface. There is no list of installed mods,
+no way to turn one on or off, no load order — the game simply isn't built to have any of
+this, so every mod has to find its own way in.
+
+The way in is to replace one of the game's interface files. That works, and it is what makes
+these mods possible at all — but **only one mod can hold a given file**. Two mods that both
+want the HUD are two mods that overwrite each other, and whichever the game happens to pick
+is the only one you get. Installing a second mod silently breaks the first.
+
+This is the one thing that does the replacing, so nothing else has to. Mods are added
+alongside it instead of fighting over the same file, which means you can install as many as
+you like and they all work at once. It also means a mod author can write the interesting
+part and skip the weeks of figuring out how to get a script running inside the game in the
+first place.
+
+---
+
+## What you get
+
+| | |
+|---|---|
+| **One place for everything** | Every mod you install shows up in the same drawer, with its own switch. Move your mouse to the right edge of the screen and it slides in. |
+| **Put things where you want them** | Drag any app anywhere on screen. It stays there — next session, next race, next time you start the game. |
+| **Settings in game** | Each mod gets its own settings page. Change what it does while you are sitting in the car, not by editing files. |
+| **Hotkeys that behave** | Give any app a key. It will not fire while you are typing a name into a chat box or a setup field. |
+| **Survives pausing** | Press Escape, come back, and everything is where you left it. |
+| **Mods don't fight** | Install ten of them if you like. They coexist, and turning one off leaves the rest alone. |
+| **Leaves no trace** | One file, in a folder that isn't the game's. Delete it and the game is exactly as it shipped. |
 
 ---
 
