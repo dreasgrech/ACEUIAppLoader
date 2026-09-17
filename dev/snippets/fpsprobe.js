@@ -25,7 +25,7 @@
     const log = function (text) { console.log("[fpsprobe] " + text); };
 
     const SAMPLE_MS = 2500;
-    const MOD_SAMPLE_MS = 2000;
+    const APP_SAMPLE_MS = 2000;
     const SLIDE_WATCH_MS = 700;
     const SETTLE_MS = 400;
     const HITCH_MS = 33;
@@ -206,7 +206,7 @@
             return;
         }
 
-        phase("without " + name, MOD_SAMPLE_MS, function () {
+        phase("without " + name, APP_SAMPLE_MS, function () {
             loader.activate(name);
             eachApp(apps, index + 1, then);
         });
