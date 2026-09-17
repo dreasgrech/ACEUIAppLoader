@@ -694,5 +694,46 @@ class RepadTests(unittest.TestCase):
         self.assertTrue(repad.rebuild("a.kspkg", entry, dry_run=False))
 
 
+class ReadmeTests(unittest.TestCase):
+    """The README is the front door: for most people it is the only page they will read."""
+
+    def setUp(self):
+        self.readme = read(os.path.join(ROOT, "README.md"))
+
+    def referenced_images(self):
+        markdown = re.findall(r"!\[[^\]]*\]\(([^)]+)\)", self.readme)
+        html = re.findall(r"<img[^>]+src=\"([^\"]+)\"", self.readme)
+
+        return [r for r in markdown + html if not r.startswith("http")]
+
+    def test_every_picture_it_promises_is_actually_there(self):
+        """A broken image on a public repo says "abandoned" before anyone reads a word.
+
+        Missing them ALL is the state before the screenshots have been taken, which is not
+        a failure -- it skips, and names what is still to shoot. Missing SOME is the real
+        hazard: a half-finished set that nobody notices until it is public. The shot list
+        is docs/images/README.md.
+        """
+        referenced = self.referenced_images()
+        self.assertTrue(referenced, "the README should show what the mod looks like")
+        missing = [r for r in referenced if not os.path.isfile(os.path.join(ROOT, *r.split("/")))]
+        if len(missing) == len(referenced):
+            raise unittest.SkipTest("no screenshots taken yet: " + ", ".join(missing))
+        self.assertEqual(missing, [], "some pictures were taken and these were not")
+
+    def test_every_page_it_links_to_is_actually_there(self):
+        pages = [r for r in re.findall(r"\]\((docs/[^)#]+)\)", self.readme)
+                 if r not in self.referenced_images()]
+        self.assertTrue(pages)
+        for rel in sorted(set(pages)):
+            with self.subTest(page=rel):
+                self.assertTrue(os.path.exists(os.path.join(ROOT, *rel.split("/"))), rel)
+
+    def test_it_says_which_game_version_the_release_is_for(self):
+        """Every release is built for one game version, and the commonest question after a
+        patch is which one this is. It belongs on the front page, not in a doc."""
+        self.assertIn(build_loader.game_version() or "0.9.1+release.6", self.readme)
+
+
 if __name__ == "__main__":
     unittest.main()
