@@ -1,8 +1,8 @@
 <div align="center">
 
-# Assetto Corsa Evo UI Mod Loader
+# Assetto Corsa Evo UI App Loader
 
-**Support for custom UI Apps for the Assetto Corsa EVO interface.**<br>
+**Support for custom UI Apps in Assetto Corsa EVO.**<br>
 
 [![Latest release](https://img.shields.io/github/v/release/dreasgrech/ACEUIModLoader?style=flat-square&label=download&color=0a7)](../../releases/latest)
 [![Built for](https://img.shields.io/badge/Assetto_Corsa_EVO-0.9.1%2Brelease.6-informational?style=flat-square)](#if-something-isnt-right)
@@ -16,8 +16,9 @@
 <img width="2560" height="1440" alt="20CA22~1" src="https://github.com/user-attachments/assets/d1dd4c93-8b13-43eb-b7f7-9790d9adf08d" />
 
 
-Assetto Corsa EVO builds its interface out of web pages. This lets other people's apps live
-in there alongside the game's own screens, and gives you one place to switch them on and off.
+
+Assetto Corsa EVO builds its interface out of web pages. The ACE UI App Loader lets custom ui apps live in there alongside the game's own screens, and gives you one place to switch them on and off.
+
 
 ---
 
