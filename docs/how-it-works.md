@@ -43,6 +43,8 @@ Nothing machine-specific: no timestamps, no install path, no hardware. Two playe
 
 The count is **not a dial**. Measured against a population of package sets, 32, 64 and 96 behave well while 48 and 256 are an order of magnitude worse — certain counts make our hash set couple the two entry points together so they fail on the same scenarios. The good values depend on the package's whole hash set, so they move whenever the package gains a file. `tune_dups.py` measures them and records the answer behind a fingerprint; the build refuses a measurement taken for a different file set.
 
+`tune_dups.py` measures other people's packages too, and two of its arguments exist for that. `package_name` is the file name to measure under — load order is by name and load order decides who wins, so measuring ACEDOOM's package under the loader's file name measures a different package. `require` is what counts as a win: the loader has **two independent ways into the page** and needs either to land, so `"any"` is the truth for it, but a package whose overrides must *all* land wants `"all"` or the count is chosen against a success it does not have. ACEDOOM is the second kind — its bank without its table plays DOOM's samples on event types nothing fires, and its table without its bank fires types whose samples are still Kunos' — and measured that way it needs 128 records where one override needed 32.
+
 Measured against sixty package sets nothing was selected on:
 
 | | one record | tuned |
