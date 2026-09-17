@@ -45,16 +45,46 @@ The count is **not a dial**. Measured against a population of package sets, 32, 
 
 `tune_dups.py` measures other people's packages too, and two of its arguments exist for that. `package_name` is the file name to measure under — load order is by name and load order decides who wins, so measuring ACEDOOM's package under the loader's file name measures a different package. `require` is what counts as a win: the loader has **two independent ways into the page** and needs either to land, so `"any"` is the truth for it, but a package whose overrides must *all* land wants `"all"` or the count is chosen against a success it does not have. ACEDOOM is the second kind — its bank without its table plays DOOM's samples on event types nothing fires, and its table without its bank fires types whose samples are still Kunos' — and measured that way it needs 128 records where one override needed 32.
 
-Measured against sixty package sets nothing was selected on:
+## How reliable it actually is
 
-| | one record | tuned |
-|---|---|---|
-| Two entry points | 74% | **32 records — 60/60** |
-| A single override (ACEDOOM's sound bank) | 40% | 32 records — 27/30 |
+Measured overnight on 2026-09-17 against **5,800+ installed-package sets**, scoring the
+built `.kspkg` files themselves rather than a reconstruction of them, with all four
+published car mods in the population and synthetic ones sized to match
+(`tools/validate_override.py`):
 
-The ceiling differs because ACEDOOM's bank swap has only one file it can override. Two ways in is what buys the last few percent.
+| other packages installed | loader | loader + ACEDOOM | ACEDOOM |
+|---|---|---|---|
+| none | 100% | 100% | 100% |
+| 1-2 | 100% | 100% | 100% |
+| 3-5 | 99.93% | 100% | 99.71% |
+| 6-10 | 100% | 99.90% | 98.42% |
+| 11-20 | 99.81% | 99.90% | 99.22% |
+| 21-30 | 99.71% | 99.85% | 97.96% |
+| **all** | **99.91%** | **99.95%** | **99.28%** |
 
-**None of it is a proof.** Sixty sets put the failure rate under a few percent, not at zero, and a package set nobody simulated can still lose. A stock install of the matching game version is the only case that is certain, because it can be computed exactly before shipping.
+**The two entry points are the whole reason that first column holds up**, and the numbers
+are blunter than anyone guessed:
+
+| | lost on its own |
+|---|---|
+| `uiresources/js/cohtml.js` | 4.35% |
+| `uiresources/hud.html` | 4.84% |
+| both at once | **0.085%** |
+
+A single override is only about 95% reliable. Everything above that comes from having a
+second, independent way in -- and the two are slightly *better* than independent, since an
+independence model predicts 12.4 joint failures where 5 were measured. The earlier figure
+of 99.908% was a model; this is the artifact.
+
+**For a package that needs all of its overrides, a second one is a cost, not a gift.**
+ACEDOOM's bank lost 0.38% of the time and its table 0.34%, and the two never failed
+together -- so the package failed 0.72% of the time, the sum of the two. Needing *either*
+halves the risk; needing *both* adds it. That is the whole difference between the two rows.
+
+**None of it is a proof.** A package set nobody simulated can still lose, and the tail gets
+worse as a folder fills: ACEDOOM at 21-30 other packages is the weakest number here. A stock
+install of the matching game version is the only case that is certain, because it can be
+computed exactly before shipping.
 
 ## Finding the mods
 
@@ -98,7 +128,7 @@ What the build does about it:
 
 `tools/post_update.py` is the recovery: it rebuilds (re-reading the stock files), re-measures when the fingerprint or the game build has moved, reinstalls, and then replays the lookup over the packages actually in the mods folder to say whether both ways in still resolve to ours.
 
-**What a patch cannot break.** Everything here rests on the sort being *unstable* -- not on our replay of MSVC's introsort being right. Score the same package assuming nothing at all about the algorithm, only that a run of equal hashes ends up in some arbitrary order, and 32 records across two entry points still wins 99.908% of the time; the replay is what makes the estimate precise, not what makes the construction work. The one change that would be fatal is a *stable* sort, and that would take every override mod in the game with it.
+**What a patch cannot break.** Everything here rests on the sort being *unstable* -- not on our replay of MSVC's introsort being right. Score the same package assuming nothing at all about the algorithm, only that a run of equal hashes ends up in some arbitrary order, and 32 records across two entry points still wins 99.908% of the time -- close to the 99.91% actually measured, which is a good sign for the model but not what makes the construction work. The one change that would be fatal is a *stable* sort, and that would take every override mod in the game with it.
 
 ## Reproducible across checkouts
 
