@@ -47,42 +47,42 @@ The count is **not a dial**. Measured against a population of package sets, 32, 
 
 ## How reliable it actually is
 
-Measured overnight on 2026-09-17 against **5,800+ installed-package sets**, scoring the
+Measured overnight on 2026-09-17 against **7,987 installed-package sets**, scoring the
 built `.kspkg` files themselves rather than a reconstruction of them, with all four
 published car mods in the population and synthetic ones sized to match
 (`tools/validate_override.py`):
 
 | other packages installed | loader | loader + ACEDOOM | ACEDOOM |
 |---|---|---|---|
-| none | 100% | 100% | 100% |
-| 1-2 | 100% | 100% | 100% |
-| 3-5 | 99.93% | 100% | 99.71% |
-| 6-10 | 100% | 99.90% | 98.42% |
-| 11-20 | 99.81% | 99.90% | 99.22% |
-| 21-30 | 99.71% | 99.85% | 97.96% |
-| **all** | **99.91%** | **99.95%** | **99.28%** |
+| none (495 sets) | 100% | 100% | 100% |
+| 1-2 (1,895) | 100% | 100% | 100% |
+| 3-5 (1,867) | 99.95% | 100% | 99.68% |
+| 6-10 (1,406) | 99.86% | 99.93% | 98.58% |
+| 11-20 (1,421) | 99.79% | 99.79% | 99.01% |
+| 21-30 (903) | 99.78% | 99.78% | 97.90% |
+| **all (7,987)** | **99.90%** | **99.92%** | **99.26%** |
 
 **The two entry points are the whole reason that first column holds up**, and the numbers
 are blunter than anyone guessed:
 
 | | lost on its own |
 |---|---|
-| `uiresources/js/cohtml.js` | 4.35% |
-| `uiresources/hud.html` | 4.84% |
-| both at once | **0.085%** |
+| `uiresources/js/cohtml.js` | 4.34% |
+| `uiresources/hud.html` | 4.66% |
+| both at once | **0.100%** |
 
 A single override is only about 95% reliable. Everything above that comes from having a
 second, independent way in -- and the two are slightly *better* than independent, since an
-independence model predicts 12.4 joint failures where 5 were measured. The earlier figure
+independence model predicts 16.2 joint failures where 8 were measured. The earlier figure
 of 99.908% was a model; this is the artifact.
 
 **For a package that needs all of its overrides, a second one is a cost, not a gift.**
-ACEDOOM's bank lost 0.38% of the time and its table 0.34%, and the two never failed
-together -- so the package failed 0.72% of the time, the sum of the two. Needing *either*
+ACEDOOM's bank lost 0.36% of the time and its table 0.38%, and the two never failed
+together -- so the package failed 0.74% of the time, the sum of the two. Needing *either*
 halves the risk; needing *both* adds it. That is the whole difference between the two rows.
 
 **None of it is a proof.** A package set nobody simulated can still lose, and the tail gets
-worse as a folder fills: ACEDOOM at 21-30 other packages is the weakest number here. A stock
+worse as a folder fills: ACEDOOM at 21-30 other packages is the weakest number here, at 97.90%. A stock
 install of the matching game version is the only case that is certain, because it can be
 computed exactly before shipping.
 
@@ -112,9 +112,35 @@ Those app files are *new* paths, which always resolve. Only the two entry points
 
 ## What Kunos actually provide
 
-Nothing that helps or hinders, which is worth knowing before looking for a better way in. The mod scan opens `content.kspkg`, lists `mods\*.kspkg` in the filesystem's order (the game does no sorting of its own), adds each through the identical `AddPackage`, and then registers `mods\` as a loose search directory. Records are appended with no deduplication and no validation that a record's hash matches its path.
+Nothing that helps or hinders, which is worth knowing before looking for a better way in.
+The mod scan opens `content.kspkg`, lists `mods\*.kspkg` in the filesystem's order (the game
+does no sorting of its own), adds each through the identical `AddPackage`, and then registers
+`mods\` as a loose search directory. Records are appended with no deduplication and no
+validation that a record's hash matches its path.
 
-There is no manifest, no load order file, no enable/disable list, no dependency system and no version check. That is the entirety of it — and it is exactly why car mods scale without limit: they only ever add new paths, so nothing ever collides. Every part of this project follows that model except the two entry points, which cannot, because to run on a page you have to be referenced by it.
+There is no manifest, no load order file, no enable/disable list, no dependency system and no
+version check.
+
+**The SDK documentation says the same thing by omission** (read 2026-09-17; the full notes
+are in [ACEGameInternals](https://github.com/dreasgrech/ACEGameInternals) section 6). It
+documents cars, driver animation, liveries, audio and physics, and across all of it there is
+no mention of load order, package conflicts, replacing a file the game ships, or enabling and
+disabling a mod. Two things in it are worth quoting:
+
+- **A `.kspkg` is an optional encrypted container, not a loading mechanism.** The official
+  route is to copy a mod folder into `mods\content\cars\` as-is; the editor's *encrypt*
+  function then turns that same folder into a `.kspkg` for `mods\`. The sample mod ships
+  both forms of identical content. Encryption protects the author's work — the game treats
+  the two the same way, which is what the package table and the loose search directory
+  amount to.
+- **The only official `uiresources` hook is `.loc` localisation text** for a car mod. Text,
+  not scripts, not pages.
+
+So overriding a file the game already ships is not an unsupported use of a supported
+feature: **the feature does not exist.** Additive content is what the format is for, which is
+exactly why car mods scale without limit — they only ever add new paths, so nothing ever
+collides. Every part of this project follows that model except the two entry points, which
+cannot, because to run on a page you have to be referenced by it.
 
 ## When the game updates
 
