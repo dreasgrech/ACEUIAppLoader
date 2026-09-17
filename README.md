@@ -1,9 +1,8 @@
 <div align="center">
 
-# ACE UI Mod Loader
+# Assetto Corsa Evo UI Mod Loader
 
-**Mods for the Assetto Corsa EVO interface.**<br>
-One file to install. One file to delete.
+**Support for custom UI Apps for the Assetto Corsa EVO interface.**<br>
 
 [![Latest release](https://img.shields.io/github/v/release/dreasgrech/ACEUIModLoader?style=flat-square&label=download&color=0a7)](../../releases/latest)
 [![Built for](https://img.shields.io/badge/Assetto_Corsa_EVO-0.9.1%2Brelease.6-informational?style=flat-square)](#if-something-isnt-right)
@@ -68,7 +67,7 @@ Drop the file in. No unzipping, no installer, nothing to run.
 <img width="800" height="450" alt="2026-09-1703-42-54online-video-cutter com-ezgif com-video-to-gif-converter" src="https://github.com/user-attachments/assets/738a4162-7706-41bf-9f63-2aa679b32273" />
 </p>
 
-Move your mouse to the **right edge of the screen** and the drawer slides in. Every mod you
+Move your mouse to the **right edge of the screen** and the drawer slides in. Every ui app you
 have installed is listed there with its own switch — flick one on and it appears straight
 away, flick it off and it's gone.
 
