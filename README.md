@@ -1,6 +1,18 @@
+<div align="center">
+
 # ACE UI Mod Loader
 
-**Adds mods to the Assetto Corsa EVO interface. One file to install, one file to delete.**
+**Mods for the Assetto Corsa EVO interface.**<br>
+One file to install. One file to delete.
+
+[![Latest release](https://img.shields.io/github/v/release/dreasgrech/ACEUIModLoader?style=flat-square&label=download&color=0a7)](../../releases/latest)
+[![Built for](https://img.shields.io/badge/Assetto_Corsa_EVO-0.9.1%2Brelease.6-informational?style=flat-square)](#if-something-isnt-right)
+[![Downloads](https://img.shields.io/github/downloads/dreasgrech/ACEUIModLoader/total?style=flat-square&color=555)](../../releases)
+[![Issues](https://img.shields.io/github/issues/dreasgrech/ACEUIModLoader?style=flat-square&color=555)](../../issues)
+
+[Install](#install) · [Mods](#mods) · [Troubleshooting](#if-something-isnt-right) · [Uninstall](#uninstalling) · [Is it safe?](#is-it-safe) · [Developers](#for-developers)
+
+</div>
 
 ![The app drawer open while driving](docs/images/hero.png)
 
@@ -9,16 +21,22 @@ in there alongside the game's own screens — a pedal graph, a lap delta, a tele
 readout — and gives you one place to switch them on and off.
 
 Nothing is added to the game's own folder. No launcher, no program running in the
-background, no setting to change. It is one file sitting in your Saved Games folder, and
-deleting it puts everything back exactly as it was.
+background, no setting to change. It is one file in your Saved Games folder, and deleting
+it puts everything back exactly as it was.
 
 ---
 
 ## Install
 
-**1. Download `ACEUIModLoader.kspkg`** from the [latest release](../../releases/latest).
+<table>
+<tr><td width="40"><h3>1</h3></td><td>
 
-**2. Open your mods folder.** Press `Win + R`, paste this in, press Enter:
+**Download `ACEUIModLoader.kspkg`** from the [latest release](../../releases/latest).
+
+</td></tr>
+<tr><td><h3>2</h3></td><td>
+
+**Open your mods folder.** Press <kbd>Win</kbd> + <kbd>R</kbd>, paste this in, press <kbd>Enter</kbd>:
 
 ```
 %USERPROFILE%\Saved Games\ACE\mods
@@ -26,9 +44,15 @@ deleting it puts everything back exactly as it was.
 
 If there is no `mods` folder yet, create one with exactly that name.
 
-**3. Put the file in it.** No unzipping, no installer, nothing to run.
+</td></tr>
+<tr><td><h3>3</h3></td><td>
+
+**Put the file in it.** No unzipping, no installer, nothing to run.
 
 ![The file in the mods folder](docs/images/mods-folder.png)
+
+</td></tr>
+</table>
 
 Start the game and drive. **Move your mouse to the right edge of the screen** and the app
 drawer slides in.
@@ -37,21 +61,22 @@ drawer slides in.
 
 ---
 
-## Adding mods
+## Mods
 
-Each mod is a separate download with its own instructions:
+Each one is a separate download with its own instructions.
 
-| | |
-|---|---|
-| [**Pedal Graph**](https://github.com/dreasgrech/ACEPedalGraph) | throttle, brake and clutch traces as you drive |
-| [**Telemetry**](https://github.com/dreasgrech/ACEUITelemetry) | lap times and a live delta against your reference lap |
-| [**DOOM**](https://github.com/dreasgrech/ACEDOOM) | the actual game of DOOM, playable on your HUD |
-
-<p align="center">
-  <img src="docs/images/apps-pedalgraph.png" width="32%" alt="Pedal graph">
-  <img src="docs/images/apps-telemetry.png" width="32%" alt="Telemetry">
-  <img src="docs/images/apps-doom.png" width="32%" alt="DOOM">
-</p>
+<table>
+<tr>
+<td width="33%" align="center"><a href="https://github.com/dreasgrech/ACEPedalGraph"><img src="docs/images/apps-pedalgraph.png" alt="Pedal graph"></a></td>
+<td width="33%" align="center"><a href="https://github.com/dreasgrech/ACEUITelemetry"><img src="docs/images/apps-telemetry.png" alt="Telemetry"></a></td>
+<td width="33%" align="center"><a href="https://github.com/dreasgrech/ACEDOOM"><img src="docs/images/apps-doom.png" alt="DOOM"></a></td>
+</tr>
+<tr>
+<td align="center"><a href="https://github.com/dreasgrech/ACEPedalGraph"><b>Pedal Graph</b></a><br><sub>throttle, brake and clutch traces as you drive</sub></td>
+<td align="center"><a href="https://github.com/dreasgrech/ACEUITelemetry"><b>Telemetry</b></a><br><sub>lap times and a live delta against your reference lap</sub></td>
+<td align="center"><a href="https://github.com/dreasgrech/ACEDOOM"><b>DOOM</b></a><br><sub>the actual game of DOOM, playable on your HUD</sub></td>
+</tr>
+</table>
 
 Every mod gets its own switch in the drawer, and most can be configured in game.
 
@@ -61,19 +86,39 @@ Every mod gets its own switch in the drawer, and most can be configured in game.
 
 ## If something isn't right
 
-**The drawer doesn't appear.** Nearly always one of these:
+> [!IMPORTANT]
+> Each release is built for **one version of the game** — this one for `0.9.1+release.6`.
+> After the game updates, come back here for the matching release.
 
-- **The game updated.** Each release is built for one version of the game — this one for
-  **0.9.1+release.6**. After a game update, come back here for the matching release.
-- **The file is in the wrong place.** It goes straight into `mods`, not a subfolder, and it
-  has to keep the name `ACEUIModLoader.kspkg`.
-- **Another mod that installs a `.kspkg` file.** Two of those can occasionally clash.
+<details>
+<summary><b>The drawer doesn't appear</b></summary><br>
 
-**A mod isn't in the drawer.** Check that mod's own instructions — most are two pieces, and
-it is easy to miss one.
+Almost always one of three things:
 
-**Anything else.** Open an [issue](../../issues) and say what you saw. If you can, attach
-the newest file from `%USERPROFILE%\Saved Games\ACE\Logs`, which records what loaded.
+1. **The game updated.** See above — this is by far the most common cause.
+2. **The file is in the wrong place.** It goes straight into `mods`, not a subfolder, and it
+   has to keep the name `ACEUIModLoader.kspkg`.
+3. **Another mod that installs a `.kspkg` file.** Two of those can occasionally clash.
+
+</details>
+
+<details>
+<summary><b>A mod isn't in the drawer</b></summary><br>
+
+Check that mod's own instructions. Most mods are two pieces — a folder and a small marker
+file — and it is easy to install one and miss the other.
+
+</details>
+
+<details>
+<summary><b>Anything else</b></summary><br>
+
+Open an [issue](../../issues) and say what you saw.
+
+If you can, attach the newest file from `%USERPROFILE%\Saved Games\ACE\Logs`. It records
+what loaded and what didn't, and usually answers the question on its own.
+
+</details>
 
 ---
 
@@ -88,16 +133,16 @@ behind.
 
 ## Is it safe?
 
-Worth answering specifically rather than just saying yes:
+> [!NOTE]
+> Worth answering specifically rather than just saying yes.
 
-- **Nothing runs.** No executable, no installer, nothing in the background, nothing that
-  starts with Windows. It is a data file the game reads.
-- **The game folder is never touched.** Everything lives in `Saved Games`, where the game
-  already keeps your settings and setups.
-- **It does not go online.** No account, no telemetry, no update check.
-- **It is not anti-cheat evasion.** It changes the interface you look at, nothing about how
-  the car drives or how results are reported.
-- **You can read all of it.** Every line is in this repository.
+| | |
+|---|---|
+| **Nothing runs** | No executable, no installer, nothing in the background, nothing that starts with Windows. It is a data file the game reads. |
+| **Your game folder is untouched** | Everything lives in `Saved Games`, where the game already keeps your settings and setups. |
+| **It doesn't go online** | No account, no telemetry, no update check. |
+| **It isn't anti-cheat evasion** | It changes the interface you look at — nothing about how the car drives or how results are reported. |
+| **You can read all of it** | Every line is in this repository. |
 
 ---
 
@@ -113,7 +158,10 @@ me.mount(attach, detach);                              // the drawer starts and 
 me.toggle(function () { return options.toggleKey; });  // a hotkey that respects typing
 ```
 
-Start with [**`docs/writing-a-mod.md`**](docs/writing-a-mod.md).
+Start with **[`docs/writing-a-mod.md`](docs/writing-a-mod.md)**.
+
+<details>
+<summary><b>All documentation</b></summary><br>
 
 | | |
 |---|---|
@@ -134,6 +182,10 @@ profiler — behind a **developer apps** switch at the bottom of the drawer, off
 The game mechanics all of this rests on are documented in
 [ACEGameInternals](https://github.com/dreasgrech/ACEGameInternals).
 
+</details>
+
 ---
 
-Loader 0.20.0 · built for Assetto Corsa EVO **0.9.1+release.6**
+<div align="center">
+<sub>Loader 0.20.0 · built for Assetto Corsa EVO <b>0.9.1+release.6</b></sub>
+</div>

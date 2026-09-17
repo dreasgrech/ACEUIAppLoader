@@ -21,6 +21,19 @@ link, so anything that needs to move has to be a GIF.
 | `apps-doom.png` | 400 KB | DOOM running on the HUD. The showpiece -- pick a frame with an enemy in it. |
 | `settings.png` | 300 KB | A mod's settings page, showing that apps are configurable without editing files. |
 
+> **The three app shots sit side by side in one row**, each a third of the page wide.
+> Crop all three to the **same aspect ratio and the same pixel size** -- 16:9 at
+> 640x360 works -- or the row comes out ragged and the whole page looks careless.
+> They are the most-looked-at images here: they are what a passer-by judges the
+> project on.
+
+## Optional, if you want one
+
+`banner.png` -- a wordmark for the top of the README, about 900x180, transparent
+background. Only worth it if it looks deliberate; a plain heading beats a bad logo. If one
+is added with a light and a dark version, the README needs a `<picture>` element and
+`ReadmeTests` needs to learn to read `srcset`, which it currently does not.
+
 ## Capturing
 
 - **Stills**: the game's own screenshot key, or Win+Shift+S. Crop tight; no desktop, no
