@@ -14,7 +14,8 @@ One file to install. One file to delete.
 
 </div>
 
-![The app drawer open while driving](docs/images/hero.png)
+<img width="2560" height="1440" alt="20CA22~1" src="https://github.com/user-attachments/assets/d1dd4c93-8b13-43eb-b7f7-9790d9adf08d" />
+
 
 Assetto Corsa EVO builds its interface out of web pages. This lets other people's mods live
 in there alongside the game's own screens, and gives you one place to switch them on and off.
@@ -63,7 +64,9 @@ Drop the file in. No unzipping, no installer, nothing to run.
 
 ## The app drawer
 
-![Opening the drawer and switching an app on](docs/images/drawer.gif)
+<p align="center">
+<img width="800" height="450" alt="2026-09-1703-42-54online-video-cutter com-ezgif com-video-to-gif-converter" src="https://github.com/user-attachments/assets/738a4162-7706-41bf-9f63-2aa679b32273" />
+</p>
 
 Move your mouse to the **right edge of the screen** and the drawer slides in. Every mod you
 have installed is listed there with its own switch — flick one on and it appears straight
