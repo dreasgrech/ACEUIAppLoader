@@ -825,6 +825,51 @@ document.addEventListener("DOMContentLoaded", function () {
         pane.remove();
     });
 
+    t("settings: sections group the rows, fold on click, remember the fold, and can lay rows in two columns", function () {
+        const S = ACEUIAppLoader.settings;
+        const pane = document.createElement("div");
+        document.getElementById("center").appendChild(pane);
+
+        S.define("sectioned", [
+            { key: "scale", type: "range", label: "Scale", value: 1, min: 0, max: 4, step: 1, digits: 0 },
+            { key: "inputs", type: "section", label: "Inputs", columns: 2 },
+            { key: "a", type: "toggle", label: "A", value: true },
+            { key: "b", type: "toggle", label: "B", value: true },
+            { key: "c", type: "toggle", label: "C", value: true },
+            { key: "demo", type: "section", label: "Demo", collapsed: true },
+            { key: "d", type: "toggle", label: "D", value: false, hint: "a hint" }
+        ]);
+        eq(Object.keys(S.all("sectioned")).join(","), "scale,a,b,c,d", "a section carries no value");
+        eq(S.set("sectioned", "inputs", true), undefined, "and cannot be set");
+        eq(S.isCollapsed("sectioned", "inputs"), false, "open by default"); eq(S.isCollapsed("sectioned", "demo"), true, "collapsed: true starts folded");
+        eq(S.isCollapsed("sectioned", "a"), false, "a non-section is never folded");
+
+        S.render("sectioned", pane);
+        const headers = Array.prototype.slice.call(pane.children).filter(function (el) { return /^(Inputs|Demo)/.test(el.textContent); });
+        eq(headers.length, 2, "two headers, direct children of the pane");
+        const inputsBody = headers[0].nextSibling, demoBody = headers[1].nextSibling;
+        eq(inputsBody.children.length, 3, "the three toggles sit in the Inputs body");
+        eq(getComputedStyle(inputsBody).display, "flex", "two columns: a wrapping flex body");
+        eq(inputsBody.children[0].style.width, "50%", "rows at half width");
+        eq(getComputedStyle(demoBody).display, "none", "the folded section's body is hidden");
+        eq(demoBody.children.length, 2, "toggle and hint in the Demo body"); eq(demoBody.children[1].style.width, "100%", "a hint spans both columns");
+        ok(pane.children[0].textContent.indexOf("Scale") >= 0, "rows before the first section go straight into the pane");
+        eq(headers[1].lastChild.textContent, "+", "folded glyph");
+
+        headers[1].dispatchEvent(new MouseEvent("click", { bubbles: true }));
+        eq(S.isCollapsed("sectioned", "demo"), false, "clicking the header unfolds");
+        eq(getComputedStyle(demoBody).display, "block", "and shows the body"); eq(headers[1].lastChild.textContent, "\u2212", "open glyph");
+        headers[0].dispatchEvent(new MouseEvent("click", { bubbles: true }));
+        eq(getComputedStyle(inputsBody).display, "none", "folding a two-column section hides it too");
+        eq(JSON.parse(localStorage.getItem(S.localKey("sectioned") + ".sections")).inputs, true, "the fold is remembered in localStorage");
+
+        S.define("sectioned", S.specs("sectioned"));       // a reload: define again
+        eq(S.isCollapsed("sectioned", "inputs"), true, "and comes back after define"); eq(S.isCollapsed("sectioned", "demo"), false);
+        S.setCollapsed("sectioned", "inputs", false);
+        eq(S.isCollapsed("sectioned", "inputs"), false, "setCollapsed drives it directly");
+        pane.remove();
+    });
+
     /* Clicking a key control arms a window-wide keydown listener. Nothing cancelled it,
        so thinking better of it and closing the window left that listener armed: the next
        key pressed anywhere -- W, driving away from the menu -- was swallowed and became

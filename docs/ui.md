@@ -137,6 +137,20 @@ app computes (`{ type: "info", label, text: fn }`, recomputed on every repaint, 
 show live state). Without those an app needs a hand-built pane for a single button, which
 is exactly what the settings page is meant to replace.
 
+A page with more than a handful of rows is a wall. **`section`** breaks it up: a header
+that every spec after it belongs to, until the next section. Clicking the header folds
+the rows under it and the loader remembers which sections are folded, per app, in
+localStorage (a view preference, not a setting, so it is not in the HUD store). A section
+with `columns: 2` lays its rows out at half width, which halves a run of toggles;
+`collapsed: true` starts it folded until the player opens it.
+
+```js
+{ key: "inputs", type: "section", label: "Inputs", columns: 2 },
+{ key: "showThrottle", type: "toggle", label: "Throttle", value: true },
+...
+{ key: "demo", type: "section", label: "Demo", collapsed: true },
+```
+
 **Types are limited to controls this engine is known to render.** Cohtml is not a browser:
 `<input type="range">` and `<select>` are unproven here, so a `range` is a pair of −/+
 buttons and a `choice` cycles on click — both patterns already proven in the dev console

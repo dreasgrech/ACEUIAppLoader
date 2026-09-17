@@ -36,6 +36,13 @@
  *     ACEUIAppLoader.settings.toggle("devconsole");
  *     ACEUIAppLoader.settings.isOpen("devconsole");
  *
+ * A page with more than a handful of rows is a wall; `section` breaks it up. A section
+ * spec is a header that every spec after it belongs to, until the next one. Clicking
+ * the header folds the section and the loader remembers which are folded, per app. A
+ * section can lay its rows out in two columns, which halves a run of toggles:
+ *
+ *     { key: "inputs", type: "section", label: "Inputs", columns: 2, collapsed: false },
+ *
  * Values are written to both stores (see ACEUIAppLoader.persist): the HUD layout
  * container, which the game writes to disk and is the only thing that survives a restart,
  * and localStorage, which is read synchronously so a value is there the moment an app asks.
@@ -47,7 +54,7 @@ ACEUIAppLoader.settings = (function () {
      * is a line of text the app computes. They are here because a settings page that can
      * only hold values forces an app back to hand-building a pane for one button.
      */
-    const TYPES = ["toggle", "range", "choice", "text", "key", "action", "info"];
+    const TYPES = ["toggle", "range", "choice", "text", "key", "action", "info", "section"];
     const VALUE_TYPES = ["toggle", "range", "choice", "text", "key"];
     const HUD_PREFIX = "hud_";
     const HUD_SUFFIX = "_settings";
@@ -60,6 +67,12 @@ ACEUIAppLoader.settings = (function () {
     const CANCEL_KEY = "Escape";
     const CLEAR_TEXT = "Reset to defaults";
 
+    /** Sections: the glyph on a header for open and folded, the widest layout, and where the folds are kept. */
+    const OPEN_GLYPH = "\u2212";
+    const FOLDED_GLYPH = "+";
+    const COLUMNS_MAX = 2;
+    const SECTIONS_SUFFIX = ".sections";
+
     /** The settings window is an ACEUIAppLoader.window; this is its id and width. */
     const WINDOW_ID_SUFFIX = ".settings";
     const WINDOW_WIDTH = "17rem";
@@ -68,7 +81,7 @@ ACEUIAppLoader.settings = (function () {
 
     const persist = ACEUIAppLoader.persist;
 
-    /** name -> { specs, values, listeners } */
+    /** name -> { specs, values, listeners, collapsed, repaint, undo } */
     const declared = {};
 
     const css = ACEUIAppLoader.dom.css;
@@ -113,6 +126,39 @@ ACEUIAppLoader.settings = (function () {
     /** Stored values for an app, HUD store first because it outlives the session. */
     const stored = function (app) {
         return persist.readHud(hudId(app)) || persist.readLocal(localKey(app)) || {};
+    };
+
+    /**
+     * Which sections the player folded, per app. localStorage only: it is a view
+     * preference, not a setting, and localStorage is what the app drawer's own folds use.
+     */
+    const storedFolds = function (app) {
+        const folds = persist.readLocal(localKey(app) + SECTIONS_SUFFIX);
+
+        return folds && typeof folds === "object" ? folds : {};
+    };
+
+    const isCollapsed = function (app, key) {
+        const held = entry(app);
+        const spec = specFor(app, key);
+
+        if (!held || !spec || spec.type !== "section") { return false; }
+
+        if (typeof held.collapsed[key] === "boolean") { return held.collapsed[key]; }
+
+        return Boolean(spec.collapsed);
+    };
+
+    const setCollapsed = function (app, key, on) {
+        const held = entry(app);
+
+        if (!held || !specFor(app, key)) { return false; }
+
+        held.collapsed[key] = Boolean(on);
+        persist.writeLocal(localKey(app) + SECTIONS_SUFFIX, held.collapsed);
+        held.repaint.forEach(function (fn) { fn(); });
+
+        return held.collapsed[key];
     };
 
     const clampNumber = function (spec, value) {
@@ -435,6 +481,49 @@ ACEUIAppLoader.settings = (function () {
         return node;
     };
 
+    /**
+     * A section: a header row that folds and unfolds the rows after it. Returns the body
+     * the following rows go into. Two-column bodies wrap their rows at half width.
+     */
+    const sectionControl = function (app, spec, repaint, container) {
+        const header = make("div", {
+            display: "flex",
+            flexDirection: "row",
+            alignItems: "center",
+            justifyContent: "space-between",
+            marginTop: "0.45rem",
+            padding: "0 0 0.12rem 0",
+            borderBottom: THEME.border,
+            fontSize: "0.58rem",
+            fontWeight: "700",
+            letterSpacing: "0.1em",
+            textTransform: "uppercase",
+            color: THEME.inkDim,
+            cursor: "pointer",
+            userSelect: "none"
+        });
+        const glyph = make("span", { color: THEME.inkOff, fontSize: "0.68rem", marginLeft: "0.5rem" });
+        const body = make("div", spec.columns === COLUMNS_MAX
+            ? { display: "flex", flexDirection: "row", flexWrap: "wrap" }
+            : {});
+
+        header.appendChild(make("span", {}, spec.label || spec.key));
+        header.appendChild(glyph);
+        header.addEventListener("click", function () { setCollapsed(app, spec.key, !isCollapsed(app, spec.key)); });
+
+        repaint.push(function () {
+            const folded = isCollapsed(app, spec.key);
+
+            body.style.display = folded ? "none" : (spec.columns === COLUMNS_MAX ? "flex" : "block");
+            glyph.textContent = folded ? FOLDED_GLYPH : OPEN_GLYPH;
+        });
+
+        container.appendChild(header);
+        container.appendChild(body);
+
+        return body;
+    };
+
     const CONTROLS = {
         action: actionControl,
         info: infoControl,
@@ -474,22 +563,37 @@ ACEUIAppLoader.settings = (function () {
 
         teardown(app);
 
+        // rows go into the current section's body, or straight into the container before
+        // the first section; a two-column section lays them out at half width
+        const target = { body: container, columns: 1 };
+
         held.specs.forEach(function (spec) {
+            if (spec.type === "section") {
+                target.body = sectionControl(app, spec, held.repaint, container);
+                target.columns = spec.columns === COLUMNS_MAX ? COLUMNS_MAX : 1;
+
+                return;
+            }
+
             const row = make("div", rowStyle);
             const control = CONTROLS[spec.type];
+
+            if (target.columns === COLUMNS_MAX) {
+                css(row, { width: "50%", boxSizing: "border-box", paddingRight: "0.6rem" });
+            }
 
             row.appendChild(make("span", { color: THEME.inkDim, marginRight: "0.5rem" }, spec.label || spec.key));
 
             if (control) { row.appendChild(control(app, spec, held.repaint)); }
 
-            container.appendChild(row);
+            target.body.appendChild(row);
 
             if (spec.hint) {
-                container.appendChild(make("div", { color: THEME.inkDim, fontSize: "0.6rem", paddingBottom: "0.2rem" }, spec.hint));
+                target.body.appendChild(make("div", { color: THEME.inkDim, fontSize: "0.6rem", paddingBottom: "0.2rem", width: "100%" }, spec.hint));
             }
         });
 
-        container.appendChild(css(button(CLEAR_TEXT, function () { reset(app); }), { marginTop: "0.3rem", marginLeft: "0" }));
+        container.appendChild(css(button(CLEAR_TEXT, function () { reset(app); }), { marginTop: "0.6rem", marginLeft: "0" }));
         held.repaint.forEach(function (fn) { fn(); });
 
         return container;
@@ -574,6 +678,7 @@ ACEUIAppLoader.settings = (function () {
             specs: list,
             values: values,
             listeners: (declared[app] && declared[app].listeners) || [],
+            collapsed: storedFolds(app),
             repaint: [],
             undo: []            // what the drawn controls bound outside their own elements
         };
@@ -599,6 +704,8 @@ ACEUIAppLoader.settings = (function () {
         reset: reset,
         onChange: onChange,
         listenerCount: listenerCount,
+        isCollapsed: isCollapsed,
+        setCollapsed: setCollapsed,
         open: open,
         close: close,
         toggle: toggle,

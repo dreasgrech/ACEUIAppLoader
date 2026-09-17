@@ -192,5 +192,5 @@ The game mechanics all of this rests on are documented in
 ---
 
 <div align="center">
-<sub>Loader 0.22.0 · built for Assetto Corsa EVO <b>0.9.1+release.6</b></sub>
+<sub>Loader 0.23.0 · built for Assetto Corsa EVO <b>0.9.1+release.6</b></sub>
 </div>
