@@ -9,14 +9,14 @@
 [![Downloads](https://img.shields.io/github/downloads/dreasgrech/ACEUIModLoader/total?style=flat-square&color=555)](../../releases)
 [![Issues](https://img.shields.io/github/issues/dreasgrech/ACEUIModLoader?style=flat-square&color=555)](../../issues)
 
-[Install](#install) · [The app drawer](#the-app-drawer) · [Mods](#mods) · [Help](#if-something-isnt-right) · [Safety](#is-it-safe) · [Developers](#for-developers)
+[Install](#install) · [The app drawer](#the-app-drawer) · [Apps](#apps) · [Help](#if-something-isnt-right) · [Safety](#is-it-safe) · [Developers](#for-developers)
 
 </div>
 
 <img width="2560" height="1440" alt="20CA22~1" src="https://github.com/user-attachments/assets/d1dd4c93-8b13-43eb-b7f7-9790d9adf08d" />
 
 
-Assetto Corsa EVO builds its interface out of web pages. This lets other people's mods live
+Assetto Corsa EVO builds its interface out of web pages. This lets other people's apps live
 in there alongside the game's own screens, and gives you one place to switch them on and off.
 
 ---
@@ -27,7 +27,8 @@ The game has no mod support for its interface, so the only way in is to replace 
 files — and **only one mod can hold a file**. Two mods that both want the HUD overwrite each
 other, and installing the second one silently breaks the first.
 
-This does the replacing once, so mods are added alongside it instead of fighting over it.
+This is that one mod. It does the replacing once and then loads **apps** on top, so apps are
+added alongside each other instead of fighting over the same file.
 
 ---
 
@@ -73,7 +74,7 @@ away, flick it off and it's gone.
 
 ---
 
-## Mods
+## Apps
 
 <table>
 <tr>
@@ -90,7 +91,7 @@ away, flick it off and it's gone.
 
 Each is a separate download with its own instructions.
 
-<p align="center"><img src="docs/images/settings.png" width="70%" alt="A mod's settings page"></p>
+<p align="center"><img src="docs/images/settings.png" width="70%" alt="An app's settings page"></p>
 
 ---
 
@@ -111,9 +112,9 @@ Each is a separate download with its own instructions.
 </details>
 
 <details>
-<summary><b>A mod isn't in the drawer</b></summary><br>
+<summary><b>An app isn't in the drawer</b></summary><br>
 
-Check that mod's own instructions. Most are two pieces — a folder and a small marker file —
+Check that app's own instructions. Most are two pieces — a folder and a small marker file —
 and it's easy to install one and miss the other.
 
 </details>
@@ -150,24 +151,24 @@ left behind.
 
 ## For developers
 
-A mod is one folder and a JavaScript file. No build step, no registration, and a shared
+An app is one folder and a JavaScript file. No build step, no registration, and a shared
 library for the parts that are genuinely hard in this engine.
 
 ```js
-const me = ACEUIModLoader.mod("mymod");
+const me = ACEUIModLoader.app("myapp");
 
 me.mount(attach, detach);                              // the drawer starts and stops you
 me.toggle(function () { return options.toggleKey; });  // a hotkey that respects typing
 ```
 
-Start with **[`docs/writing-a-mod.md`](docs/writing-a-mod.md)**.
+Start with **[`docs/writing-an-app.md`](docs/writing-an-app.md)**.
 
 <details>
 <summary><b>All documentation</b></summary><br>
 
 | | |
 |---|---|
-| [`docs/writing-a-mod.md`](docs/writing-a-mod.md) | the mod lifecycle and `mod.json` |
+| [`docs/writing-an-app.md`](docs/writing-an-app.md) | the app lifecycle and `app.json` |
 | [`docs/library.md`](docs/library.md) | `ACEUIModLoader.*`: storage, hotkeys, the frame loop |
 | [`docs/ui.md`](docs/ui.md) | the drawer, windows, and settings pages |
 | [`docs/building.md`](docs/building.md) | building the package, the tools, the tests |
@@ -176,6 +177,7 @@ Start with **[`docs/writing-a-mod.md`](docs/writing-a-mod.md)**.
 | [`docs/style.md`](docs/style.md) | the JavaScript rules and why each one is there |
 | [`docs/design.md`](docs/design.md) | the investigation behind the loader |
 | [`docs/developer-apps.md`](docs/developer-apps.md) | why the developer tools ship inside the package |
+| [`docs/naming.md`](docs/naming.md) | mod or app: which word means what, and why |
 | [`docs/roadmap.md`](docs/roadmap.md) | what is missing |
 
 Three developer apps ship inside the package — a capabilities probe, a console and a
@@ -189,5 +191,5 @@ The game mechanics all of this rests on are documented in
 ---
 
 <div align="center">
-<sub>Loader 0.20.0 · built for Assetto Corsa EVO <b>0.9.1+release.6</b></sub>
+<sub>Loader 0.21.0 · built for Assetto Corsa EVO <b>0.9.1+release.6</b></sub>
 </div>

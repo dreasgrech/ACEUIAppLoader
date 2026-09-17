@@ -4,7 +4,7 @@
  * `attach(root, options)` makes `root` draggable inside its parent (the HUD's
  * `.absolutecenter`), clamped so it stays fully on screen, and persists its
  * position as fractions of the parent (resolution independent) through
- * ACEUIModLoader.persist under `options.hudId` / `options.storageKey`. The mod's frame
+ * ACEUIModLoader.persist under `options.hudId` / `options.storageKey`. The app's frame
  * loop must call `update(panel, now)` every frame until the restore has settled.
  *
  * Restore sequence, to avoid any visible jump: the root is hidden at attach; a
@@ -21,7 +21,7 @@
 ACEUIModLoader.panel = (function () {
 
     const RESTORE_WAIT_MS = 2000;
-    /** Class on the root while it is being dragged (mods style it). */
+    /** Class on the root while it is being dragged (apps style it). */
     const DRAGGING_CLASS = "dragging";
     /** Attribute on descendants that must not start a drag. */
     const NO_DRAG_ATTR = "data-nodrag";

@@ -1,4 +1,4 @@
-"""Tests for the library sources (style and contracts), install_mod.py and build_loader.py."""
+"""Tests for the library sources (style and contracts), install_app.py and build_loader.py."""
 import json
 import os
 import re
@@ -11,7 +11,7 @@ ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 TOOLS = os.path.join(ROOT, "tools")
 sys.path.insert(0, TOOLS)
 
-import install_mod  # noqa: E402
+import install_app  # noqa: E402
 import build_loader  # noqa: E402
 import post_update  # noqa: E402
 import repad  # noqa: E402
@@ -48,11 +48,11 @@ class LibrarySourceTests(unittest.TestCase):
         self.files = {name: read(os.path.join(SRC, name)) for name in build_loader.LIB_ORDER}
 
     def test_the_library_follows_the_project_style_too(self):
-        """The same conventions the kit enforces on mods: IIFE modules, no classes, no
+        """The same conventions the kit enforces on apps: IIFE modules, no classes, no
         `this`, no var, no arrows, 4-space indent, double quotes. This was only ever
-        checked on mods, so the loader's own source -- the most-edited code here -- was
+        checked on apps, so the loader's own source -- the most-edited code here -- was
         the one place the rule lived on memory rather than on a test."""
-        from modkit import check_style
+        from appkit import check_style
 
         for name, js in self.files.items():
             with self.subTest(source=name):
@@ -62,7 +62,7 @@ class LibrarySourceTests(unittest.TestCase):
         self.assertEqual(sorted(n for n in os.listdir(SRC) if n.endswith(".js")), sorted(build_loader.LIB_ORDER))
         self.assertEqual(build_loader.LIB_ORDER[0], "ACEUIModLoader.core.js", "core defines the namespace")
         self.assertEqual(build_loader.LIB_ORDER[1], "ACEUIModLoader.console.js", "console hook must run before the stock bundle")
-        self.assertEqual(build_loader.LIB_ORDER[-4], "ACEUIModLoader.loader.js", "loader starts mods")
+        self.assertEqual(build_loader.LIB_ORDER[-4], "ACEUIModLoader.loader.js", "loader starts apps")
         # the drawer registers an ACEUIModLoader.ready callback, so it must load after the loader
         self.assertEqual(build_loader.LIB_ORDER[-3], "ACEUIModLoader.drawer.js", "drawer needs ready()")
         # settings registers its pane with the drawer, so it loads after it
@@ -124,15 +124,15 @@ class LibrarySourceTests(unittest.TestCase):
         for name in ("MAX_ENTRIES", "LEVELS", "entries", "clear", "capture", "subscribe", "listenerCount", "format"):
             self.assertRegex(js, rf"\n\s+{name}: [A-Za-z_.]+,?\n", f"console.{name} not exported")
 
-    def test_mod_roots_are_hidden_at_creation_when_switched_off(self):
-        # the drawer builds on ready(), which fires only after every mod has loaded, so a
+    def test_app_roots_are_hidden_at_creation_when_switched_off(self):
+        # the drawer builds on ready(), which fires only after every app has loaded, so a
         # switched-off app stayed visible for that whole window and appeared to flash on
         # and off again after a pause-menu reload
         js = self.files["ACEUIModLoader.loader.js"]
         self.assertIn("if (ACEUIModLoader.drawer) { ACEUIModLoader.drawer.applyStored(name); }", js,
                       "mountRoot must apply the saved switch as soon as it creates the root")
         self.assertLess(js.find("ACEUIModLoader.drawer.applyStored(name)"), js.find("return root;"),
-                        "applied before the root is handed back and the mod's scripts run")
+                        "applied before the root is handed back and the app's scripts run")
         drawer = self.files["ACEUIModLoader.drawer.js"]
         self.assertIn("loadStored();", drawer, "the saved switches are read as the library loads")
         self.assertIn("applyStored: applyStored,", drawer, "and exported for the loader to call")
@@ -150,34 +150,34 @@ class LibrarySourceTests(unittest.TestCase):
 
     def test_loader_contract(self):
         js = self.files["ACEUIModLoader.loader.js"]
-        self.assertIn('const ROOT = "ACEUIModLoaderMods/";', js)
+        self.assertIn('const ROOT = "ACEUIModLoaderApps/";', js)
         # the two roots must differ: loose files never beat packed files, so a bundled app
         # sitting at the installed path could never be overridden to work on it
-        self.assertIn('const APPS_ROOT = "ACEUIModLoaderApps/";', js)
-        self.assertIn('const APPS_FILE = "apps.json";', js)
-        self.assertNotEqual('ACEUIModLoaderApps/', 'ACEUIModLoaderMods/')
-        self.assertNotIn("manifest", js.lower(), "the game's preset list is the only source of mod names")
-        self.assertIn('const MOD_FILE = "mod.json";', js)
+        self.assertIn('const BUILTIN_ROOT = "ACEUIModLoaderBuiltIn/";', js)
+        self.assertIn('const BUILTIN_INDEX = "apps.json";', js)
+        self.assertNotEqual('ACEUIModLoaderBuiltIn/', 'ACEUIModLoaderApps/')
+        self.assertNotIn("manifest", js.lower(), "the game's preset list is the only source of app names")
+        self.assertIn('const APP_FILE = "app.json";', js)
         self.assertIn('const DEFAULT_PAGES = ["hud.html"];', js)
         self.assertIn('const PRESET_REQUEST = "SettingsRequestVideoPresetList";', js)
         self.assertIn('const PRESET_RESPONSE = "SettingsResponseVideoPresetList";', js)
-        self.assertIn('const MARKER_PREFIX = "ACEUIModLoaderMods-";', js)
+        self.assertIn('const MARKER_PREFIX = "ACEUIModLoaderApps-";', js)
         self.assertIn('const MARKER_EXT = ".settingspreset";', js)
         self.assertIn('engine.trigger("OnUICommand", PRESET_REQUEST, { __Type: PRESET_REQUEST, version: 0 });', js)
-        for line in ('"loader " + ACEUIModLoader.VERSION + " on /"', 'source + ": " + names.length + " mod(s)"', '" loaded"',
-                     '" FAILED"', '"; no installed mods"', '"nothing to load"', '"no engine on this page"', '"could not wrap engine.on'):
+        for line in ('"loader " + ACEUIModLoader.VERSION + " on /"', 'source + ": " + names.length + " app(s)"', '" loaded"',
+                     '" FAILED"', '"; no installed apps"', '"nothing to load"', '"no engine on this page"', '"could not wrap engine.on'):
             self.assertIn(line, js, line)
         self.assertIn("loadScripts(base, files, index + 1, onDone)", js, "scripts load sequentially")
         self.assertIn("styles.concat(scripts).every(isFileName)", js, "never request anything that could be a folder")
         for name in ("PRESET_REQUEST", "PRESET_RESPONSE", "MARKER_PREFIX", "MARKER_EXT", "PRESET_TIMEOUT_MS", "source",
                      "filtering", "isMarker", "markerNames", "withoutMarkers", "isFileName", "CONTAINER_SELECTOR",
-                     "MOD_ATTR", "DEV_VERSION", "mod", "APPS_ROOT", "APPS_FILE", "merge", "isDeveloper"):
+                     "APP_ATTR", "DEV_VERSION", "app", "BUILTIN_ROOT", "BUILTIN_INDEX", "merge", "isDeveloper"):
             self.assertRegex(js, rf"\n\s+{name}: [A-Za-z_.]+,?\n", f"loader.{name} not exported")
-        for alias in ("ROOT", "mods", "mod", "ready", "addStylesheet", "addScript"):
+        for alias in ("ROOT", "apps", "app", "ready", "addStylesheet", "addScript"):
             self.assertIn(f"ACEUIModLoader.{alias} = ACEUIModLoader.loader.{alias};", js)
         self.assertIn('const CONTAINER_SELECTOR = ".absolutecenter";', js)
         self.assertIn("mountRoot(name, info);\n            state.current = entry;\n            loadScripts(", js,
-                      "root exists and mod() knows the current mod before its scripts run")
+                      "root exists and app() knows the current app before its scripts run")
         self.assertIn('const KEY_PREFIX = "ace";', js)
         self.assertIn('const HUD_ID_PREFIX = "hud_";', js)
 
@@ -193,20 +193,20 @@ class LibrarySourceTests(unittest.TestCase):
         self.assertNotIn("ACEUIModLoader.core.js", harness, "the harness must not list library files itself")
 
     def test_manifest_keys_match_between_the_install_tool_and_the_test_kit(self):
-        """Both read a mod.json, and a key one accepts and the other rejects is a mod that
+        """Both read an app.json, and a key one accepts and the other rejects is an app that
         installs but fails its own tests (or the reverse)."""
         sys.path.insert(0, os.path.join(ROOT, "tools"))
-        import modkit  # noqa: E402
+        import appkit  # noqa: E402
 
-        self.assertEqual(sorted(install_mod.KNOWN_KEYS), sorted(modkit.KNOWN_KEYS))
-        self.assertIn("developer", install_mod.KNOWN_KEYS, "the app drawer's developer switch reads it")
+        self.assertEqual(sorted(install_app.KNOWN_KEYS), sorted(appkit.KNOWN_KEYS))
+        self.assertIn("developer", install_app.KNOWN_KEYS, "the app drawer's developer switch reads it")
 
     def test_marker_naming_matches_between_loader_and_install_tool(self):
         js = self.files["ACEUIModLoader.loader.js"]
-        self.assertIn(f'const MARKER_PREFIX = "{install_mod.MARKER_PREFIX}";', js)
-        self.assertIn(f'const MARKER_EXT = "{install_mod.MARKER_EXT}";', js)
-        self.assertEqual(install_mod.MARKER_DIR, "Video", "the game lists Saved Games/ACE/Video for SettingsRequestVideoPresetList")
-        self.assertEqual(install_mod.MODS_SUBDIR.replace(os.sep, "/") + "/", "uiresources/" + "ACEUIModLoaderMods/")
+        self.assertIn(f'const MARKER_PREFIX = "{install_app.MARKER_PREFIX}";', js)
+        self.assertIn(f'const MARKER_EXT = "{install_app.MARKER_EXT}";', js)
+        self.assertEqual(install_app.MARKER_DIR, "Video", "the game lists Saved Games/ACE/Video for SettingsRequestVideoPresetList")
+        self.assertEqual(install_app.APPS_SUBDIR.replace(os.sep, "/") + "/", "uiresources/" + "ACEUIModLoaderApps/")
 
     def test_no_per_frame_geometry_or_css_in_library(self):
         for name, js in self.files.items():
@@ -215,14 +215,14 @@ class LibrarySourceTests(unittest.TestCase):
             self.assertNotIn('createElement("style")', js, name)
 
 
-class InstallModTests(unittest.TestCase):
+class InstallAppTests(unittest.TestCase):
     def setUp(self):
         self.tmp = tempfile.TemporaryDirectory()
         self.mods = os.path.join(self.tmp.name, "mods")
-        self.src = os.path.join(self.tmp.name, "mymod")
+        self.src = os.path.join(self.tmp.name, "myapp")
         os.makedirs(self.src)
-        with open(os.path.join(self.src, "mod.json"), "w", encoding="utf-8") as f:
-            json.dump({"name": "mymod", "version": "1.2.3", "pages": ["hud.html"], "styles": ["a.css"], "scripts": ["a.js", "b.js"]}, f)
+        with open(os.path.join(self.src, "app.json"), "w", encoding="utf-8") as f:
+            json.dump({"name": "myapp", "version": "1.2.3", "pages": ["hud.html"], "styles": ["a.css"], "scripts": ["a.js", "b.js"]}, f)
         for name in ("a.css", "a.js", "b.js", ".hidden", "x.swp"):
             with open(os.path.join(self.src, name), "w") as f:
                 f.write("x")
@@ -231,64 +231,90 @@ class InstallModTests(unittest.TestCase):
         self.tmp.cleanup()
 
     def test_install_copies_files_and_writes_an_empty_marker(self):
-        dest = install_mod.install(self.src, self.mods)
-        self.assertEqual(dest, os.path.join(self.mods, "uiresources", "ACEUIModLoaderMods", "mymod"))
-        self.assertEqual(sorted(os.listdir(dest)), ["a.css", "a.js", "b.js", "mod.json"], "junk must not be copied")
-        marker = install_mod.marker_path("mymod", self.mods)
-        self.assertEqual(marker, os.path.join(self.tmp.name, "Video", "ACEUIModLoaderMods-mymod.settingspreset"),
+        dest = install_app.install(self.src, self.mods)
+        self.assertEqual(dest, os.path.join(self.mods, "uiresources", "ACEUIModLoaderApps", "myapp"))
+        self.assertEqual(sorted(os.listdir(dest)), ["a.css", "a.js", "app.json", "b.js"], "junk must not be copied")
+        marker = install_app.marker_path("myapp", self.mods)
+        self.assertEqual(marker, os.path.join(self.tmp.name, "Video", "ACEUIModLoaderApps-myapp.settingspreset"),
                          "marker lives next to the mods folder, where the game lists video presets")
         self.assertTrue(os.path.isfile(marker))
         self.assertEqual(os.path.getsize(marker), 0, "the game deserialises every listed file; only an empty one is safe")
-        install_mod.install(self.src, self.mods)
-        self.assertEqual(install_mod.marker_names(self.mods), ["mymod"])
-        self.assertFalse(os.path.exists(os.path.join(install_mod.mods_root_dir(self.mods), "manifest.json")), "no manifest any more")
+        install_app.install(self.src, self.mods)
+        self.assertEqual(install_app.marker_names(self.mods), ["myapp"])
+        self.assertFalse(os.path.exists(os.path.join(install_app.apps_root_dir(self.mods), "manifest.json")), "no manifest any more")
+
+    def test_installing_clears_the_copy_left_at_the_pre_rename_path(self):
+        """An app installed while apps were called mods sits somewhere the loader no longer
+        reads, so it is invisible rather than broken. Installing again has to clear it."""
+        old = os.path.join(self.mods, "uiresources", "ACEUIModLoaderMods", "myapp")
+        os.makedirs(old)
+        write(os.path.join(old, "mod.json"), "{}")
+        old_marker = os.path.join(self.tmp.name, "Video", "ACEUIModLoaderMods-myapp.settingspreset")
+        os.makedirs(os.path.dirname(old_marker), exist_ok=True)
+        write(old_marker, "")
+
+        install_app.install(self.src, self.mods)
+
+        self.assertFalse(os.path.isdir(old), "the old folder is gone")
+        self.assertFalse(os.path.exists(old_marker), "and so is the old marker")
+        self.assertTrue(os.path.isdir(os.path.join(install_app.apps_root_dir(self.mods), "myapp")))
+
+    def test_remove_clears_both_paths_so_nothing_lingers(self):
+        old = os.path.join(self.mods, "uiresources", "ACEUIModLoaderMods", "myapp")
+        install_app.install(self.src, self.mods)
+        os.makedirs(old, exist_ok=True)
+
+        install_app.remove("myapp", self.mods)
+
+        self.assertFalse(os.path.isdir(old))
+        self.assertEqual(install_app.marker_names(self.mods), [])
 
     def test_remove_deletes_folder_and_marker(self):
-        install_mod.install(self.src, self.mods)
-        install_mod.remove("mymod", self.mods)
-        self.assertFalse(os.path.isdir(os.path.join(self.mods, "uiresources", "ACEUIModLoaderMods", "mymod")))
-        self.assertFalse(os.path.exists(install_mod.marker_path("mymod", self.mods)))
-        self.assertEqual(install_mod.marker_names(self.mods), [])
+        install_app.install(self.src, self.mods)
+        install_app.remove("myapp", self.mods)
+        self.assertFalse(os.path.isdir(os.path.join(self.mods, "uiresources", "ACEUIModLoaderApps", "myapp")))
+        self.assertFalse(os.path.exists(install_app.marker_path("myapp", self.mods)))
+        self.assertEqual(install_app.marker_names(self.mods), [])
 
     def test_missing_listed_file_is_an_error(self):
         os.remove(os.path.join(self.src, "b.js"))
         with self.assertRaises(SystemExit):
-            install_mod.install(self.src, self.mods)
+            install_app.install(self.src, self.mods)
 
     def test_name_comes_from_the_folder_when_mod_json_has_none(self):
-        folder = os.path.join(self.tmp.name, "othermod")
+        folder = os.path.join(self.tmp.name, "otherapp")
         os.makedirs(folder)
-        with open(os.path.join(folder, "mod.json"), "w", encoding="utf-8") as f:
-            json.dump({"version": "0.1.0", "scripts": ["othermod.js"]}, f)
-        with open(os.path.join(folder, "othermod.js"), "w") as f:
+        with open(os.path.join(folder, "app.json"), "w", encoding="utf-8") as f:
+            json.dump({"version": "0.1.0", "scripts": ["otherapp.js"]}, f)
+        with open(os.path.join(folder, "otherapp.js"), "w") as f:
             f.write("x")
-        dest = install_mod.install(folder, self.mods)
-        self.assertTrue(dest.endswith("othermod"))
-        self.assertEqual(install_mod.marker_names(self.mods), ["othermod"])
-        with open(os.path.join(folder, "mod.json"), "w", encoding="utf-8") as f:
-            json.dump({"name": "different", "version": "0.1.0", "scripts": ["othermod.js"]}, f)
+        dest = install_app.install(folder, self.mods)
+        self.assertTrue(dest.endswith("otherapp"))
+        self.assertEqual(install_app.marker_names(self.mods), ["otherapp"])
+        with open(os.path.join(folder, "app.json"), "w", encoding="utf-8") as f:
+            json.dump({"name": "different", "version": "0.1.0", "scripts": ["otherapp.js"]}, f)
         with self.assertRaises(SystemExit):
-            install_mod.install(folder, self.mods)
-        with open(os.path.join(folder, "mod.json"), "w", encoding="utf-8") as f:
-            json.dump({"version": "0.1.0", "scripts": ["othermod.js"], "bogus": 1}, f)
+            install_app.install(folder, self.mods)
+        with open(os.path.join(folder, "app.json"), "w", encoding="utf-8") as f:
+            json.dump({"version": "0.1.0", "scripts": ["otherapp.js"], "bogus": 1}, f)
         with self.assertRaises(SystemExit):
-            install_mod.install(folder, self.mods)
+            install_app.install(folder, self.mods)
 
     def test_names_and_paths_that_could_escape_the_folder_are_errors(self):
         with self.assertRaises(SystemExit):
-            install_mod.check_name("../evil")
-        with open(os.path.join(self.src, "mod.json"), "w", encoding="utf-8") as f:
-            json.dump({"name": "mymod", "version": "1.0.0", "scripts": ["sub/a.js"]}, f)
+            install_app.check_name("../evil")
+        with open(os.path.join(self.src, "app.json"), "w", encoding="utf-8") as f:
+            json.dump({"name": "myapp", "version": "1.0.0", "scripts": ["sub/a.js"]}, f)
         with self.assertRaises(SystemExit):
-            install_mod.install(self.src, self.mods)
+            install_app.install(self.src, self.mods)
 
     def test_marker_names_ignore_the_players_own_presets(self):
-        folder = install_mod.marker_dir(self.mods)
+        folder = install_app.marker_dir(self.mods)
         os.makedirs(folder)
-        for name in ("MyLowSettings.settingspreset", "ACEUIModLoaderMods-other.settingspreset", "ACEUIModLoaderMods-x.txt"):
+        for name in ("MyLowSettings.settingspreset", "ACEUIModLoaderApps-other.settingspreset", "ACEUIModLoaderApps-x.txt"):
             with open(os.path.join(folder, name), "wb"):
                 pass
-        self.assertEqual(install_mod.marker_names(self.mods), ["other"])
+        self.assertEqual(install_app.marker_names(self.mods), ["other"])
 
 
 @unittest.skipUnless(os.path.exists(os.path.join(_repos.game_dir(), "content.kspkg")), "game not installed")
@@ -298,18 +324,18 @@ class BundledAppsTests(unittest.TestCase):
     def setUp(self):
         self.tmp = tempfile.mkdtemp()
         self.apps = os.path.join(self.tmp, "apps")
-        mod = os.path.join(self.apps, "gizmo", "gizmo")
-        os.makedirs(mod)
-        write(os.path.join(mod, "mod.json"),
+        app = os.path.join(self.apps, "gizmo", "gizmo")
+        os.makedirs(app)
+        write(os.path.join(app, "app.json"),
               json.dumps({"version": "1.2.3", "title": "Gizmo", "developer": True,
                           "scripts": ["gizmo.js"], "styles": ["gizmo.css"]}))
         for name in ("gizmo.js", "gizmo.css"):
-            write(os.path.join(mod, name), "/* x */")
+            write(os.path.join(app, name), "/* x */")
         # things a repo has and a package must not: tests, dev pages, a README
         os.makedirs(os.path.join(self.apps, "gizmo", "tests"))
         write(os.path.join(self.apps, "gizmo", "tests", "harness.html"), "<html></html>")
         write(os.path.join(self.apps, "gizmo", "README.md"), "# gizmo")
-        write(os.path.join(mod, "notes.txt"), "not listed")
+        write(os.path.join(app, "notes.txt"), "not listed")
 
     def tearDown(self):
         shutil.rmtree(self.tmp, ignore_errors=True)
@@ -317,16 +343,16 @@ class BundledAppsTests(unittest.TestCase):
     def test_only_the_listed_files_are_bundled_and_the_index_describes_them(self):
         build = os.path.join(self.tmp, "build")
         index = build_loader.copy_apps(build, self.apps)
-        root = os.path.join(build, *build_loader.APPS_PATH.split("/"))
+        root = os.path.join(build, *build_loader.BUILTIN_PATH.split("/"))
 
         self.assertEqual(sorted(os.listdir(os.path.join(root, "gizmo"))),
-                         ["gizmo.css", "gizmo.js", "mod.json"], "the repo's tests, README and strays stay out")
+                         ["app.json", "gizmo.css", "gizmo.js"], "the repo's tests, README and strays stay out")
         self.assertEqual(index, [{"name": "gizmo", "version": "1.2.3", "title": "Gizmo", "developer": True}])
-        with open(os.path.join(root, build_loader.APPS_INDEX), encoding="utf-8") as f:
+        with open(os.path.join(root, build_loader.BUILTIN_INDEX), encoding="utf-8") as f:
             self.assertEqual(json.load(f)["apps"], index, "what the loader reads is what was copied")
 
     def test_a_bundled_app_is_held_to_the_same_manifest_rules_as_an_installed_one(self):
-        write(os.path.join(self.apps, "gizmo", "gizmo", "mod.json"),
+        write(os.path.join(self.apps, "gizmo", "gizmo", "app.json"),
               json.dumps({"version": "1.2.3", "scripts": ["missing.js"]}))
         with self.assertRaises(SystemExit):
             build_loader.copy_apps(os.path.join(self.tmp, "build"), self.apps)
@@ -371,19 +397,19 @@ class BuildLoaderTests(unittest.TestCase):
             shipped = sorted(p for p in entries
                              if not p.startswith("uiresources\\pad") and not entries[p].flags & kspkg.FLAG_DIR)
             # the table stores lower-case paths (kspkg.normalize)
-            apps_prefix = (build_loader.APPS_PATH.replace("/", "\\") + "\\").lower()
+            builtin_prefix = (build_loader.BUILTIN_PATH.replace("/", "\\") + "\\").lower()
             overrides = [pk.normalize(t) for t in build_loader.TARGETS]
             for path in overrides:
                 self.assertIn(path, shipped)
-            self.assertEqual([p for p in shipped if p not in overrides and not p.startswith(apps_prefix)],
+            self.assertEqual([p for p in shipped if p not in overrides and not p.startswith(builtin_prefix)],
                              [], "the only overrides are the entry points; the rest are bundled apps")
 
             # the bootstrap the HUD page loads lives beside the apps, at a new path of its own
-            expected = {(apps_prefix + build_loader.APPS_INDEX).lower(), pk.normalize(build_loader.BOOT_PATH)}
+            expected = {(builtin_prefix + build_loader.BUILTIN_INDEX).lower(), pk.normalize(build_loader.BOOT_PATH)}
             for _, info in build_loader.bundled_apps():
-                for rel in ["mod.json"] + info.get("scripts", []) + info.get("styles", []) + info.get("files", []):
-                    expected.add((apps_prefix + info["name"] + "\\" + rel).lower())
-            self.assertEqual({p for p in shipped if p.startswith(apps_prefix)}, expected,
+                for rel in ["app.json"] + info.get("scripts", []) + info.get("styles", []) + info.get("files", []):
+                    expected.add((builtin_prefix + info["name"] + "\\" + rel).lower())
+            self.assertEqual({p for p in shipped if p.startswith(builtin_prefix)}, expected,
                              "the package carries every listed file of every bundled app, and nothing else")
 
 
@@ -619,7 +645,7 @@ class ReproducibleBytesTests(unittest.TestCase):
         packaged = [os.path.join(SRC, name) for name in build_loader.LIB_ORDER]
         for src, info in build_loader.bundled_apps():
             packaged += [os.path.join(src, f) for f in info.get("scripts", []) + info.get("styles", [])]
-            packaged.append(os.path.join(src, install_mod.MOD_FILE))
+            packaged.append(os.path.join(src, install_app.APP_FILE))
         self.assertGreater(len(packaged), len(build_loader.LIB_ORDER), "the apps' files count too")
         for path in packaged:
             with open(path, "rb") as f:
@@ -653,7 +679,7 @@ class RepadTests(unittest.TestCase):
 
     def test_only_packages_that_lost_an_override_count_as_losers(self):
         """A package with nothing to lose is not a loser, and neither is one whose overrides
-        all still resolve. Car mods are the first kind: they only add new paths."""
+        all still resolve. Car apps are the first kind: they only add new paths."""
         counts = {"car.kspkg": (0, 0), "fine.kspkg": (2, 2), "lost.kspkg": (1, 2),
                   "gone.kspkg": (0, 1)}
         self.assertEqual(sorted(repad.losers(counts)), ["gone.kspkg", "lost.kspkg"])
@@ -715,7 +741,7 @@ class ReadmeTests(unittest.TestCase):
         is docs/images/README.md.
         """
         referenced = self.referenced_images()
-        self.assertTrue(referenced, "the README should show what the mod looks like")
+        self.assertTrue(referenced, "the README should show what the app looks like")
         missing = [r for r in referenced if not os.path.isfile(os.path.join(ROOT, *r.split("/")))]
         if len(missing) == len(referenced):
             raise unittest.SkipTest("no screenshots taken yet: " + ", ".join(missing))

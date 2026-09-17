@@ -1,16 +1,16 @@
 #!/usr/bin/env python3
 """
-check_ingame_log.py - in-game smoke test for the ACEUIModLoader and its mods.
+check_ingame_log.py - in-game smoke test for the ACEUIModLoader and its apps.
 
 The game writes the UI's console.log output into its own log as [gameface] lines,
-so after one launch + session we can tell whether the loader ran, which mods it
+so after one launch + session we can tell whether the loader ran, which apps it
 loaded, and whether anything crashed, without a debugger. Run this after playing:
 
   python tools/check_ingame_log.py            # newest log
   python tools/check_ingame_log.py <logfile>  # a specific log
 
 Exit codes: 0 loader ran on the HUD and everything it started finished loading, 1 loader never
-ran (package not applied), 2 crash/exception or a mod failed, 3 no log / HUD never
+ran (package not applied), 2 crash/exception or an app failed, 3 no log / HUD never
 loaded.
 """
 import glob
@@ -20,7 +20,7 @@ import sys
 
 LOG_DIR = os.path.join(os.path.expanduser("~"), "Saved Games", "ACE", "Logs")
 LOADER = "[ACEUIModLoader]"
-# per-mod lines worth echoing (any "[Xyz]" prefixed UI line that is not the loader)
+# per-app lines worth echoing (any "[Xyz]" prefixed UI line that is not the loader)
 INTERESTING = ("script loaded", "widget attached", "position ", "script error", "sampling ok", "not attaching")
 MAX_ECHO = 12
 
@@ -46,8 +46,8 @@ def scan(loader_lines):
     What the loader did, per page. The loader runs once per page and says so first, so
     everything after a "loader X on /page" line belongs to that page until the next one.
 
-    Per page: how many mods the game's preset list named, how many apps came bundled in
-    the package, which mods it started loading and which finished, which bundled app an
+    Per page: how many apps the game's preset list named, how many apps came bundled in
+    the package, which apps it started loading and which finished, which bundled app an
     installed copy replaced, and any line that reports a problem.
     """
     pages = {}
@@ -62,11 +62,11 @@ def scan(loader_lines):
         if current is None:
             continue
         page = pages[current]
-        for pattern, key in ((r"presets: (\d+) mod", "presets"), (r"bundled: (\d+) app", "bundled")):
+        for pattern, key in ((r"presets: (\d+) app", "presets"), (r"bundled: (\d+) app", "bundled")):
             m = re.search(pattern, line)
             if m:
                 page[key] = int(m.group(1))
-        for pattern, key in ((r"mod (\S+) \S+: loading", "attempted"), (r"mod (\S+) loaded", "loaded"),
+        for pattern, key in ((r"app (\S+) \S+: loading", "attempted"), (r"app (\S+) loaded", "loaded"),
                              (r"(\S+): installed copy overrides the bundled", "overridden")):
             m = re.search(pattern, line)
             if m:
@@ -99,10 +99,10 @@ def report(pages):
         if missing:
             print(f"      started loading but never finished: {', '.join(missing)}")
             bad.append(f"{name}: {', '.join(missing)} never finished loading")
-        # a page with nothing to load is normal (driverlabels.html has no mods); on the
-        # HUD it means the mods are not reaching the game at all
+        # a page with nothing to load is normal (driverlabels.html has no apps); on the
+        # HUD it means the apps are not reaching the game at all
         if page["empty"] and name == "/hud.html":
-            print("      nothing loaded on the HUD: no bundled apps and no installed mods found")
+            print("      nothing loaded on the HUD: no bundled apps and no installed apps found")
             bad.append("nothing loaded on the HUD")
     return bad
 
@@ -129,14 +129,14 @@ def main(argv):
     print(f"loader: {'v' + version.group(1) if version else 'never ran'} on {len(pages)} page(s)")
     failed = report(pages)
 
-    # any bracketed prefix that is not the loader's: a mod's own logger uses its title,
+    # any bracketed prefix that is not the loader's: an app's own logger uses its title,
     # which can be several words ("[ACE UI Capabilities Probe] ...")
-    mod_lines = [l for l in lines if "[gameface]" in l and LOADER not in l and re.search(r"\[[A-Z][^\]]*\] ", l)]
-    echoed = [l for l in mod_lines if any(k in l for k in INTERESTING)]
+    app_lines = [l for l in lines if "[gameface]" in l and LOADER not in l and re.search(r"\[[A-Z][^\]]*\] ", l)]
+    echoed = [l for l in app_lines if any(k in l for k in INTERESTING)]
     for l in echoed[:MAX_ECHO]:
         print("  " + l[:170])
     if len(echoed) > MAX_ECHO:
-        print(f"  ... {len(echoed) - MAX_ECHO} more mod lines")
+        print(f"  ... {len(echoed) - MAX_ECHO} more app lines")
 
     if crashes:
         print("CRASH / EXCEPTION lines:")

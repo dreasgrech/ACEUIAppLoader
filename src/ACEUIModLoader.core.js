@@ -1,19 +1,19 @@
 /**
- * ACEUIModLoader.core -- the root namespace and the small helpers every mod uses.
+ * ACEUIModLoader.core -- the root namespace and the small helpers every app uses.
  *
  * First of the library files appended to the stock `uiresources/js/cohtml.js`
  * (see tools/build_loader.py for the order), so it runs on every Gameface page
  * before Kunos' bundle. Later files add one namespace each (`ACEUIModLoader.console`,
- * `.persist`, `.panel`, `.loop`, `.loader`); mods only ever talk to `ACEUIModLoader.*`.
+ * `.persist`, `.panel`, `.loop`, `.loader`); apps only ever talk to `ACEUIModLoader.*`.
  *
  * Classic scripts: a top-level `const` is a page-wide binding but not a window
- * property, so the module is also assigned to `window.ACEUIModLoader` for mods that
+ * property, so the module is also assigned to `window.ACEUIModLoader` for apps that
  * detect the loader that way.
  */
 const ACEUIModLoader = (function () {
 
     /** Loader/library version -- keep in step with the VERSION file at the repo root. */
-    const VERSION = "0.20.0";
+    const VERSION = "0.21.0";
 
     /** Prefix of every loader log line; the game log and check_ingame_log.py grep for it. */
     const LOG_PREFIX = "[ACEUIModLoader]";
@@ -27,7 +27,7 @@ const ACEUIModLoader = (function () {
         console.log(LOG_PREFIX + " " + message);
     };
 
-    /** Prefixed logger for mods: ACEUIModLoader.logger("[PedalGraph]")("hello"). */
+    /** Prefixed logger for apps: ACEUIModLoader.logger("[PedalGraph]")("hello"). */
     const logger = function (prefix) {
         return function (message) {
             console.log(prefix + " " + message);
@@ -79,7 +79,7 @@ const ACEUIModLoader = (function () {
     };
 
     /**
-     * Run someone else's callback without letting it take the caller down: a mod's
+     * Run someone else's callback without letting it take the caller down: an app's
      * settings listener, a window's onClose, a drawer options pane. Returns what the
      * function returned, or undefined when it threw -- and says where in the log.
      */
@@ -95,14 +95,14 @@ const ACEUIModLoader = (function () {
 
     /**
      * Name a piece of work, so a profiler can say how long *that* took rather than only
-     * how long the mod took. A profiler fills `ACEUIModLoader.profiler` with something
+     * how long the app took. A profiler fills `ACEUIModLoader.profiler` with something
      * that has a `section(name, fn)`; with nothing there this is a property read and a
-     * call through, which is what a mod pays for being profilable when nobody is.
+     * call through, which is what an app pays for being profilable when nobody is.
      *
      *     ACEUIModLoader.section("render", function () { renderFrame(state, v, frac); });
      *
      * Sections nest: one inside another shows up as its child, which is what turns a flat
-     * "this mod costs 2 ms" into a tree of where the 2 ms went.
+     * "this app costs 2 ms" into a tree of where the 2 ms went.
      */
     const section = function (name, fn) {
         const sink = ACEUIModLoader.profiler;
@@ -112,7 +112,7 @@ const ACEUIModLoader = (function () {
         return sink.section(name, fn);
     };
 
-    /** True while the stock HUD is toggled off; mods keep recording but stop drawing. */
+    /** True while the stock HUD is toggled off; apps keep recording but stop drawing. */
     const hudHidden = function () {
         return Boolean(document.body) && document.body.classList.contains(HUD_HIDDEN_CLASS);
     };
@@ -151,8 +151,8 @@ const ACEUIModLoader = (function () {
         /**
          * The sink `section` above calls into, filled by a profiler while it is recording
          * and nulled when it stops. Not the profiler app: that is
-         * `ACEUIModLoader.apps.get("profiler")`, which is its panel. This is one method,
-         * and mods never touch it directly.
+         * `ACEUIModLoader.shared.get("profiler")`, which is its panel. This is one method,
+         * and apps never touch it directly.
          */
         profiler: null,
         errorText: errorText,

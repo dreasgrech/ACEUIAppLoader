@@ -7,7 +7,7 @@
     The profiler outside the game: the library from the sibling loader checkout, then the
     real files. Open directly in Edge or Chrome and press REC.
 
-    The page fakes what the HUD would be doing around it -- three mods with different
+    The page fakes what the HUD would be doing around it -- three apps with different
     appetites, the stock bundle's per-frame model sync, a stock widget reacting to it, a
     timer and an event -- so the panel has something real to measure. It demonstrates the
     panel, not the engine: a browser's performance.now() advances within a frame, which the
@@ -85,11 +85,11 @@ window.ksUI = {
     <div id="profiler"></div>
 </div>
 <div class="note">
-    <b>Press REC.</b> This page fakes a HUD around the panel: three mods, the stock model
+    <b>Press REC.</b> This page fakes a HUD around the panel: three apps, the stock model
     sync, a stock widget, a timer and a mouse handler.<br><br>
     <b>WORST</b> shows the slowest frame &mdash; a spike is injected every few seconds.<br>
     <b>LOG</b> prints the table to the browser console.<br>
-    Turn on <code>Profile stock widgets</code> in the mod's settings to see
+    Turn on <code>Profile stock widgets</code> in the app's settings to see
     <code>ks-hudtyres.onBindingUpdate</code> appear.
 </div>
 <script>
@@ -108,7 +108,7 @@ window.ksUI = {
         return acc;
     };
 
-    // three mods with different appetites, started through the library's own loop so they
+    // three apps with different appetites, started through the library's own loop so they
     // are named in the table rather than showing up as anonymous callbacks
     ACEUIModLoader.loop.start(function () { spin(9000); }, "pedalgraph");
     ACEUIModLoader.loop.start(function () { spin(2500); }, "telemetry");

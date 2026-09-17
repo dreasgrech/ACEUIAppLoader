@@ -19,7 +19,7 @@
  * and what you act on. The per-frame line above it is for spikes, where 1 ms of
  * quantisation does not matter because the spike is twenty.
  *
- * What it can see: our own mods by name (ACEUIModLoader.loop carries the owner), the stock
+ * What it can see: our own apps by name (ACEUIModLoader.loop carries the owner), the stock
  * bundle's per-frame work by function name (`perFrameAllModelUpdate` and friends -- the
  * bundle ships unminified), `engine.on` model events, DOM events and timers. And `other`:
  * frame time no script accounted for, which is the engine itself -- style, layout,
@@ -27,7 +27,7 @@
  */
 const ACEUIProfiler = (function () {
 
-    const me = ACEUIModLoader.mod("profiler");
+    const me = ACEUIModLoader.app("profiler");
     const S = ACEProfilerSampler;
 
     /** The mounted panel's handle; see `panel()` at the bottom of this file. */
@@ -170,7 +170,7 @@ const ACEUIProfiler = (function () {
      * legend swatches are still CSS, and a test keeps the two lists in step.
      */
     const BANDS = [
-        { key: "mod", label: "mods", ink: "#44ea78" },
+        { key: "app", label: "apps", ink: "#44ea78" },
         { key: "stock", label: "stock HUD", ink: "#3aa6ff" },
         { key: "event", label: "events", ink: "#ffd23a" },
         { key: "timer", label: "timers", ink: "#c07cff" },
@@ -391,7 +391,7 @@ const ACEUIProfiler = (function () {
 
     /**
      * A label per guide. Where it sits depends on the scale in force, which changes, and a
-     * mod may not write styles in its per-frame path -- so the label says which line it is
+     * app may not write styles in its per-frame path -- so the label says which line it is
      * and the graph says which scale is in force, and the stylesheet does the positioning.
      */
     const guidesMarkup = function () {
@@ -1055,7 +1055,7 @@ const ACEUIProfiler = (function () {
         if (on) {
             S.start({ widgets: Boolean(options.widgets) });
             log("recording started: animation frames, timers, DOM events, engine events and"
-                + " layout reads are instrumented; mods' own named sections are live"
+                + " layout reads are instrumented; apps' own named sections are live"
                 + (S.widgets().length ? "; " + S.widgets().length + " stock widget methods wrapped" : "")
                 + " (clock " + S.CLOCK.name + ", " + S.CLOCK.resolutionMs + " ms steps, window "
                 + options.window + " frames)");
@@ -1264,10 +1264,10 @@ const ACEUIProfiler = (function () {
         live = handleFor(state);
 
         // the same handle ACEUIProfiler.panel() hands back, offered to the other apps by
-        // name: a mod that wants to start a recording or read the last window off does not
+        // name: an app that wants to start a recording or read the last window off does not
         // have to know the profiler's global exists. Withdrawn in detach, because the
         // handle is this panel's -- and a stopped profiler has nothing to report.
-        ACEUIModLoader.apps.register(me.name, live);
+        ACEUIModLoader.shared.register(me.name, live);
         log("panel attached, clock " + S.CLOCK.name + " (" + S.CLOCK.resolutionMs + " ms steps)");
 
         return state;
@@ -1276,7 +1276,7 @@ const ACEUIProfiler = (function () {
     /**
      * What the panel actually got from the engine. Measured on a later frame, not at
      * attach: the first reading said "canvas on screen 0x0", which was my measurement,
-     * not the engine's -- nothing has been laid out yet when a mod's script runs, and a
+     * not the engine's -- nothing has been laid out yet when an app's script runs, and a
      * client* read here does not force layout the way a browser's does.
      *
      * `getComputedStyle` is no use for the other half of the question. In this engine it
@@ -1305,7 +1305,7 @@ const ACEUIProfiler = (function () {
     };
 
     const detach = function (state) {
-        ACEUIModLoader.apps.unregister(me.name);
+        ACEUIModLoader.shared.unregister(me.name);
         state.ui.stop();
 
         if (state.unsubscribeSettings) {
@@ -1327,7 +1327,7 @@ const ACEUIProfiler = (function () {
             state.bag = null;
         }
 
-        // never leave the page instrumented by a mod that is no longer running
+        // never leave the page instrumented by an app that is no longer running
         S.stop();
     };
 
@@ -1407,15 +1407,15 @@ const ACEUIProfiler = (function () {
 /*
  * Classic scripts: a top-level `const` is a page-wide binding but not a window property,
  * so anything reaching for `window.ACEUIProfiler` -- a dev-console snippet, another
- * mod -- would find nothing. The library's core does the same for the same reason.
+ * app -- would find nothing. The library's core does the same for the same reason.
  */
 window.ACEUIProfiler = ACEUIProfiler;
 
 /* Attach to #profiler: the loader creates it in game, the preview page carries it. */
-ACEUIModLoader.mod("profiler").mount(ACEUIProfiler.attach, ACEUIProfiler.detach);
+ACEUIModLoader.app("profiler").mount(ACEUIProfiler.attach, ACEUIProfiler.detach);
 
 /*
  * The show/hide key. The loader holds it rather than the panel, because a panel that has been
  * closed is not running to hold anything -- which is exactly when you want the key to work.
  */
-ACEUIModLoader.mod("profiler").toggle(ACEUIProfiler.toggleKey);
+ACEUIModLoader.app("profiler").toggle(ACEUIProfiler.toggleKey);

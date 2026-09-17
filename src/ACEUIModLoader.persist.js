@@ -1,22 +1,22 @@
 /**
- * ACEUIModLoader.persist -- the three places a HUD mod can keep state.
+ * ACEUIModLoader.persist -- the three places a HUD app can keep state.
  *
  * Primary: the stock HUD's layout container (`HUD.elementModified(id, data)` /
  * `HUD.StoredData.layouts[<current>].elements[id]`), which the game writes to disk
  * when the HUD closes and reads back on every HUD load -- the same path the stock
  * widgets use for their positions. It only exists once the HUD's layout store has
- * loaded, a little after mod scripts run, so readers poll it (see ACEUIModLoader.panel).
+ * loaded, a little after app scripts run, so readers poll it (see ACEUIModLoader.panel).
  *
  * Fallback: localStorage, which lives as long as the UI view; it survives the HUD
  * page reload that Escape/resume causes but not a game restart.
  *
  * Third: the engine's key/value container itself (`storeLoaded` / `readStore` /
  * `writeStore` / `removeStore`), which the HUD store is one key inside. It also reaches
- * disk but under a top-level key of the mod's own choosing, so it suits state too big
+ * disk but under a top-level key of the app's own choosing, so it suits state too big
  * to belong in the HUD layout. It arrives asynchronously -- see `storeApi` below.
  *
  * Ids in the HUD store follow the stock convention `hud_<name>`; localStorage keys
- * are free-form (mods use `ace<mod>.<what>`). All three take plain JSON data.
+ * are free-form (apps use `ace<app>.<what>`). All three take plain JSON data.
  */
 ACEUIModLoader.persist = (function () {
 
@@ -86,7 +86,7 @@ ACEUIModLoader.persist = (function () {
      * The engine's own key/value container (`window.STORAGE`), which is what the HUD
      * layout lives inside: the game writes every key of it to
      * `Saved Games\ACE\ui_storage.uistorage` and reads them back at startup. Unlike the
-     * HUD store this takes a **top-level key of our own**, so a mod with more to keep
+     * HUD store this takes a **top-level key of our own**, so an app with more to keep
      * than a position -- DOOM's saved games, say -- can do it without swelling the
      * layout blob the stock widgets depend on.
      *
@@ -155,9 +155,9 @@ ACEUIModLoader.persist = (function () {
      * when it never turns up. Three separate pollers for this had grown in the library --
      * the drawer waiting to adopt stored switches, input waiting for `ksUI`, the panel
      * checking every frame -- each with its own interval and deadline. The store appears
-     * a little after mod scripts run, so this is the shape every one of them needed.
+     * a little after app scripts run, so this is the shape every one of them needed.
      *
-     * Returns a cancel function, for a mod that detaches before the store shows up.
+     * Returns a cancel function, for an app that detaches before the store shows up.
      */
     const whenHudReady = function (onReady, options) {
         const opts = options || {};

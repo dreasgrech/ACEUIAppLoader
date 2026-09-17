@@ -10,7 +10,7 @@ evaluates).
 
 | command | what it does |
 |---|---|
-| `.run <name>` | loads `ACEUIModLoaderMods/snippets/<name>.js` as a script — write it in an editor, run it in game, no reinstall and no pasting |
+| `.run <name>` | loads `ACEUIModLoaderApps/snippets/<name>.js` as a script — write it in an editor, run it in game, no reinstall and no pasting |
 | `.fields [name]` | the **schema** fields of a `Model*` global or message, against what the game actually published |
 | `.logtest` | which console methods really reach this console, measured from the inside |
 
@@ -32,7 +32,7 @@ UICurrentCarState <- ModelCurrentCar  PlatformUiTypes.proto  91 defined, 88 live
 
 `.fields` with no name lists every message mapped to a global. The data is generated from
 `ACEGameInternals/proto` by `tools/gen_protofields.py` into `devconsole/protofields.js`,
-which ships under mod.json's `files` key and is **loaded on demand**, so the HUD never pays
+which ships under app.json's `files` key and is **loaded on demand**, so the HUD never pays
 for it unless someone asks. Regenerate it after a game update:
 
 ```
@@ -101,16 +101,16 @@ throws prints the error instead of killing the print.
   is not valid syntax it runs as statements (`window.x = 1`). Errors are shown
   in red. Arrow up/down walk the history (50 entries). Escape leaves the prompt.
 - **`.run <name>`**: loads `<name>.js` from the snippets folder,
-  `Saved Games/ACE/mods/uiresources/ACEUIModLoaderMods/snippets/`, as a script.
+  `Saved Games/ACE/mods/uiresources/ACEUIModLoaderApps/snippets/`, as a script.
   Write anything longer than a line in an editor, save, type `.run name` in
-  game: no reinstall, no pasting. The folder sits next to the mod folders and
-  outside every mod, so reinstalling a mod never touches it. Only plain file
+  game: no reinstall, no pasting. The folder sits next to the app folders and
+  outside every app, so reinstalling an app never touches it. Only plain file
   names are accepted (a folder URL would crash the game); a missing file is one
   warning in the log and a red line in the console. Commands start with a dot
   and a word so they never collide with JavaScript (`.5 + 1` is still a number).
 - The buffer holds the last 500 lines and lives in the page: it starts fresh
   whenever the HUD page is reloaded (Escape/resume), but everything the loader
-  and other mods logged while the page was loading is already in it.
+  and other apps logged while the page was loading is already in it.
 - Drag anywhere except the buttons and the prompt to move it; the position
   persists like the stock widgets' (see the loader's `ACEUIModLoader.panel`).
 
@@ -145,5 +145,5 @@ and `4056`, and the menu state is pushed back with
 
 Releasing it matters more than taking it — a console still holding the capture would
 leave the car unable to read its own controls — so it is released on blur, when the
-console is closed, and when the mod is detached (including being switched off in the app
+console is closed, and when the app is detached (including being switched off in the app
 drawer).

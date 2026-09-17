@@ -98,7 +98,7 @@
 
         const names = rowTexts();
 
-        ok(names.indexOf("busymod") >= 0, "the busy mod is listed: " + names.join(", "));
+        ok(names.indexOf("busymod") >= 0, "the busy app is listed: " + names.join(", "));
         ok(names.indexOf("quietmod") >= 0, "so is the quiet one");
         ok(names.indexOf("busymod") < names.indexOf("quietmod"), "costliest first");
         ok(names.indexOf("profiler") >= 0, "and the profiler itself, which is only fair");
@@ -111,7 +111,7 @@
             return r.querySelector(".pr-name").textContent === "busymod";
         })[0];
 
-        ok(row, "the busy mod has a row");
+        ok(row, "the busy app has a row");
         eq(row.querySelector(".pr-calls").textContent, "1.0", "one call per frame");
         ok(parseFloat(row.querySelector(".pr-ms").textContent) >= 1, "and its ms per frame: "
             + row.querySelector(".pr-ms").textContent);
@@ -139,7 +139,7 @@
     /* Closing a panel used to hide its root and leave the app switched on in the drawer,
        which is the one place in the UI you can get an app back from: the profiler was then
        unreachable except by its hotkey. Closing is switching off, and the key that brings it
-       back is held by the loader, because a mod that is off is not running to hold it. */
+       back is held by the loader, because an app that is off is not running to hold it. */
     t("pausing stops recording; closing switches the app off, where the drawer can see it", function () {
         const drawer = ACEUIModLoader.drawer;
 
@@ -282,7 +282,7 @@
             "the picker shows which view is on");
         ok(root.querySelector(".pr-stat").textContent.indexOf("call tree") === 0,
             "the header says what is on screen: " + root.querySelector(".pr-stat").textContent);
-        ok(parent, "the mod is listed: " + names.join(" | "));
+        ok(parent, "the app is listed: " + names.join(" | "));
         ok(childRow, "with the section it named inside it: " + names.join(" | "));
         eq(childRow.getAttribute("data-depth"), "1", "marked a level deep, which is what indents it");
         eq(rows[0].getAttribute("data-depth"), "0", "a root row is not indented");
@@ -296,7 +296,7 @@
     /*
      * On a real HUD the engine's slice is most of every frame, so the graph is a grey wall
      * with the scripts squashed into the bottom eighth. Switching a band off is what turns
-     * it back into a picture of what the mods did.
+     * it back into a picture of what the apps did.
      */
     t("a legend entry switches its band off, in the graph and the table together", function () {
         const engine = root.querySelector('.pr-key[data-value="other"]');
@@ -322,7 +322,7 @@
         ok(engine.classList.contains("off"), "and the legend says so");
         ok(!rowTexts().some(function (n) { return n.indexOf("engine") === 0; }),
             "the table dropped it too: " + rowTexts().join(" | "));
-        eq(ACEUIModLoader.mod("profiler").recall("bands", {}).other, false, "and the choice is remembered");
+        eq(ACEUIModLoader.app("profiler").recall("bands", {}).other, false, "and the choice is remembered");
 
         engine.dispatchEvent(new MouseEvent("click", { bubbles: true }));
         eq(state.bands.other, true, "clicking again brings it back");
@@ -352,7 +352,7 @@
         const parent = rows.filter(function (row) { return row.name === "selfmod"; })[0];
         const child = rows.filter(function (row) { return row.name === "inner"; })[0];
 
-        ok(parent && child, "the mod and the section it ran");
+        ok(parent && child, "the app and the section it ran");
         ok(parent.msPerFrame >= child.msPerFrame, "the parent's total includes the child's");
         ok(parent.selfPerFrame < parent.msPerFrame,
             "but its self time does not: " + parent.selfPerFrame + " of " + parent.msPerFrame);
@@ -474,10 +474,10 @@
     });
 
     t("the other apps can reach the panel by name while it is attached", function () {
-        const handle = ACEUIModLoader.apps.get("profiler");
+        const handle = ACEUIModLoader.shared.get("profiler");
 
         eq(handle, ACEUIProfiler.panel(), "the registered surface is the panel's own handle");
-        eq(handle.record(true), true, "so a mod can start a recording without knowing our global");
+        eq(handle.record(true), true, "so an app can start a recording without knowing our global");
         handle.record(false);
     });
 
@@ -485,7 +485,7 @@
         const cancelled = clock.cancelled;
 
         P.detach(state);
-        eq(ACEUIModLoader.apps.get("profiler"), null, "and it stops answering: the handle was this panel's");
+        eq(ACEUIModLoader.shared.get("profiler"), null, "and it stops answering: the handle was this panel's");
         eq(clock.cancelled, cancelled + 1, "the frame was cancelled");
         eq(state.ui.loop.running, false, "loop stopped");
         eq(S.wrapped(), false, "and nothing of ours is left wrapped around the page");

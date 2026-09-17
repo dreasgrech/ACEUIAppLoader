@@ -28,7 +28,7 @@ window.engine = {
         if (command !== "SettingsRequestVideoPresetList") { return; }
         window.setTimeout(function () {
             const response = { __Type: "SettingsResponseVideoPresetList", response: "OK",
-                filenames: ["ACEUIModLoaderMods-beta", "MyLowSettings", "ACEUIModLoaderMods-alpha", "ACEUIModLoaderMods-"] };
+                filenames: ["ACEUIModLoaderApps-beta", "MyLowSettings", "ACEUIModLoaderApps-alpha", "ACEUIModLoaderApps-"] };
             (window.__engine.handlers["SettingsResponseVideoPresetList"] || []).slice().forEach(function (e) { e.cb.call(e.ctx || window.engine, response); });
         }, 0);
     },
@@ -314,7 +314,7 @@ document.addEventListener("DOMContentLoaded", function () {
         ok(f.scroller.following(), "still following");
         f.scroller.scrollBy(-100);
         ok(!f.scroller.following(), "scrolling away stops it");
-        eq(seen.length, 1, "the mod is told once");
+        eq(seen.length, 1, "the app is told once");
         eq(seen[0], false, "that following stopped");
         f.scroller.scrollBy(100);
         ok(f.scroller.following(), "reaching the bottom resumes it");
@@ -342,7 +342,7 @@ document.addEventListener("DOMContentLoaded", function () {
     });
 
     /*
-     * In game: a mod switched off in the app drawer is detached within milliseconds of
+     * In game: an app switched off in the app drawer is detached within milliseconds of
      * loading, while its own probes are still in flight. The capabilities probe's
      * three-second WebSocket check then came back and re-filtered its list against a
      * scroller that was gone -- "Cannot read properties of null (reading 'scrollBy')".
@@ -374,7 +374,7 @@ document.addEventListener("DOMContentLoaded", function () {
         window.HUD = undefined;
         cancel = persist.whenHudReady(function () { fired += 1; });
         eq(fired, 1, "nothing to report yet");
-        eq(typeof cancel, "function", "a mod that detaches first can cancel");
+        eq(typeof cancel, "function", "an app that detaches first can cancel");
         cancel();
         window.HUD = hadHud;
     });
@@ -763,7 +763,7 @@ document.addEventListener("DOMContentLoaded", function () {
         eq(S.set("coerce", "missing", 1), undefined, "an unknown key is not invented");
     });
 
-    t("settings: listeners can be counted, so a mod can prove its detach unsubscribed", function () {
+    t("settings: listeners can be counted, so an app can prove its detach unsubscribed", function () {
         const S = ACEUIModLoader.settings;
 
         S.define("counted", [{ key: "x", type: "toggle", label: "X", value: false }]);
@@ -774,10 +774,10 @@ document.addEventListener("DOMContentLoaded", function () {
         eq(S.listenerCount("counted"), 1);
         off();
         eq(S.listenerCount("counted"), 0, "and unsubscribing really removes it");
-        eq(S.listenerCount("nobody"), 0, "a mod with no settings has none");
+        eq(S.listenerCount("nobody"), 0, "an app with no settings has none");
     });
 
-    t("settings: changes are announced to the mod and survive as stored values", function () {
+    t("settings: changes are announced to the app and survive as stored values", function () {
         window.HUD = makeHud({});
         const S = ACEUIModLoader.settings;
         const seen = [];
@@ -786,7 +786,7 @@ document.addEventListener("DOMContentLoaded", function () {
         const off = S.onChange("announce", function (key, value) { seen.push(key + "=" + value); });
 
         S.set("announce", "size", 3);
-        eq(seen.join(","), "size=3", "the mod is told");
+        eq(seen.join(","), "size=3", "the app is told");
         S.set("announce", "size", 3);
         eq(seen.length, 1, "an unchanged value says nothing");
 
@@ -828,7 +828,7 @@ document.addEventListener("DOMContentLoaded", function () {
     /* Clicking a key control arms a window-wide keydown listener. Nothing cancelled it,
        so thinking better of it and closing the window left that listener armed: the next
        key pressed anywhere -- W, driving away from the menu -- was swallowed and became
-       the mod's hotkey. */
+       the app's hotkey. */
     t("settings: a key control can be cancelled, and Escape is not a hotkey", function () {
         const S = ACEUIModLoader.settings;
         const pane = document.createElement("div");
@@ -899,7 +899,7 @@ document.addEventListener("DOMContentLoaded", function () {
         pane.remove();
     });
 
-    t("settings: a mod with settings gets a way in from the drawer, opening its own window", function () {
+    t("settings: an app with settings gets a way in from the drawer, opening its own window", function () {
         const S = ACEUIModLoader.settings;
         const d = ACEUIModLoader.drawer;
 
@@ -912,14 +912,14 @@ document.addEventListener("DOMContentLoaded", function () {
         eq(app.gear.style.display, "", "declaring settings reveals it");
 
         /* a pane unfolding inside the drawer pushes every row below it down the list, so
-           with more than a couple of mods it has to be a window of its own */
+           with more than a couple of apps it has to be a window of its own */
         app.gear.dispatchEvent(new MouseEvent("click", { bubbles: true }));
         ok(S.isOpen("geary"), "a window opened");
         eq(app.row.nextSibling, null, "and nothing unfolded inside the drawer");
 
         const win = document.querySelector("[data-ace-window='" + S.windowId("geary") + "']");
         ok(win, "the window is in the page");
-        ok(win.textContent.indexOf("Geary settings") >= 0, "titled after the mod");
+        ok(win.textContent.indexOf("Geary settings") >= 0, "titled after the app");
         ok(win.textContent.indexOf("On") >= 0, "with its controls");
 
         const shut = win.querySelector("[data-ace-window-close]");
@@ -1040,14 +1040,14 @@ document.addEventListener("DOMContentLoaded", function () {
     // ---- loop ----------------------------------------------------------------------------
 
     /*
-     * The five lines every mod in this project opened with, and the three it closed with.
+     * The five lines every app in this project opened with, and the three it closed with.
      * Two of them fail quietly when forgotten: without the per-frame panel.update a widget
-     * never returns to where it was left, and without loop.stop a mod switched off in the
+     * never returns to where it was left, and without loop.stop an app switched off in the
      * app drawer keeps its frame loop for ever.
      */
-    t("mod: panel() places the widget, drives its frame loop and stops both in one call", function () {
+    t("app: panel() places the widget, drives its frame loop and stops both in one call", function () {
         const root = document.createElement("div");
-        const me = ACEUIModLoader.mod("lifecycle");
+        const me = ACEUIModLoader.app("lifecycle");
         const frames = [];
         let ui;
 
@@ -1063,7 +1063,7 @@ document.addEventListener("DOMContentLoaded", function () {
         eq(frames.length, 1, "the callback runs on every frame");
         eq(root.style.visibility, "", "and the panel was ticked, so its position restored");
         near(parseFloat(root.style.left), 0.25 * center.clientWidth, 2, "restored from the HUD store");
-        ok(ui.panel, "the panel itself is there for a mod that needs it");
+        ok(ui.panel, "the panel itself is there for an app that needs it");
 
         clock.step(1016);
         eq(frames.length, 2, "still running");
@@ -1103,8 +1103,8 @@ document.addEventListener("DOMContentLoaded", function () {
      * with its own bounds and its own copy of the current value. One font-size in rem on a
      * root whose insides are em scales the lot, which is the part worth sharing.
      */
-    t("mod: scale sizes a panel, follows its setting and stays inside its bounds", function () {
-        const me = ACEUIModLoader.mod("scaler");
+    t("app: scale sizes a panel, follows its setting and stays inside its bounds", function () {
+        const me = ACEUIModLoader.app("scaler");
         const root = document.createElement("div");
         const seen = [];
         let scale;
@@ -1126,7 +1126,7 @@ document.addEventListener("DOMContentLoaded", function () {
 
         eq(scale.set(9), 1.5, "clamped at its maximum");
         eq(scale.set(0), 0.8, "and its minimum");
-        ok(seen.length >= 4, "every change was announced to the mod: " + seen.join(", "));
+        ok(seen.length >= 4, "every change was announced to the app: " + seen.join(", "));
 
         scale.stop();
         ACEUIModLoader.settings.set("scaler", "scale", 1.2);
@@ -1134,24 +1134,24 @@ document.addEventListener("DOMContentLoaded", function () {
         root.parentNode.removeChild(root);
     });
 
-    t("mod: scale works for a mod that declared no settings at all", function () {
-        const me = ACEUIModLoader.mod("quietscaler");
+    t("app: scale works for an app that declared no settings at all", function () {
+        const me = ACEUIModLoader.app("quietscaler");
         const root = document.createElement("div");
         const scale = me.scale(root);
 
         center.appendChild(root);
         eq(scale.set(1.4), 1.4, "set");
-        eq(me.recall("scale", 1), 1.4, "remembered under the mod's own key instead");
+        eq(me.recall("scale", 1), 1.4, "remembered under the app's own key instead");
         scale.stop();
         root.parentNode.removeChild(root);
     });
 
-    t("mod: recall and remember keep a small value under the mod's own key", function () {
-        const me = ACEUIModLoader.mod("keeper");
+    t("app: recall and remember keep a small value under the app's own key", function () {
+        const me = ACEUIModLoader.app("keeper");
 
         eq(me.recall("open", true), true, "nothing stored: the fallback");
         me.remember("open", false);
-        eq(localStorage.getItem("acekeeper.open"), "false", "stored under the mod's prefix");
+        eq(localStorage.getItem("acekeeper.open"), "false", "stored under the app's prefix");
         eq(me.recall("open", true), false, "and read back, not the fallback");
         eq(me.recall("open"), false, "no fallback needed once it is there");
         me.forget("open");
@@ -1189,38 +1189,38 @@ document.addEventListener("DOMContentLoaded", function () {
 
     t("loader: constants, aliases, and it announced itself", function () {
         const L = ACEUIModLoader.loader;
-        eq(L.ROOT, "ACEUIModLoaderMods/"); eq(ACEUIModLoader.ROOT, "ACEUIModLoaderMods/"); eq(L.MOD_FILE, "mod.json");
-        eq(L.APPS_ROOT, "ACEUIModLoaderApps/", "bundled apps live apart from installed ones: loose files never beat packed ones");
-        eq(L.APPS_FILE, "apps.json");
+        eq(L.ROOT, "ACEUIModLoaderApps/"); eq(ACEUIModLoader.ROOT, "ACEUIModLoaderApps/"); eq(L.APP_FILE, "app.json");
+        eq(L.BUILTIN_ROOT, "ACEUIModLoaderBuiltIn/", "bundled apps live apart from installed ones: loose files never beat packed ones");
+        eq(L.BUILTIN_INDEX, "apps.json");
         eq(L.DEFAULT_PAGES.join(","), "hud.html");
         eq(L.PRESET_REQUEST, "SettingsRequestVideoPresetList"); eq(L.PRESET_RESPONSE, "SettingsResponseVideoPresetList");
-        eq(L.MARKER_PREFIX, "ACEUIModLoaderMods-"); eq(L.MARKER_EXT, ".settingspreset");
-        eq(ACEUIModLoader.ready, L.ready); eq(ACEUIModLoader.mods, L.mods); eq(typeof ACEUIModLoader.addScript, "function");
+        eq(L.MARKER_PREFIX, "ACEUIModLoaderApps-"); eq(L.MARKER_EXT, ".settingspreset");
+        eq(ACEUIModLoader.ready, L.ready); eq(ACEUIModLoader.apps, L.apps); eq(typeof ACEUIModLoader.addScript, "function");
         ok(window.__log.some(function (l) { return l === "[ACEUIModLoader] loader " + ACEUIModLoader.VERSION + " on /harness.html"; }), "boot line");
     });
 
     t("loader: marker helpers and the file-name guard", function () {
         const L = ACEUIModLoader.loader;
-        eq(L.markerNames(["ACEUIModLoaderMods-b", "Other", "ACEUIModLoaderMods-a", "ACEUIModLoaderMods-", 7]).join(","), "a,b");
+        eq(L.markerNames(["ACEUIModLoaderApps-b", "Other", "ACEUIModLoaderApps-a", "ACEUIModLoaderApps-", 7]).join(","), "a,b");
         eq(L.markerNames(null).length, 0);
-        const r = L.withoutMarkers({ __Type: "x", response: "OK", filenames: ["ACEUIModLoaderMods-a", "Mine"] });
+        const r = L.withoutMarkers({ __Type: "x", response: "OK", filenames: ["ACEUIModLoaderApps-a", "Mine"] });
         eq(r.filenames.join(","), "Mine"); eq(r.response, "OK"); eq(r.__Type, "x");
         eq(L.withoutMarkers(null), null);
-        ["a.js", "pedal-graph.css", "mod.json"].forEach(function (f) { ok(L.isFileName(f), f); });
+        ["a.js", "pedal-graph.css", "app.json"].forEach(function (f) { ok(L.isFileName(f), f); });
         ["sub/a.js", "sub\\a.js", "a", "", ".", "..", ".hidden", "a.", 5, null].forEach(function (f) { ok(!L.isFileName(f), JSON.stringify(f)); });
     });
 
-    t("loader: an installed mod replaces the bundled app of the same name", function () {
+    t("loader: an installed app replaces the bundled app of the same name", function () {
         const merge = ACEUIModLoader.loader.merge;
         const shape = function (list) {
             return list.map(function (w) { return w.name + "@" + w.root; }).join(" ");
         };
-        eq(shape(merge([{ name: "a", version: "1.0.0" }], ["b"])), "a@ACEUIModLoaderApps/ b@ACEUIModLoaderMods/",
+        eq(shape(merge([{ name: "a", version: "1.0.0" }], ["b"])), "a@ACEUIModLoaderBuiltIn/ b@ACEUIModLoaderApps/",
             "bundled first, then installed");
-        eq(shape(merge([{ name: "a", version: "1.0.0" }], ["a"])), "a@ACEUIModLoaderMods/",
+        eq(shape(merge([{ name: "a", version: "1.0.0" }], ["a"])), "a@ACEUIModLoaderApps/",
             "the same name is one app, and the installed copy is the one that runs");
-        eq(shape(merge([], ["a"])), "a@ACEUIModLoaderMods/");
-        eq(shape(merge([{ name: "a", version: "1.0.0" }], [])), "a@ACEUIModLoaderApps/");
+        eq(shape(merge([], ["a"])), "a@ACEUIModLoaderApps/");
+        eq(shape(merge([{ name: "a", version: "1.0.0" }], [])), "a@ACEUIModLoaderBuiltIn/");
     });
 
     t("loader: it asked the game for the video preset list", function () {
@@ -1229,73 +1229,73 @@ document.addEventListener("DOMContentLoaded", function () {
         ok(ACEUIModLoader.loader.filtering(), "engine.on wrapped");
     });
 
-    // Discovery finishes asynchronously (the fake engine answers on a timer, mod.json
+    // Discovery finishes asynchronously (the fake engine answers on a timer, app.json
     // fetches are XHRs), so the remaining cases wait for it before the report is written.
     const finish = function () {
         const loaderLines = window.__log.filter(function (l) { return l.indexOf("[ACEUIModLoader]") === 0 || l.indexOf("[Alpha]") === 0; });
-        const statuses = ACEUIModLoader.loader.mods.map(function (m) { return m.name + "=" + m.status; }).join(" ");
+        const statuses = ACEUIModLoader.loader.apps.map(function (m) { return m.name + "=" + m.status; }).join(" ");
 
-        H.finish(["loader log: " + loaderLines.join(" | "), "mods: " + statuses, "errors: " + window.__warn.slice(-3).join(" | ")]);
+        H.finish(["loader log: " + loaderLines.join(" | "), "apps: " + statuses, "errors: " + window.__warn.slice(-3).join(" | ")]);
     };
     const waitFor = function (cond, then, deadline) {
         if (cond() || Date.now() > deadline) { then(); return; }
         window.setTimeout(function () { waitFor(cond, then, deadline); }, 10);
     };
 
-    // ACEUIModLoader.ready fires once every discovered mod has been processed (scripts loaded or skipped).
+    // ACEUIModLoader.ready fires once every discovered app has been processed (scripts loaded or skipped).
     // If it never does, report that as a failure instead of producing no report at all.
     let readyFired = false;
     window.setTimeout(function () {
         if (readyFired) { return; }
-        t("loader: became ready", function () { throw new Error("ACEUIModLoader.ready never fired; mods: " + ACEUIModLoader.loader.mods.map(function (m) { return m.name + "=" + m.status; }).join(" ")); });
+        t("loader: became ready", function () { throw new Error("ACEUIModLoader.ready never fired; apps: " + ACEUIModLoader.loader.apps.map(function (m) { return m.name + "=" + m.status; }).join(" ")); });
         finish();
     }, 5000);
     ACEUIModLoader.ready(function () {
         readyFired = true;
-        t("loader: discovered the mods from the game's answer, not a manifest", function () {
-            const mods = ACEUIModLoader.loader.mods;
+        t("loader: discovered the apps from the game's answer, not a manifest", function () {
+            const apps = ACEUIModLoader.loader.apps;
             eq(ACEUIModLoader.loader.source(), "presets");
-            eq(mods.map(function (m) { return m.name; }).join(","), "gadget,alpha,beta",
+            eq(apps.map(function (m) { return m.name; }).join(","), "gadget,alpha,beta",
                 "the bundled app, then the markers with the prefix stripped, sorted");
-            eq(mods[0].status, "loaded", "gadget is bundled in the package");
-            eq(mods[1].status, "loaded", "alpha has a folder with mod.json in the harness");
-            eq(mods[2].status, "missing", "beta has none");
-            ok(window.__log.indexOf("[ACEUIModLoader] presets: 2 mod(s)") >= 0, "discovery line");
-            ok(window.__log.indexOf("[ACEUIModLoader] mod alpha 1.2.3: loading 1 script(s), 0 stylesheet(s)") >= 0, "version from mod.json");
+            eq(apps[0].status, "loaded", "gadget is bundled in the package");
+            eq(apps[1].status, "loaded", "alpha has a folder with app.json in the harness");
+            eq(apps[2].status, "missing", "beta has none");
+            ok(window.__log.indexOf("[ACEUIModLoader] presets: 2 app(s)") >= 0, "discovery line");
+            ok(window.__log.indexOf("[ACEUIModLoader] app alpha 1.2.3: loading 1 script(s), 0 stylesheet(s)") >= 0, "version from app.json");
             ok(!window.__log.some(function (l) { return l.indexOf("nothing to load") >= 0; }), "no give-up line");
         });
 
-        t("loader: the root is created inside the HUD container before the script runs, and mod() describes the mod", function () {
+        t("loader: the root is created inside the HUD container before the script runs, and app() describes the app", function () {
             const a = window.__alpha;
             ok(a, "alpha.js ran");
-            eq(a.name, "alpha"); eq(a.title, "Alpha", "title from mod.json"); eq(a.version, "1.2.3"); eq(a.loaded, true);
-            eq(a.base, "ACEUIModLoaderMods/alpha/");
+            eq(a.name, "alpha"); eq(a.title, "Alpha", "title from app.json"); eq(a.version, "1.2.3"); eq(a.loaded, true);
+            eq(a.base, "ACEUIModLoaderApps/alpha/");
             eq(a.hudId, "hud_alpha"); eq(a.storageKey, "acealpha.pos"); eq(a.filterKey, "acealpha.filters");
             ok(a.rootPresent, "root existed while the script ran"); eq(a.rootParent, "center", "inside .absolutecenter"); eq(a.rootAttr, "alpha");
             eq(document.querySelectorAll("#alpha").length, 1, "exactly one root");
             ok(window.__log.indexOf("[Alpha] alpha script ran") >= 0, "prefixed logger uses the title");
-            const later = ACEUIModLoader.mod("alpha");
+            const later = ACEUIModLoader.app("alpha");
             eq(later.version, "1.2.3"); eq(later.root, document.getElementById("alpha"), "root by id later on");
-            eq(ACEUIModLoader.mod, ACEUIModLoader.loader.mod, "alias");
-            const dev = ACEUIModLoader.mod("zzz");
+            eq(ACEUIModLoader.app, ACEUIModLoader.loader.app, "alias");
+            const dev = ACEUIModLoader.app("zzz");
             eq(dev.version, ACEUIModLoader.loader.DEV_VERSION); eq(dev.loaded, false); eq(dev.base, ""); eq(dev.name, "zzz"); eq(dev.hudId, "hud_zzz");
-            eq(ACEUIModLoader.mod("beta").version, "dev", "listed but not loaded reads as dev");
+            eq(ACEUIModLoader.app("beta").version, "dev", "listed but not loaded reads as dev");
         });
 
         t("loader: an app bundled in the package loads with no marker, and an installed copy of the same name wins", function () {
             const g = window.__gadget;
-            const entry = ACEUIModLoader.loader.mods.filter(function (m) { return m.name === "gadget"; })[0];
+            const entry = ACEUIModLoader.loader.apps.filter(function (m) { return m.name === "gadget"; })[0];
             ok(g, "gadget.js ran");
-            eq(g.base, "ACEUIModLoaderApps/gadget/", "loaded from the bundled root, not the installed one");
-            eq(g.version, "0.1.0"); eq(g.developer, true, "its mod.json calls it a developer tool");
+            eq(g.base, "ACEUIModLoaderBuiltIn/gadget/", "loaded from the bundled root, not the installed one");
+            eq(g.version, "0.1.0"); eq(g.developer, true, "its app.json calls it a developer tool");
             eq(entry.builtin, true); eq(entry.status, "loaded");
             ok(window.__log.indexOf("[ACEUIModLoader] bundled: 2 app(s)") >= 0, "the index line");
             ok(window.__log.indexOf("[ACEUIModLoader] alpha: installed copy overrides the bundled 9.9.9") >= 0, "and it said which copy won");
-            eq(window.__alpha.base, "ACEUIModLoaderMods/alpha/", "alpha really is the installed one");
+            eq(window.__alpha.base, "ACEUIModLoaderApps/alpha/", "alpha really is the installed one");
             eq(ACEUIModLoader.loader.isDeveloper("gadget"), true); eq(ACEUIModLoader.loader.isDeveloper("alpha"), false);
-            eq(ACEUIModLoader.apps.get("gadget").answer, 42, "it offered its surface to the other apps");
-            ok(ACEUIModLoader.apps.has("gadget")); eq(ACEUIModLoader.apps.get("nope"), null, "asking for a stranger is not an error");
-            ok(ACEUIModLoader.apps.names().indexOf("gadget") >= 0);
+            eq(ACEUIModLoader.shared.get("gadget").answer, 42, "it offered its surface to the other apps");
+            ok(ACEUIModLoader.shared.has("gadget")); eq(ACEUIModLoader.shared.get("nope"), null, "asking for a stranger is not an error");
+            ok(ACEUIModLoader.shared.names().indexOf("gadget") >= 0);
         });
 
         t("drawer: a developer app is loaded but not started, and its hotkey cannot put it on screen", function () {
@@ -1303,7 +1303,7 @@ document.addEventListener("DOMContentLoaded", function () {
             eq(drawer.developerShown(), false, "the developer switch is off until someone asks for it");
             eq(window.__gadget.attached, 0, "loaded, but never started");
             eq(drawer.isVisible("gadget"), false);
-            eq(ACEUIModLoader.mod("gadget").show(true), false, "which is what the hotkey and a close button go through");
+            eq(ACEUIModLoader.app("gadget").show(true), false, "which is what the hotkey and a close button go through");
             ok(window.__log.some(function (l) { return l.indexOf("[Gadget] not shown: developer apps are switched off") === 0; }), "and it says why");
             eq(window.__gadget.attached, 0, "still not started");
             eq(drawer.setDeveloper(true), true);
@@ -1315,16 +1315,16 @@ document.addEventListener("DOMContentLoaded", function () {
             eq(ACEUIModLoader.persist.readLocal(drawer.DEV_STORE_KEY).on, false, "the choice is remembered");
         });
 
-        t("loader: mod(name).mount(attach) attaches once to #name when the DOM has it, and is a no-op otherwise", function () {
+        t("loader: app(name).mount(attach) attaches once to #name when the DOM has it, and is a no-op otherwise", function () {
             let calls = [];
             const attach = function (root) { calls.push(root); };
-            ACEUIModLoader.mod("gamma").mount(attach);
+            ACEUIModLoader.app("gamma").mount(attach);
             eq(calls.length, 0, "no #gamma yet: nothing happens");
             const gamma = document.createElement("div"); gamma.id = "gamma"; center.appendChild(gamma);
-            ACEUIModLoader.mod("gamma").mount(attach);
+            ACEUIModLoader.app("gamma").mount(attach);
             eq(calls.length, 1, "attached once the root exists"); eq(calls[0], gamma, "with the root");
             ok(gamma.hasAttribute(ACEUIModLoader.loader.MOUNTED_ATTR), "marked as mounted");
-            ACEUIModLoader.mod("gamma").mount(attach);
+            ACEUIModLoader.app("gamma").mount(attach);
             eq(calls.length, 1, "a second mount is a no-op");
             gamma.remove();
         });
@@ -1335,7 +1335,7 @@ document.addEventListener("DOMContentLoaded", function () {
         const handle = engine.on("SettingsResponseVideoPresetList", stockHandler, { tag: "stock" });
         engine.trigger("OnUICommand", "SettingsRequestVideoPresetList", { __Type: "SettingsRequestVideoPresetList", version: 0 });
 
-        t("drawer: builds a row per mod, parked off-screen behind a right-edge hot zone", function () {
+        t("drawer: builds a row per app, parked off-screen behind a right-edge hot zone", function () {
             const panel = ACEUIModLoader.drawer.build([
                 { name: "alpha", info: { title: "Alpha App" }, status: "loaded" },
                 { name: "beta", info: { title: "Beta App" }, status: "failed" }
@@ -1345,9 +1345,9 @@ document.addEventListener("DOMContentLoaded", function () {
             eq(panel.style.position, "fixed", "fixed to the screen, not the HUD layout");
             ok(ACEUIModLoader.drawer.state.hot, "hot zone created");
             eq(ACEUIModLoader.drawer.state.hot.style.right, "0px", "hot zone sits on the right edge");
-            eq(ACEUIModLoader.drawer.state.apps.length, 2, "one app per mod");
-            ok(panel.textContent.indexOf("Alpha App") >= 0, "uses the mod's title");
-            ok(panel.textContent.indexOf("failed") >= 0, "a mod that did not load says so");
+            eq(ACEUIModLoader.drawer.state.apps.length, 2, "one app per app");
+            ok(panel.textContent.indexOf("Alpha App") >= 0, "uses the app's title");
+            ok(panel.textContent.indexOf("failed") >= 0, "an app that did not load says so");
         });
 
         t("drawer: the hot zone opens it, leaving closes it after a delay", function () {
@@ -1383,7 +1383,7 @@ document.addEventListener("DOMContentLoaded", function () {
             ok(d.state.panel.style.transition.indexOf("opacity") > 0, "opacity is animated, not just set");
         });
 
-        t("drawer: a switch hides the mod's own root element and remembers the choice", function () {
+        t("drawer: a switch hides the app's own root element and remembers the choice", function () {
             const d = ACEUIModLoader.drawer;
             let root = document.getElementById("alpha");
             if (!root) {
@@ -1395,19 +1395,19 @@ document.addEventListener("DOMContentLoaded", function () {
             eq(d.isVisible("alpha"), true, "on by default");
             d.toggleApp("alpha");
             eq(d.isVisible("alpha"), false, "switched off");
-            eq(root.style.display, "none", "the mod's root is hidden");
+            eq(root.style.display, "none", "the app's root is hidden");
             eq(ACEUIModLoader.persist.readLocal(d.STORE_KEY).alpha, false, "and the choice is persisted");
 
             d.toggleApp("alpha");
-            eq(root.style.display, "", "switched back on, the mod's own CSS decides again");
+            eq(root.style.display, "", "switched back on, the app's own CSS decides again");
             eq(d.isVisible("alpha"), true);
         });
 
-        t("drawer: a switched-off mod is hidden the instant its root is created, not when the drawer builds", function () {
+        t("drawer: a switched-off app is hidden the instant its root is created, not when the drawer builds", function () {
             const d = ACEUIModLoader.drawer;
-            /* The drawer builds on ready(), which fires only after EVERY mod has loaded, so
+            /* The drawer builds on ready(), which fires only after EVERY app has loaded, so
                anything that waits for build() leaves a switched-off app visible for that
-               whole time -- about a second with a big mod in the queue, seen in game as the
+               whole time -- about a second with a big app in the queue, seen in game as the
                app flashing on and then vanishing again after a pause-menu reload. */
             d.setVisible("flashy", false);
 
@@ -1495,9 +1495,9 @@ document.addEventListener("DOMContentLoaded", function () {
             window.HUD = null;
         });
 
-        t("drawer: switching a mod off stops it, not just hides it", function () {
+        t("drawer: switching an app off stops it, not just hides it", function () {
             const d = ACEUIModLoader.drawer;
-            /* Hiding the root left the mod's key handlers, frame loop and sounds running:
+            /* Hiding the root left the app's key handlers, frame loop and sounds running:
                DOOM still answered Insert and played music while "disabled". */
             const root = document.createElement("div");
             root.id = "lively";
@@ -1505,7 +1505,7 @@ document.addEventListener("DOMContentLoaded", function () {
 
             let attached = 0, detached = 0;
             const entry = { name: "lively", info: { title: "Lively" }, status: "loaded" };
-            ACEUIModLoader.loader.mods.push(entry);
+            ACEUIModLoader.loader.apps.push(entry);
             entry.attach = function () { attached += 1; return { live: true }; };
             entry.detach = function () { detached += 1; };
             entry.instance = entry.attach(root);
@@ -1524,32 +1524,32 @@ document.addEventListener("DOMContentLoaded", function () {
             eq(root.style.display, "", "and visible again");
 
             root.parentNode.removeChild(root);
-            ACEUIModLoader.loader.mods.splice(ACEUIModLoader.loader.mods.indexOf(entry), 1);
+            ACEUIModLoader.loader.apps.splice(ACEUIModLoader.loader.apps.indexOf(entry), 1);
         });
 
-        t("drawer: a mod that gave the loader no detach is still only hidden", function () {
+        t("drawer: an app that gave the loader no detach is still only hidden", function () {
             const d = ACEUIModLoader.drawer;
             const root = document.createElement("div");
             root.id = "stubborn";
             document.getElementById("center").appendChild(root);
 
             const entry = { name: "stubborn", info: {}, status: "loaded", instance: {} };
-            ACEUIModLoader.loader.mods.push(entry);
+            ACEUIModLoader.loader.apps.push(entry);
 
             eq(ACEUIModLoader.loader.deactivate("stubborn"), false, "nothing to stop it with");
             d.setVisible("stubborn", false);
             eq(root.style.display, "none", "so hiding is all the drawer can do");
 
             root.parentNode.removeChild(root);
-            ACEUIModLoader.loader.mods.splice(ACEUIModLoader.loader.mods.indexOf(entry), 1);
+            ACEUIModLoader.loader.apps.splice(ACEUIModLoader.loader.apps.indexOf(entry), 1);
         });
 
         /*
          * The drawer used to offer two ways in: a pane that unfolded inside it, and a
-         * window of the mod's own. The pane pushed every row below it down the list, so
+         * window of the app's own. The pane pushed every row below it down the list, so
          * with a dozen apps it was unusable; it is gone, and this is the one way in.
          */
-        t("drawer: the OPTIONS button opens what the mod registered, and a throwing one does not take the drawer down", function () {
+        t("drawer: the OPTIONS button opens what the app registered, and a throwing one does not take the drawer down", function () {
             const d = ACEUIModLoader.drawer;
             const app = d.state.apps.filter(function (a) { return a.name === "alpha"; })[0];
             const bad = d.state.apps.filter(function (a) { return a.name === "beta"; })[0];
@@ -1560,7 +1560,7 @@ document.addEventListener("DOMContentLoaded", function () {
             eq(app.gear.style.display, "", "registering reveals it");
 
             app.gear.dispatchEvent(new MouseEvent("click", { bubbles: true }));
-            eq(opened, 1, "clicking it opens what the mod registered");
+            eq(opened, 1, "clicking it opens what the app registered");
             eq(d.isVisible("alpha"), true, "and does not toggle the app off");
 
             d.registerOpener("beta", function () { throw new Error("boom"); });
@@ -1569,7 +1569,7 @@ document.addEventListener("DOMContentLoaded", function () {
             ok(last(window.__log).indexOf("beta options failed: Error: boom") >= 0, "and says so in the log");
         });
 
-        t("drawer: registerOptions is gone; a mod opens its own window instead", function () {
+        t("drawer: registerOptions is gone; an app opens its own window instead", function () {
             eq(typeof ACEUIModLoader.drawer.registerOptions, "undefined", "one way in, not two");
             eq(typeof ACEUIModLoader.input.releaseAll, "undefined", "and release() has no alias");
         });
@@ -1579,7 +1579,7 @@ document.addEventListener("DOMContentLoaded", function () {
                 ok(seen, "stock handler ran");
                 eq(seen.filenames.join(","), "MyLowSettings");
                 eq(seen.response, "OK");
-                eq(ACEUIModLoader.loader.mods.length, 3, "the loader's own handler was cleared after discovery: gadget, alpha and beta, not a second round");
+                eq(ACEUIModLoader.loader.apps.length, 3, "the loader's own handler was cleared after discovery: gadget, alpha and beta, not a second round");
                 handle.clear();
                 eq((window.__engine.handlers["SettingsResponseVideoPresetList"] || []).length, 0, "clear() still works through the wrapper");
             });

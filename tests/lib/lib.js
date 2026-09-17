@@ -9,7 +9,7 @@
  * on the script tag overrides that.
  */
 (function () {
-    const FILES = ["core", "console", "dom", "keys", "scroll", "persist", "panel", "loop", "input", "apps", "loader", "drawer", "window", "settings"];
+    const FILES = ["core", "console", "dom", "keys", "scroll", "persist", "panel", "loop", "input", "shared", "loader", "drawer", "window", "settings"];
     const script = document.currentScript;
     const base = script.getAttribute("data-src") || script.src.replace(/tests\/lib\/lib\.js.*$/, "src/");
 

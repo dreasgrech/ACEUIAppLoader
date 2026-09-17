@@ -114,7 +114,7 @@ window.ksUI = {
         S.start();
         S.clear();
 
-        // a mod's frame loop: 3 ms of work, inside a 16 ms frame
+        // an app's frame loop: 3 ms of work, inside a 16 ms frame
         handles.push(ACEUIModLoader.loop.start(function () { burn(3); }, "pretendmod"));
         clock.step(1000);
         clock.step(1016);
@@ -131,7 +131,7 @@ window.ksUI = {
         S.stop();
     });
 
-    t("our mods are named by their loop's owner; the stock bundle by its function names", function () {
+    t("our apps are named by their loop's owner; the stock bundle by its function names", function () {
         S.start();
         S.clear();
 
@@ -145,8 +145,8 @@ window.ksUI = {
         const mine = tree.filter(function (n) { return n.name === "pedalgraph"; })[0];
         const stock = tree.filter(function (n) { return n.name.indexOf("perFrameAllModelUpdate") >= 0; })[0];
 
-        ok(mine, "the mod is named, not 'anonymous': " + names.join(", "));
-        eq(mine.category, "mod", "and filed as a mod");
+        ok(mine, "the app is named, not 'anonymous': " + names.join(", "));
+        eq(mine.category, "app", "and filed as an app");
         ok(stock, "the stock callback is named from its function: " + names.join(", "));
         eq(stock.category, "stock", "and filed as stock");
         stopAll();
@@ -306,7 +306,7 @@ window.ksUI = {
 
         ok(reader.layoutPerFrame >= 3, "the reader is charged for all three: " + reader.layoutPerFrame);
         ok(inner.layoutPerFrame >= 2, "including the two its callee made: " + inner.layoutPerFrame);
-        eq(innocent.layoutPerFrame, 0, "and the mod that read none is charged none");
+        eq(innocent.layoutPerFrame, 0, "and the app that read none is charged none");
         eq(lastFrame().layoutReads >= 3, true, "the per-frame total is still kept too");
 
         stopAll();
@@ -349,9 +349,9 @@ window.ksUI = {
         const totals = S.totals(frame);
 
         ok(frame.profilerMs >= 0, "the profiler's own time is recorded");
-        ok(totals.mod > 0, "the mod's slice");
+        ok(totals.app > 0, "the app's slice");
         ok(totals.other >= 0, "the engine's slice");
-        near(totals.mod + totals.other + totals.stock + totals.event + totals.timer,
+        near(totals.app + totals.other + totals.stock + totals.event + totals.timer,
             frame.wallMs, 0.5, "the slices add up to the frame");
         stopAll();
         S.stop();
@@ -387,7 +387,7 @@ window.ksUI = {
 
         ok(report.frames >= FRAMES - 2, "the window covers the frames recorded: " + report.frames);
         ok(report.wallMs > 0, "and their wall time");
-        ok(steady, "the busy mod is in the report");
+        ok(steady, "the busy app is in the report");
         ok(idle, "so is the quiet one");
         eq(steady.calls, report.frames, "one call per frame, counted exactly");
         ok(steady.msPerCall >= 0.5, "its cost per call survives the quantisation: " + steady.msPerCall.toFixed(3) + " ms");
@@ -395,13 +395,13 @@ window.ksUI = {
         ok(steady.share > idle.share, "which is what the share column says");
         ok(steady.share <= 1, "a share is a fraction of the frame: " + steady.share.toFixed(3));
         eq(report.rows[0].name, "steady", "rows come back sorted by cost");
-        ok(idle.msPerCall < 1, "a mod doing nothing costs under a tick: " + idle.msPerCall.toFixed(3) + " ms");
+        ok(idle.msPerCall < 1, "an app doing nothing costs under a tick: " + idle.msPerCall.toFixed(3) + " ms");
         stopAll();
         S.stop();
     });
 
     /*
-     * "Not only our mods but the stock HUD apps too" is the whole point, and this is the
+     * "Not only our apps but the stock HUD apps too" is the whole point, and this is the
      * shape the real ones have: a registered custom element whose prototype carries named
      * methods -- and an accessor that throws "Illegal invocation" if anything reads it off
      * the prototype, which is how the first probe took itself down.
@@ -458,12 +458,12 @@ window.ksUI = {
     });
 
     /*
-     * Wrapping can only see as deep as the frame callback: what a mod does inside its own
-     * IIFE is closures, invisible from outside. `ACEUIModLoader.section` is how a mod names
+     * Wrapping can only see as deep as the frame callback: what an app does inside its own
+     * IIFE is closures, invisible from outside. `ACEUIModLoader.section` is how an app names
      * those parts itself, and this is the tree they produce -- the answer to "what inside
-     * this mod is taking the time", which is the whole reason for the hook.
+     * this app is taking the time", which is the whole reason for the hook.
      */
-    t("a mod's own named sections nest under it, and merge into a tree across frames", function () {
+    t("an app's own named sections nest under it, and merge into a tree across frames", function () {
         let i;
 
         S.start();
@@ -484,7 +484,7 @@ window.ksUI = {
             return tree.rows.filter(function (r) { return r.name === name; })[0];
         };
 
-        ok(at("widget"), "the mod is a root: " + tree.rows.map(function (r) { return r.name; }).join(", "));
+        ok(at("widget"), "the app is a root: " + tree.rows.map(function (r) { return r.name; }).join(", "));
         eq(at("widget").depth, 0, "at the top");
         eq(at("sample").depth, 1, "its sections are one level in");
         eq(at("render").depth, 1, "both of them");

@@ -1,25 +1,25 @@
 # The surfaces the loader draws
 
-Three things a mod gets without building them: the app drawer every mod appears in, a
+Three things an app gets without building them: the app drawer every app appears in, a
 draggable window whenever it needs a second surface, and a settings page it declares
 rather than draws.
 
 ## The app drawer
 
-Every mod shows up in an **app drawer** -- installed or bundled with the loader -- that lives off the right edge of the
+Every app shows up in an **app drawer** -- installed or bundled with the loader -- that lives off the right edge of the
 screen and slides in when the pointer reaches that edge, in the spirit of Content
-Manager's app bar. Each row is a switch that shows or hides that mod, and the choice
-persists across the HUD reload on Escape/resume. A mod that failed to load still gets a
+Manager's app bar. Each row is a switch that shows or hides that app, and the choice
+persists across the HUD reload on Escape/resume. An app that failed to load still gets a
 row, saying why, rather than vanishing silently.
 
-The drawer is part of the loader rather than a mod, because the loader is the only thing
+The drawer is part of the loader rather than an app, because the loader is the only thing
 that knows what is installed.
 
-At the foot of the panel is a **DEVELOPER APPS** switch, off by default. A mod whose
-`mod.json` says `"developer": true` -- the profiler, the dev console and the capabilities
+At the foot of the panel is a **DEVELOPER APPS** switch, off by default. An app whose
+`app.json` says `"developer": true` -- the profiler, the dev console and the capabilities
 probe, which ship with the loader -- is listed only while that switch is on. It is a
 master switch rather than a filter: an app it hides is stopped as well, and cannot be
-brought back by its own hotkey or by `mod().show(true)` while it is off (both say so in
+brought back by its own hotkey or by `app().show(true)` while it is off (both say so in
 the log). An app on the screen with no row to switch it off again is exactly what the
 show/hide lifecycle exists to prevent. Each app's own switch is left untouched, so they
 come back as they were -- and since an app is on unless switched off, turning developer
@@ -28,34 +28,34 @@ apps on shows them working rather than three rows that each need switching on as
 Switches are written to **both** stores: `localStorage` so a switched-off app is hidden
 instantly on the Escape/resume reload, and the stock **HUD layout container**, which is
 the only one the game writes to disk and therefore the only one that survives a game
-restart. The HUD store appears a little after mod scripts run, so it is adopted when it
+restart. The HUD store appears a little after app scripts run, so it is adopted when it
 turns up and mirrored back into `localStorage`; a switch flipped in the meantime wins
 over the copy from disk. The game saves that store when the HUD closes, so quitting via
 Escape is what commits it.
 
-A mod should hand `mount` both halves of its lifecycle, so the drawer can really turn it
+An app should hand `mount` both halves of its lifecycle, so the drawer can really turn it
 off rather than merely hide it:
 
 ```js
-ACEUIModLoader.mod("telemetry").mount(ACEUITelemetry.attach, ACEUITelemetry.detach);
+ACEUIModLoader.app("telemetry").mount(ACEUITelemetry.attach, ACEUITelemetry.detach);
 ```
 
-Hiding the root is not enough on its own: a hidden mod keeps its key handlers, its
-frame loop and its sounds. With a detach the loader stops the mod through it, and a mod
-switched off at startup is never attached at all. A mod that supplies no detach is only
+Hiding the root is not enough on its own: a hidden app keeps its key handlers, its
+frame loop and its sounds. With a detach the loader stops the app through it, and an app
+switched off at startup is never attached at all. An app that supplies no detach is only
 hidden, which is all the drawer can do for it.
 
-Each row's OPTIONS button opens whatever that mod registered:
+Each row's OPTIONS button opens whatever that app registered:
 
 ```js
 ACEUIModLoader.drawer.registerOpener("telemetry", function () { myWindow.open(); });
 ```
 
-Declaring settings does this for you, so most mods never call it. If the opener throws,
+Declaring settings does this for you, so most apps never call it. If the opener throws,
 the failure is logged and the rest of the drawer keeps working.
 
 API: `open()`, `close()`, `toggle()`, `isVisible(name)`, `setVisible(name, on)`,
-`toggleApp(name)`, `registerOpener(name, open)`, `build(mods)`.
+`toggleApp(name)`, `registerOpener(name, open)`, `build(apps)`.
 
 The drawer is styled with inline styles rather than a stylesheet: the loader reaches the
 page by overriding a game file, and every file the package adds changes which layouts win
@@ -65,7 +65,7 @@ in this Cohtml build. Inline `transition` still animates the slide.
 
 ## Windows
 
-Any mod that needs a second surface — settings, help, a picker, a report — gets one
+Any app that needs a second surface — settings, help, a picker, a report — gets one
 without hand-building a panel, wiring dragging, remembering where the player put it or
 running a frame loop:
 
@@ -95,18 +95,18 @@ content in `body`.
 Options, all optional: `title`, `width`, `left`, `top`, `onOpen(win)`, `onClose(id)`. A
 hook that throws is logged and ignored rather than breaking the window.
 
-**The id is per window, not per mod** — a mod can have several. It is also the storage
-key, so each window remembers its own position; prefix it with the mod name
+**The id is per window, not per app** — an app can have several. It is also the storage
+key, so each window remembers its own position; prefix it with the app name
 (`"doom.help"`, `"telemetry.laps"`) to keep them apart.
 
 Dragging and position persistence come from `ACEUIModLoader.panel`, which settles a
 restored position over a few frames, so one shared frame loop runs while any window is
 open and stops when the last one closes.
 
-## A settings page per mod
+## A settings page per app
 
-A mod declares what it has; the loader stores the values, draws the controls in the app
-drawer's options pane, and tells the mod when something changes. The mod never touches
+An app declares what it has; the loader stores the values, draws the controls in the app
+drawer's options pane, and tells the app when something changes. The app never touches
 storage or builds a form.
 
 ```js
@@ -122,19 +122,19 @@ ACEUIModLoader.settings.get("devconsole", "scale");
 ACEUIModLoader.settings.onChange("devconsole", function (key, value) { ... });
 ```
 
-Declaring settings is all it takes for a way in to appear on that mod's drawer row.
-Clicking it opens **that mod's own settings window** — an `ACEUIModLoader.window`, so it
+Declaring settings is all it takes for a way in to appear on that app's drawer row.
+Clicking it opens **that app's own settings window** — an `ACEUIModLoader.window`, so it
 is a normal draggable panel with an [X] at its top right, whose position is remembered per
-mod. It can also be driven directly: `settings.open(mod)`, `.close(mod)`, `.toggle(mod)`,
-`.isOpen(mod)`. Settings deliberately do *not*
-unfold inside the drawer: with more than a couple of mods an inline pane pushes every row
-below it down the list and the drawer stops being usable. A mod with something more
+app. It can also be driven directly: `settings.open(app)`, `.close(app)`, `.toggle(app)`,
+`.isOpen(app)`. Settings deliberately do *not*
+unfold inside the drawer: with more than a couple of apps an inline pane pushes every row
+below it down the list and the drawer stops being usable. An app with something more
 bespoke than a settings page registers what to open itself, with `registerOpener`.
 
 Besides the value types there are two that carry no value: **`action`** is a button the
-mod handles (`{ type: "action", label, button, press: fn }`) and **`info`** is a line the
-mod computes (`{ type: "info", label, text: fn }`, recomputed on every repaint, so it can
-show live state). Without those a mod needs a hand-built pane for a single button, which
+app handles (`{ type: "action", label, button, press: fn }`) and **`info`** is a line the
+app computes (`{ type: "info", label, text: fn }`, recomputed on every repaint, so it can
+show live state). Without those an app needs a hand-built pane for a single button, which
 is exactly what the settings page is meant to replace.
 
 **Types are limited to controls this engine is known to render.** Cohtml is not a browser:
@@ -144,7 +144,7 @@ and DOOM. `text` uses a plain `<input>` (proven by the console prompt) and takes
 keyboard through `ACEUIModLoader.input` while focused, so typing a value cannot drive the
 car.
 
-**`key` is why this exists.** Mods that hardcode hotkeys collide with whatever the player
+**`key` is why this exists.** Apps that hardcode hotkeys collide with whatever the player
 has bound in the game, and their bindings are not ours to shadow — so the dev console's
 toggle and DOOM's show/hide key are both rebindable from the drawer. Clicking the control
 waits for a key; Escape or a click anywhere else cancels, because a control that could only
@@ -152,4 +152,4 @@ be escaped by pressing *some* key would swallow whichever one you pressed next.
 
 Values are written to both stores: the HUD layout container, which the game writes to disk
 and is the only thing that survives a restart, and `localStorage`, read synchronously so a
-value is there the moment a mod asks for it.
+value is there the moment an app asks for it.

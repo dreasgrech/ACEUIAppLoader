@@ -27,7 +27,7 @@ Ten categories, ~70 checks:
   and an active Blob-URL worker round-trip.
 - **Media & audio** — `AudioContext` (expected absent), `HTMLAudioElement.play`
   (exists but silent — no decoder), video `canPlayType` (empty — the "no demuxers"
-  evidence), and the `engine.trigger` FMOD/UI-command bridge the mods actually use
+  evidence), and the `engine.trigger` FMOD/UI-command bridge the apps actually use
   for sound.
 - **Crypto & encoding** — `crypto.getRandomValues`, `crypto.subtle`, `btoa`/`atob`.
 - **DOM & observers** — Mutation/Resize/Intersection observers, `DOMParser`,
@@ -39,7 +39,7 @@ Ten categories, ~70 checks:
 ### Reading the results
 
 The panel groups the checks by category with a coloured dot per row. The same run is
-written to the game log with the mod's prefix, so `check_ingame_log.py` (in the
+written to the game log with the app's prefix, so `check_ingame_log.py` (in the
 loader repo) can read the capability list off a headless-friendly game session:
 
 ```
@@ -63,13 +63,13 @@ so the probe can never wedge the HUD.
 
 ## Layout
 
-- `capabilities/` — the shipped mod, exactly what lands in
-  `Saved Games\ACE\mods\uiresources\ACEUIModLoaderMods\capabilities\`:
-  `mod.json` (version, styles, scripts), `capabilities.js`, `capabilities.css`.
-- `tests/test_mod.py` — runs the loader's shared test kit (`modkit.py`): mod.json,
+- `capabilities/` — the shipped app, exactly what lands in
+  `Saved Games\ACE\mods\uiresources\ACEUIModLoaderApps\capabilities\`:
+  `app.json` (version, styles, scripts), `capabilities.js`, `capabilities.css`.
+- `tests/test_app.py` — runs the loader's shared test kit (`appkit.py`): app.json,
   the project's JavaScript style rules, the Cohtml rules, class/stylesheet
   agreement, and `tests/harness.html` in a headless browser.
-- `dev/preview.html` — the mod outside the game (most features read "yes" in a real
+- `dev/preview.html` — the app outside the game (most features read "yes" in a real
   browser; the in-game run is the one that matters).
 
 ## Install
@@ -87,8 +87,8 @@ one until it is removed again, and then a re-run of the install plus a HUD reloa
 in game (Escape, resume) is the whole edit loop.
 
 ```
-python tools/install_mod.py apps/capabilities/capabilities
-python tools/install_mod.py --remove capabilities
+python tools/install_app.py apps/capabilities/capabilities
+python tools/install_app.py --remove capabilities
 ```
 
 ## Tests

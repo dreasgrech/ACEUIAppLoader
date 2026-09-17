@@ -5,20 +5,20 @@
  *
  * Sit still for about 40 s. It builds synthetic apps shaped like real ones -- a root in
  * the HUD container, ~60 elements each, an ACEUIModLoader.panel (so they add the same
- * global listeners and per-frame position work), and a frame loop doing a typical mod's
+ * global listeners and per-frame position work), and a frame loop doing a typical app's
  * writes -- then measures the page's frame rate as their number grows, and takes them all
  * away again.
  *
  * Two questions, one run:
  *
  *   1. How many apps can the HUD carry? 0, 4, 8, 16 and 24 in turn. The measured page
- *      rate is 58.5 fps with today's four mods (dev/snippets/fpsprobe.js), and none of
+ *      rate is 58.5 fps with today's four apps (dev/snippets/fpsprobe.js), and none of
  *      them costs a measurable frame, so the interesting number is where that stops
  *      being true.
  *   2. Does one shared frame loop beat one loop per app? The 16-app step is measured
  *      twice, once with 16 separate requestAnimationFrame loops and once with a single
  *      loop calling the same 16 callbacks. That decides whether the library should own
- *      the frame loop rather than handing each mod its own.
+ *      the frame loop rather than handing each app its own.
  *
  * Everything it creates is removed at the end, including the panels' listeners.
  */
@@ -109,7 +109,7 @@
     };
 
     /**
-     * Shaped like a real mod rather than an empty div: a fixed set of elements built once,
+     * Shaped like a real app rather than an empty div: a fixed set of elements built once,
      * of which a few are written every frame. The writes are the cheap kind the project's
      * own rules ask for -- transforms and textContent, never geometry -- so this measures
      * the floor cost of *having* an app, not the cost of a badly written one.

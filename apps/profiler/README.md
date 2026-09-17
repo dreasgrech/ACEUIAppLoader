@@ -2,7 +2,7 @@
 
 A profiler for Assetto Corsa EVO's UI, in the shape of the Unity profiler: a graph of the last frames on top, a table of what cost what underneath. One of the loader's **developer apps** -- it ships inside `ACEUIModLoader.kspkg`, and the app drawer keeps it behind the `DEVELOPER APPS` switch that is off by default.
 
-It profiles the mods the loader runs **and the game's own stock HUD**, which turns out to be possible for three reasons, all measured rather than assumed -- see [`docs/internals.md`](docs/internals.md).
+It profiles the apps the loader runs **and the game's own stock HUD**, which turns out to be possible for three reasons, all measured rather than assumed -- see [`docs/internals.md`](docs/internals.md).
 
 ## Using it
 
@@ -12,17 +12,17 @@ that started with the HUD would be measuring every session whether asked or not.
 - **F9** shows and hides the panel (rebindable in its settings, from the app drawer).
 - **REC** starts and stops recording; **CLEAR** empties the graph and the table.
 - **TREE** is the stack-trace view: every app with what it called inside it, indented and
-  merged across the window. Wrapping alone only reaches as deep as a mod's frame callback,
-  so the mods name their own parts with `ACEUIModLoader.section(...)` -- PedalGraph's
+  merged across the window. Wrapping alone only reaches as deep as an app's frame callback,
+  so the apps name their own parts with `ACEUIModLoader.section(...)` -- PedalGraph's
   `read model` / `render`, Telemetry's `draw map` / `draw trace`, DOOM's `doom tic` /
-  `present frame` -- and those appear here as children of the mod that ran them.
+  `present frame` -- and those appear here as children of the app that ran them.
 - **WINDOW / TREE / WORST** are one picker, because they are one choice of what the table
   is showing.
 - **Any column header** sorts the table; the same header again turns it round. Total finds
   the expensive branch, **self** the expensive function inside it, **calls** the thing
   running four hundred times a frame, **layout** whoever is making the engine re-measure.
   In TREE the sort applies within each parent, so the hierarchy survives it.
-- **total vs self**: total is the branch, self is the row's own hands. A mod at 2 ms total
+- **total vs self**: total is the branch, self is the row's own hands. An app at 2 ms total
   and 0.05 ms self is not slow -- it is calling something slow, and the row under it in
   TREE names it.
 - **Any legend entry** switches its category off, in the graph and the table together, and
@@ -38,7 +38,7 @@ that started with the HUD would be measuring every session whether asked or not.
   everything inside is em, the same way the dev console and DOOM scale themselves.
 - **Profile stock widgets** (a setting, off by default) wraps the methods of every custom
   element on the page, so `ks-huddamage.process` and friends appear in the table beside our
-  own mods. It is about 150 wrappers, which is worth asking for rather than assuming; it
+  own apps. It is about 150 wrappers, which is worth asking for rather than assuming; it
   can be turned on and off between recordings.
 - The graph ranges itself between 17.1, 33, 66 and 133 ms full height, following the
   window's worst frame and forgetting it slowly (about two and a half seconds). 17.1 ms is
@@ -64,8 +64,8 @@ python tools/build_loader.py --dups=auto --install
 To iterate, install it loose as well; the installed copy wins over the bundled one until it is removed:
 
 ```
-python tools/install_mod.py apps/profiler/profiler
-python tools/install_mod.py --remove profiler
+python tools/install_app.py apps/profiler/profiler
+python tools/install_app.py --remove profiler
 ```
 
 `dev/preview.html` runs it outside the game against a faked HUD, and `dev/gallery.html` shows the panel with fixed numbers in it -- the same picture every time, so a change to the look is visible as a change to the picture (`?tree`, `?worst`, `?narrow` for the other views).

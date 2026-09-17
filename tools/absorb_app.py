@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-absorb_app.py - move a mod repo into this one as `apps/<name>/`, history and all.
+absorb_app.py - move an app repo into this one as `apps/<name>/`, history and all.
 
 The developer apps (dev console, capabilities probe, profiler) ship with the loader
 rather than as three loose downloads; see docs/developer-apps.md. This is the one-off
@@ -26,8 +26,8 @@ whatever `git config user.name/user.email` says -- run it yourself so that is yo
 Usage:
   python tools/absorb_app.py <app repo>            print the commands, run nothing
   python tools/absorb_app.py <app repo> --run      run them, stopping at the first error
-  python tools/absorb_app.py <app repo> --name x   the mod name, if it is not the one
-                                                   folder with a mod.json in the repo
+  python tools/absorb_app.py <app repo> --name x   the app name, if it is not the one
+                                                   folder with an app.json in the repo
 """
 import json
 import os
@@ -38,7 +38,7 @@ import tempfile
 
 import _repos
 
-MOD_FILE = "mod.json"
+APP_FILE = "app.json"
 APPS_DIR = "apps"
 BRANCH_PREFIX = "absorb-"
 REMOTE_SUFFIX = "-absorb"
@@ -63,13 +63,13 @@ def git_out(cmd, cwd):
     return out.stdout.strip() if out.returncode == 0 else ""
 
 
-def mod_name(repo):
-    """The mod's name: the one folder in the repo holding a mod.json. It becomes apps/<name>."""
+def app_name(repo):
+    """The app's name: the one folder in the repo holding an app.json. It becomes apps/<name>."""
     found = [d for d in sorted(os.listdir(repo))
-             if os.path.isdir(os.path.join(repo, d)) and os.path.isfile(os.path.join(repo, d, MOD_FILE))]
+             if os.path.isdir(os.path.join(repo, d)) and os.path.isfile(os.path.join(repo, d, APP_FILE))]
     if len(found) != 1:
-        raise SystemExit("expected exactly one folder with %s in %s, found %s" % (MOD_FILE, repo, found))
-    with open(os.path.join(repo, found[0], MOD_FILE), encoding="utf-8") as f:
+        raise SystemExit("expected exactly one folder with %s in %s, found %s" % (APP_FILE, repo, found))
+    with open(os.path.join(repo, found[0], APP_FILE), encoding="utf-8") as f:
         info = json.load(f)
     return info.get("name") or found[0]
 
@@ -157,7 +157,7 @@ if __name__ == "__main__":
         sys.exit(1)
 
     app_repo = os.path.abspath(argv[0])
-    app_name = named[0] if named else mod_name(app_repo)
+    app_name = named[0] if named else app_name(app_repo)
     scratch_dir, steps = plan(app_repo, app_name)
 
     if "--run" not in flags:

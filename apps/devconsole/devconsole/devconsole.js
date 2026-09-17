@@ -4,7 +4,7 @@
  * Shows what the UI logs (everything `ACEUIModLoader.console` captured, including the
  * stock bundle's own console.* output and uncaught errors) in a draggable panel,
  * with per-level filters, and runs JavaScript typed into its prompt against the
- * HUD page (e.g. `ModelCurrentCar.speed`, `ACEUIModLoader.mods`). Toggle with the
+ * HUD page (e.g. `ModelCurrentCar.speed`, `ACEUIModLoader.apps`). Toggle with the
  * backquote key, which the loader holds so that it works while the console is switched off.
  *
  * Built on the ACEUIModLoader library: `ACEUIModLoader.console` is the source of lines and
@@ -20,7 +20,7 @@
  * rebuilt after attach.
  *
  * The line buffer lives in the page: it starts fresh whenever the HUD page is
- * reloaded (Escape/resume), but lines the loader and other mods logged while the
+ * reloaded (Escape/resume), but lines the loader and other apps logged while the
  * page was loading are already in it when the console attaches.
  *
  * Usage: `DevConsole.attach(rootElement)` returns the console's state;
@@ -29,10 +29,10 @@
 const DevConsole = (function () {
 
     /**
-     * Identity from the loader: name, version (mod.json), title, root, a prefixed
+     * Identity from the loader: name, version (app.json), title, root, a prefixed
      * logger and the storage keys, so none of it is repeated here.
      */
-    const me = ACEUIModLoader.mod("devconsole");
+    const me = ACEUIModLoader.app("devconsole");
 
     /**
      * Keyboard. Names are `e.key` / `e.code` values; the numbers are the legacy
@@ -51,7 +51,7 @@ const DevConsole = (function () {
     const LOGTEST_COMMAND = "logtest";
 
     /**
-     * The recovered protobuf schemas, generated into a data file beside the mod by
+     * The recovered protobuf schemas, generated into a data file beside the app by
      * tools/gen_protofields.py and loaded the first time `.fields` is used, so the HUD
      * never pays for them unless someone asks.
      */
@@ -64,7 +64,7 @@ const DevConsole = (function () {
     /** Every console method worth testing for capture; `.logtest` reports on each. */
     const LOG_METHODS = ["log", "info", "debug", "warn", "error", "trace", "dir", "table", "assert"];
     const LOGTEST_SETTLE_MS = 200;
-    /** Snippets live next to the mod folders, outside any mod, so reinstalling a mod never removes them. */
+    /** Snippets live next to the app folders, outside any app, so reinstalling an app never removes them. */
     const SNIPPET_DIR = ACEUIModLoader.ROOT + "snippets/";
     const SNIPPET_EXT = ".js";
     const SNIPPET_NAME_RE = /^[A-Za-z0-9_.-]+$/;
@@ -115,7 +115,7 @@ const DevConsole = (function () {
      * Scrolling is ACEUIModLoader.scroll's job. Cohtml does not scroll an overflowing box
      * by itself, so this panel has to move the body and draw its own thumb -- and the
      * capabilities probe needed exactly the same behaviour, so it lives in the library
-     * rather than in two mods. The wheel's inverted sign and the "follow the newest line
+     * rather than in two apps. The wheel's inverted sign and the "follow the newest line
      * until you scroll away" rule are both in there.
      */
     const scrolling = ACEUIModLoader.scroll;
@@ -498,16 +498,16 @@ const DevConsole = (function () {
      * controls, or typing an expression toggles headlights, wipers and everything else
      * bound to a letter.
      *
-     * The mechanism lives in ACEUIModLoader.input, shared with any mod that needs it --
+     * The mechanism lives in ACEUIModLoader.input, shared with any app that needs it --
      * it sets both of the engine's flags (`is_chat_active` for letters and
      * `ignore_gameplay_input_actions` for bound actions such as the arrow keys) and
-     * counts holders so two mods can want the keyboard at once.
+     * counts holders so two apps can want the keyboard at once.
      *
      * Releasing matters more than taking: a console left holding the capture would leave
      * the car deaf to its own controls, so blur, close and detach all release it.
      *
      * ACEUIModLoader.input counts holders, so releasing here cannot take the keyboard
-     * away from another mod that still wants it (DOOM holds it while it is open).
+     * away from another app that still wants it (DOOM holds it while it is open).
      */
     const captureKeyboard = function (on) {
         const input = ACEUIModLoader.input;
@@ -861,7 +861,7 @@ const DevConsole = (function () {
     };
 
     /**
-     * `.run <name>` loads `ACEUIModLoaderMods/snippets/<name>.js` as a script: write it in
+     * `.run <name>` loads `ACEUIModLoaderApps/snippets/<name>.js` as a script: write it in
      * an editor, run it in game, no reinstall and no pasting. Only plain file names are
      * accepted (a folder URL crashes the game); a missing file is one warning in the log.
      */
@@ -887,7 +887,7 @@ const DevConsole = (function () {
     /**
      * `.fields <name>` -- what a message can carry, against what the game actually
      * published. The live `Model*` objects only show the fields this build fills in; the
-     * recovered schemas (ACEGameInternals/proto, shipped beside the mod by
+     * recovered schemas (ACEGameInternals/proto, shipped beside the app by
      * tools/gen_protofields.py) say what else is defined. The difference is the point.
      */
     const withProtos = function (onReady) {
@@ -1177,8 +1177,8 @@ const DevConsole = (function () {
      * and all, in the console's own buffer. Reading the log is `ACEUIModLoader.console`
      * (that is where the lines come from), and printing to it is `console.log`.
      *
-     *     const dc = ACEUIModLoader.apps.get("devconsole");
-     *     if (dc) { dc.evaluate("ACEUIModLoader.mods.length"); }
+     *     const dc = ACEUIModLoader.shared.get("devconsole");
+     *     if (dc) { dc.evaluate("ACEUIModLoader.apps.length"); }
      *
      * Offered while the console is attached, withdrawn when it is not: there is no panel
      * to show the answer in otherwise.
@@ -1237,7 +1237,7 @@ const DevConsole = (function () {
 
         state.ui = me.panel(root, function (now) { tick(state, now); });
         state.unsubscribe = lines.subscribe(function () { state.dirty = true; });
-        ACEUIModLoader.apps.register(me.name, surface(state));
+        ACEUIModLoader.shared.register(me.name, surface(state));
         log("console attached, " + lines.entries().length + " buffered line(s)"
             + ", scale " + state.scale + ", toggle key " + toggleKey());
 
@@ -1246,7 +1246,7 @@ const DevConsole = (function () {
 
     /** Stop the loop, stop following the buffer and release the listeners. The DOM is left in place. */
     const detach = function (state) {
-        ACEUIModLoader.apps.unregister(me.name);
+        ACEUIModLoader.shared.unregister(me.name);
         state.ui.stop();
 
         if (state.unsubscribe) {
@@ -1311,11 +1311,11 @@ const DevConsole = (function () {
 }());
 
 /* Attach to #devconsole: the loader creates it in game, the preview page carries it. */
-ACEUIModLoader.mod("devconsole").mount(DevConsole.attach, DevConsole.detach);
+ACEUIModLoader.app("devconsole").mount(DevConsole.attach, DevConsole.detach);
 
 /*
  * The show/hide key, held by the loader rather than by the panel: a console that has been
  * closed is switched off, so it is not running to hold a key binding of its own -- and being
  * closed is exactly when you want the key to work.
  */
-ACEUIModLoader.mod("devconsole").toggle(DevConsole.toggleKey);
+ACEUIModLoader.app("devconsole").toggle(DevConsole.toggleKey);

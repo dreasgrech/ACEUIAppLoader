@@ -1,7 +1,7 @@
-# Shared library for ACE UI mods -- investigation
+# Shared library for ACE UI apps -- investigation
 
-Written 2026-09-14, before starting the second mod (an in-game debug console).
-Goal: pull the reusable parts out of PedalGraph so both mods, and later ones,
+Written 2026-09-14, before starting the second app (an in-game debug console).
+Goal: pull the reusable parts out of PedalGraph so both apps, and later ones,
 share one library, one HUD entry point and one package.
 
 ## 1. What is in PedalGraph today (627 lines)
@@ -15,8 +15,8 @@ Census of `src/uiresources/js/pedalgraph.js`, grouped by what it is really about
 | Position persistence | `hudElements`, `isPosition`, `currentPosition`, `savePosition`, `readLocalPosition`, `applyPosition`, `parentHasSize`, `finishRestore`, `restoreImmediately`, `maybeRestore` | 135 | yes, this is the biggest win |
 | Drag | `moveTo`, `onMouseDown`, `onMouseMove`, `onMouseUp`, listener wiring in `attach`/`detach` | 60 | yes |
 | Frame loop | `tick` scaffolding (reschedule, hidden-HUD check, periodic log) | 25 | yes, as a "widget runtime" |
-| Lifecycle | `attach`, `detach`, `create` shell, boot block | 60 | yes, the pattern; the markup is per mod |
-| PedalGraph proper | `TRACES`, `markup`/`stripMarkup`, `setSlot`, `scaleTransform`, `shiftTransform`, `readModel`, `commitSample`, `renderFrame`, `logSample` | 200 | no, this is the mod |
+| Lifecycle | `attach`, `detach`, `create` shell, boot block | 60 | yes, the pattern; the markup is per app |
+| PedalGraph proper | `TRACES`, `markup`/`stripMarkup`, `setSlot`, `scaleTransform`, `shiftTransform`, `readModel`, `commitSample`, `renderFrame`, `logSample` | 200 | no, this is the app |
 
 Roughly two thirds of the file is infrastructure a debug console needs
 unchanged: a draggable panel that remembers where it was, hides with the HUD,
@@ -32,23 +32,23 @@ must respect all of them.
   later scripts by name. There is no `import`. The library is therefore a
   handful of IIFE modules loaded in order, exactly like uplinkjs.
 - **One `hud.html`.** Only one package can override it (the game's lookup
-  returns one record per hash). Two mods cannot each ship their own copy, so
+  returns one record per hash). Two apps cannot each ship their own copy, so
   the override must become a shared **entry point** that loads the library
-  and then every enabled mod.
+  and then every enabled app.
 - **One package is far simpler than several.** The game re-sorts the merged
   table after each package it adds; `lookup_sim` models one mod package. With
   several mod packages the padding search would have to model the whole
   chain and depends on the order the directory listing returns them. One
-  package for "all our UI mods" keeps `find_padding` as it is.
+  package for "all our UI apps" keeps `find_padding` as it is.
 - **Cohtml rules.** Per-frame work may only change transforms (SVG/geometry
   rebuilds crashed the game); no `var(--x, fallback)`; the HUD page is
-  reloaded on Escape/resume, so every mod restarts and must restore state.
+  reloaded on Escape/resume, so every app restarts and must restore state.
 - **Project style.** No classes, no `this`, function expressions, `let`/`const`
   (tests enforce this on every shipped script).
 - **Logging goes to the game log.** Every `console.log` from the UI lands in
   `Logs\log-*.txt` as `[gameface] [info]`. `console.warn` and `console.error`
   do too, as `[warning]`. That is our only output channel today -- and the
-  thing the debug console mod wants to show in-game.
+  thing the debug console app wants to show in-game.
 
 ## 3. What the debug console needs that PedalGraph did not
 
@@ -56,7 +56,7 @@ must respect all of them.
   `console.log` 658 times, `warn` 205, `error` 132, `trace` 143 (it already
   wraps `console.trace` itself, so wrapping must chain, not replace). To catch
   the stock HUD's own messages the hook must be installed in `hud.html` before
-  `components.js`, i.e. in the entry point, not in the mod's widget script
+  `components.js`, i.e. in the entry point, not in the app's widget script
   which loads later.
 - **Catch errors.** `window.addEventListener("error", ...)` already proved
   useful (hud.html diagnostics); `unhandledrejection` should join it.
@@ -73,27 +73,27 @@ must respect all of them.
 ## 4. Proposed structure
 
 ```
-ACEPedalGraph/                (rename later; it is becoming "ACE UI mods")
+ACEPedalGraph/                (rename later; it is becoming "ACE UI apps")
   lib/                        shared library, one IIFE per file, loaded in this order
     ACEUIModLoader.core.js           ACEUIModLoader.core: clamp, el/close, toArray, percentText, log(prefix)
     ACEUIModLoader.persist.js        ACEUIModLoader.persist: HUD-store + localStorage position/state store
     ACEUIModLoader.panel.js          ACEUIModLoader.panel: draggable, hide-with-HUD, positioning class, attach/detach
     ACEUIModLoader.loop.js           ACEUIModLoader.loop: per-frame runtime with fixed-rate sampling helper
     ACEUIModLoader.console.js        ACEUIModLoader.console: console.* hook + ring buffer + error capture (entry point uses it)
-  mods/
-    pedalgraph/               pedalgraph.js + pedalgraph.css (only the mod-specific 200 lines)
+  apps/
+    pedalgraph/               pedalgraph.js + pedalgraph.css (only the app-specific 200 lines)
     console/                  debugconsole.js + debugconsole.css
   hud/
-    hud.html                  the single entry point: stock page + <link>s + <script>s in order + one <div> per mod
-  build/                      generated: uiresources/{js,assets,hud.html} assembled from lib + mods + hud
+    hud.html                  the single entry point: stock page + <link>s + <script>s in order + one <div> per app
+  build/                      generated: uiresources/{js,assets,hud.html} assembled from lib + apps + hud
   tools/                      pack_kspkg.py (packs build/), lookup_sim.py, check_ingame_log.py, build.py (assemble)
-  tests/                      per-library tests + per-mod tests, one harness per library module
+  tests/                      per-library tests + per-app tests, one harness per library module
 ```
 
 Key decisions inside that:
 
 - **Namespaces, not globals soup.** `ACEUIModLoader` is one global object; each lib
-  file adds one namespace (`ACEUIModLoader.core`, ...). Mods are `PedalGraph`,
+  file adds one namespace (`ACEUIModLoader.core`, ...). Apps are `PedalGraph`,
   `DebugConsole` etc. and only talk to `ACEUIModLoader.*`.
 - **Persistence API** (extracted from today's code, generalised beyond
   position): `ACEUIModLoader.persist.save(id, data)`, `ACEUIModLoader.persist.load(id, onReady)`
@@ -103,14 +103,14 @@ Key decisions inside that:
   `ACEUIModLoader.panel.attach(root, { id, onFrame })` does the hidden-until-placed
   dance itself.
 - **The entry point owns load order and diagnostics.** hud.html installs the
-  console hook and error capture first, then the library, then each mod. The
-  per-mod `PEDALGRAPH_SOURCE` tag becomes `ACEUIModLoader.source`.
-- **Build step assembles, packer packs.** `build.py` copies lib + mods + hud
+  console hook and error capture first, then the library, then each app. The
+  per-app `PEDALGRAPH_SOURCE` tag becomes `ACEUIModLoader.source`.
+- **Build step assembles, packer packs.** `build.py` copies lib + apps + hud
   into `build/uiresources/...` (single place for the game paths), then the
   existing packer runs on `build/`. The padding search already handles
   several overrides (`hud.html` today, more pages later).
-- **Versioning per mod and for the bundle.** `VERSION` stays for the bundle;
-  each mod carries its own `VERSION` constant, all logged at boot.
+- **Versioning per app and for the bundle.** `VERSION` stays for the bundle;
+  each app carries its own `VERSION` constant, all logged at boot.
 
 ## 5. Migration order (small, testable steps)
 
@@ -119,31 +119,31 @@ Key decisions inside that:
    Tests: move the corresponding harness cases to a library harness.
 2. Extract `ACEUIModLoader.panel.js` (drag + hidden-until-placed + hide-with-HUD) and
    `ACEUIModLoader.loop.js`; PedalGraph shrinks to its 200 lines.
-3. Introduce `build.py` and the `hud/` entry point; move mod sources to
-   `mods/pedalgraph/`. Packer input becomes `build/`.
+3. Introduce `build.py` and the `hud/` entry point; move app sources to
+   `apps/pedalgraph/`. Packer input becomes `build/`.
 4. Add `ACEUIModLoader.console.js` (hook + buffer) to the entry point, verify in a
    launch that stock messages are captured (they will appear twice in the
    game log if we also re-log them -- the hook must not echo).
-5. Build the debug console mod on `ACEUIModLoader.panel` + `ACEUIModLoader.console`.
+5. Build the debug console app on `ACEUIModLoader.panel` + `ACEUIModLoader.console`.
 
 Each step ends with the full test suite and one launch checked by
 `check_ingame_log.py`; steps 1-3 change no behaviour in game.
 
-## 6a. Separate packages per mod (decision 2026-09-14)
+## 6a. Separate packages per app (decision 2026-09-14)
 
 Requirement from the project owner: PedalGraph and the debug console are
-separate, separately installable mods. Section 4's "one package" therefore
-splits into a **loader package** plus one package per mod.
+separate, separately installable apps. Section 4's "one package" therefore
+splits into a **loader package** plus one package per app.
 
 What the game allows:
 
 - Only one record per path wins, so only one package may override
   `hud.html`. That package is the loader. It ships the library and probes a
-  fixed set of mod slots (`uiresources\ACEUIModLoaderMods\slotNN.js`, tried with dynamic
+  fixed set of app slots (`uiresources\ACEUIModLoaderApps\slotNN.js`, tried with dynamic
   `<script>` elements and `onerror`; Cohtml has no directory listing).
 - Mod packages ship only **new** files: their slot script, their own
-  `uiresources\ACEUIModLoaderMods\<mod>\...` assets. New paths have unique hashes and
-  always resolve regardless of layout, so mods never need padding.
+  `uiresources\ACEUIModLoaderApps\<app>\...` assets. New paths have unique hashes and
+  always resolve regardless of layout, so apps never need padding.
 
 What the game does not allow us to ignore, measured with `lookup_sim`:
 
@@ -159,23 +159,23 @@ Consequence: padding must be computed against the **actual set of installed
 packages**, on the user's machine, in the game's package order. A `repad`
 tool does that: read every `mods\*.kspkg` table, replay the adds in listing
 order, and rewrite only the loader's 64 MB table region with padding that
-wins for that set. Every mod installer runs it after copying its package;
-removing a mod should run it too. `check_ingame_log.py` remains the final
+wins for that set. Every app installer runs it after copying its package;
+removing an app should run it too. `check_ingame_log.py` remains the final
 check. To verify before relying on it: the order in which the game's
 directory listing returns `mods\*.kspkg` (assumed alphabetical, NTFS order);
 one launch with two packages settles it.
 
 ## 7. Final investigation (2026-09-14): is a loader unavoidable, and what shape?
 
-Question asked: do multiple UI mods require our own loader, with certainty?
+Question asked: do multiple UI apps require our own loader, with certainty?
 Everything below comes from the 0.9.1+release.6 exe (disassembly with
 pefile/capstone) and the extracted stock UI files.
 
 **Certain.** One record wins per path hash (merged vector + `lower_bound`).
-Two packages cannot both own the same stock file. Every UI mod needs code in
+Two packages cannot both own the same stock file. Every UI app needs code in
 the HUD page, and every code path into the HUD page is a stock file. So one
 package must own the entry point; whether that package is "a loader" or
-"the first mod" is naming.
+"the first app" is naming.
 
 **Searched for a loader-free hook, none found:**
 
@@ -185,7 +185,7 @@ package must own the entry point; whether that package is "a loader" or
 - `uiconfig.json`: dev-mode only, never requested in retail sessions, and it
   carries two flags (`skipintro`, `ignorebackend`).
 - The bundle's dynamic `import(...)` calls target internal module paths; the
-  `importScript(url)` helper has no caller that takes a mod-supplied URL.
+  `importScript(url)` helper has no caller that takes an app-supplied URL.
 - Entry-record flags: only `1 = directory` and `0x100 = XOR` are read; no
   priority bit; the lookup ignores flags when choosing between equal hashes.
 - Car dash displays run in separate Cohtml views; no access to the HUD DOM.
@@ -197,12 +197,12 @@ package must own the entry point; whether that package is "a loader" or
    manager's search-path vector (the one the lookup falls back to when no
    package has the hash). Loose files never beat packed ones (that is why the
    loose `hud.html` tests failed), but a path no package contains resolves to
-   `Saved Games\ACE\mods\<path>`. Consequence: **mods that only add new files
+   `Saved Games\ACE\mods\<path>`. Consequence: **apps that only add new files
    need no package at all** -- a folder under `mods\uiresources\...` is enough,
    editable in place, reloaded by Escape/resume. Only the entry-point override
    must be a package. With no mod packages in play, the merged table is base +
    loader only, so the inter-package padding hazard of section 6a disappears
-   for UI mods (car mod packages still participate and still need `repad`).
+   for UI apps (car mod packages still participate and still need `repad`).
    Pending one launch to confirm loose new files load (staged: `hud.html`
    in the package, `js/pedalgraph.js` and `assets/pedalgraph.css` loose).
 2. **`js/cohtml.js` is a better host than `hud.html`.** It is the first
@@ -223,15 +223,15 @@ choosing padding that wins under every permutation of the installed packages.
 
 **Recommendation.** One loader package (`js/cohtml.js` override + library,
 padded per game version, `repad` for machines with car-mod packages); every
-UI mod a loose folder under `mods\uiresources\ACEUIModLoaderMods\<mod>\` plus one slot
-script the loader probes. No per-mod packaging, no per-mod padding, and live
+UI app a loose folder under `mods\uiresources\ACEUIModLoaderApps\<app>\` plus one slot
+script the loader probes. No per-app packaging, no per-app padding, and live
 editing during development.
 
 ## 8. Second deep pass (2026-09-14, later)
 
 - **Search directories.** `AddSearchDir` has exactly two callers: the resource
   manager's constructor (one default entry built next to its logger name,
-  most likely the working directory, i.e. the game folder) and the mod
+  most likely the working directory, i.e. the game folder) and the app
   scanner (`<Saved Games\ACE>\mods`). So loose lookups try the game folder
   first, then `mods\`. Both only matter for paths no package has.
 - **The constructor also holds the XOR key** (`0x9F9721A97D1135C1` written to
@@ -242,7 +242,7 @@ editing during development.
   name strings (no offsets), so any preload must read by path through the
   same lookup; an override that wins the lookup is therefore also what a
   preload cache would hold. Empirical confirmation pending (below).
-- **Documents-path call after `mods`** is backend URL configuration, not mod
+- **Documents-path call after `apps`** is backend URL configuration, not app
   related.
 - **Package listing order** still unverified statically (no obvious sort in
   the listing helper).
@@ -264,7 +264,7 @@ Experiment (launched 2026-09-14 01:13): package = `hud.html` override +
 
 Decision basis is therefore complete: one loader package hosted in
 `js/cohtml.js` (no `hud.html` override needed at all), padded per game
-version; UI mods as loose folders with no packaging and no padding.
+version; UI apps as loose folders with no packaging and no padding.
 
 ## 6. Open questions to settle before step 4
 
@@ -280,14 +280,14 @@ version; UI mods as loose folders with no packaging and no padding.
 
 ## 9. Implemented (2026-09-14, loader 0.2.0)
 
-The library exists and both mods run on it; this section records what was
+The library exists and both apps run on it; this section records what was
 built against sections 4 and 5, and where it deviates.
 
-- **Where the library lives.** Not as loose files: all six `src/ACEUIModLoaderMods.*.js`
+- **Where the library lives.** Not as loose files: all six `src/ACEUIModLoaderApps.*.js`
   files are appended to the stock `js/cohtml.js` inside the loader package, in
   `LIB_ORDER` (core, console, persist, panel, loop, loader). Reason: the
   console hook must run before `components.js`, which only the host can
-  guarantee, and mods may then rely on `ACEUIModLoader.*` existing synchronously.
+  guarantee, and apps may then rely on `ACEUIModLoader.*` existing synchronously.
   The cost is a rebuild + reinstall for library changes (padding unchanged,
   it depends only on paths).
 - **Namespaces** as planned: `ACEUIModLoader` (core), `.console`, `.persist`,
@@ -299,24 +299,24 @@ built against sections 4 and 5, and where it deviates.
   starting a drag; needed by the console.
 - **Persistence API** ended up lower-level than section 4's
   `persist.load(id, onReady)`: `readHud/readLocal/save` plus the polling done
-  by `panel.update(panel, now)` in the mod's frame. Simpler, same behaviour.
+  by `panel.update(panel, now)` in the app's frame. Simpler, same behaviour.
 - **Console buffer** is per page (section 6, first option): lost on the
   Escape/resume reload, but the hook runs on every page so menu-page logs are
   captured too; only the HUD shows them today.
 - **PedalGraph 0.4.0** shrank from 627 to ~330 lines and is only the graph.
-  **DevConsole 0.1.0** (repo `ACEDevConsole`) is the second mod: row pool of
+  **DevConsole 0.1.0** (repo `ACEDevConsole`) is the second app: row pool of
   200 recycled elements, filters, prompt with expression-then-statement
   compilation, backquote toggle. Open question left for the first launch:
   whether keyboard focus reaches the prompt while driving.
 - **Tests.** Library behaviour is tested in the loader repo
-  (`tests/lib/harness.html`, 17 cases); each mod tests its own logic plus its
+  (`tests/lib/harness.html`, 17 cases); each app tests its own logic plus its
   integration with the panel. The headless runner moved to
   `tools/headless.py` and is shared.
 
 ## 10. Discovery without a manifest (loader 0.3.0, 2026-09-14)
 
-Problem: a player adding a mod had to edit (or run a script to regenerate)
-`ACEUIModLoaderMods/manifest.json`, because a page cannot list folders and every
+Problem: a player adding an app had to edit (or run a script to regenerate)
+`ACEUIModLoaderApps/manifest.json`, because a page cannot list folders and every
 self-registration scheme (fixed shared files, numbered or hashed slots, fonts,
 localisation) either collides between zips, needs a central registry, or does
 not exist in this Cohtml build. See ACEGameInternals/docs/game-internals.md,
@@ -324,10 +324,10 @@ not exist in this Cohtml build. See ACEGameInternals/docs/game-internals.md,
 
 Mechanism: the game lists `Saved Games/ACE/Video/*.settingspreset` for its own
 video presets menu and answers `SettingsRequestVideoPresetList` on every page.
-Each mod ships an **empty** marker `Video/ACEUIModLoaderMods-<name>.settingspreset`
+Each app ships an **empty** marker `Video/ACEUIModLoaderApps-<name>.settingspreset`
 next to its folder; the loader sends that request at start, keeps the names with
-our prefix, and loads those mods. Two zips never touch the same file, so any
-number of mods can be unzipped in any order. The video list was chosen because it
+our prefix, and loads those apps. Two zips never touch the same file, so any
+number of apps can be unzipped in any order. The video list was chosen because it
 applies no filter beyond the extension (the audio list also compares a version)
 and its menu is rarely visited.
 
@@ -335,49 +335,49 @@ Consequences implemented:
 - `ACEUIModLoader.loader.js` wraps `engine.on` so stock handlers for
   `SettingsResponseVideoPresetList` receive a copy without markers (our own
   handler is flagged); without an engine or an answer within 1.5 s it loads nothing;
-  refuses `mod.json` entries that are not plain file names, because requesting a
+  refuses `app.json` entries that are not plain file names, because requesting a
   folder URL crashes the game.
-- `tools/install_mod.py` writes/removes the marker (manifest.json is gone) and
+- `tools/install_app.py` writes/removes the marker (manifest.json is gone) and
   validates names; `--list` reports folder/marker mismatches.
-- `check_ingame_log.py` reads `presets: N mod(s)`.
+- `check_ingame_log.py` reads `presets: N app(s)`.
 
-Open: mod load order is alphabetical (an `after` field in mod.json if a mod ever
+Open: app load order is alphabetical (an `after` field in app.json if an app ever
 depends on another); the marker's home under `Video\` is fixed by the game.
 
-## 11. Less boilerplate per mod (loader 0.4.0, 2026-09-14)
+## 11. Less boilerplate per app (loader 0.4.0, 2026-09-14)
 
-Inventory of the two reference mods showed eleven files each, the version in six
-places, the mod's name in about eight forms, the library load order in ten files
-across three repos, and `mod.js`, `tools/install.py` and the harness doubles
-identical between the mods.
+Inventory of the two reference apps showed eleven files each, the version in six
+places, the app's name in about eight forms, the library load order in ten files
+across three repos, and `app.js`, `tools/install.py` and the harness doubles
+identical between the apps.
 
-Loader-side changes, so a mod can be one folder with three files:
-- `mod.json` shrinks to `version`, `scripts`, `styles` (optional `title`, `pages`,
-  `root`, `name`); the folder name is the mod name and must match a `name` key.
-- The loader creates `<div id="<name>" data-mod="<name>">` in `.absolutecenter`
-  (or `<body>`) before injecting the scripts, so `mod.js` is unnecessary: the
+Loader-side changes, so an app can be one folder with three files:
+- `app.json` shrinks to `version`, `scripts`, `styles` (optional `title`, `pages`,
+  `root`, `name`); the folder name is the app name and must match a `name` key.
+- The loader creates `<div id="<name>" data-app="<name>">` in `.absolutecenter`
+  (or `<body>`) before injecting the scripts, so `app.js` is unnecessary: the
   script's own boot block finds `#<name>` exactly as it does on a preview page.
-- `ACEUIModLoader.mod()` / `mod(name)` returns name, title, version, root, a
+- `ACEUIModLoader.app()` / `app(name)` returns name, title, version, root, a
   prefixed logger, `hudId`, `storageKey` and `key(suffix)`; the script declares
   none of these and never repeats the version (`const VERSION` is now a kit error).
-- `tools/modkit.py` is the shared test kit (one subclass per mod repo);
+- `tools/appkit.py` is the shared test kit (one subclass per app repo);
   `tests/lib/doubles.js` and `tests/lib/lib.js` are the shared browser fixtures,
   so `LIB_ORDER` has one mirror instead of nine.
-- `tools/new_mod.py` writes a complete mod repo that passes the kit; a test proves it.
-- `install_mod.py` derives the name from the folder (a legacy `src/` folder may
+- `tools/new_app.py` writes a complete app repo that passes the kit; a test proves it.
+- `install_app.py` derives the name from the folder (a legacy `src/` folder may
   keep a `name` key) and rejects unknown keys.
 
-Found on the way: a `mod.json` without `styles` made `toArray(undefined)` throw
-inside the XHR callback, leaving the mod pending forever; the harness fixture
+Found on the way: an `app.json` without `styles` made `toArray(undefined)` throw
+inside the XHR callback, leaving the app pending forever; the harness fixture
 `alpha` (no styles) caught it. Harnesses now wait on `ACEUIModLoader.ready` rather
 than a virtual-time deadline, with a timeout that reports a stuck loader.
 Next: strip PedalGraph and DevConsole to the new shape.
 
-Follow-up (same day): the last three repeats went too. `mod(name).mount(attach)`
+Follow-up (same day): the last three repeats went too. `app(name).mount(attach)`
 replaces the twelve-line boot block every script carried; the harness helpers
 (`t`/`eq`/`ok`/`near`) and the report writer live in `tests/lib/doubles.js` as
 `window.__harness`, so a harness holds only its cases; the scripts no longer
-re-export their identity (harnesses ask `ACEUIModLoader.mod(name)`), and the
+re-export their identity (harnesses ask `ACEUIModLoader.app(name)`), and the
 `source=` flag from the package era is gone from the load line. The kit rejects
-`DOMContentLoaded`/`readyState` in mod scripts and requires `.mount(`. A mod is
-now its script, its stylesheet, `mod.json`, its own harness cases and a README.
+`DOMContentLoaded`/`readyState` in app scripts and requires `.mount(`. An app is
+now its script, its stylesheet, `app.json`, its own harness cases and a README.

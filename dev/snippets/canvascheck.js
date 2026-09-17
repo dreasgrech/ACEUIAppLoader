@@ -4,7 +4,7 @@
  *
  *     .run canvascheck
  *
- * Two mods draw with canvas 2D -- ACEUITelemetry's track map and speed trace, and the
+ * Two apps draw with canvas 2D -- ACEUITelemetry's track map and speed trace, and the
  * profiler's frame graph -- and a canvas that yields no context fails silently: the
  * element is there, the drawing calls do nothing, and the result is an empty rectangle
  * that looks exactly like "nothing to show yet". The profiler's graph came up empty in
@@ -91,7 +91,7 @@
     made.push(wrap);
     describe("innerHTML", wrap.querySelector("canvas"));
 
-    // 3. and what the mods on this page actually got
+    // 3. and what the apps on this page actually got
     const live = document.querySelectorAll("canvas");
     let withContext = 0;
     let i;

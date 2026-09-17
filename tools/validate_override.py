@@ -60,7 +60,7 @@ SEED = 20260917
 
 LOADER_PKG = os.path.join(_repos.REPO, "dist", "ACEUIModLoader.kspkg")
 DOOM_PKG = os.path.join(os.path.dirname(_repos.REPO), "ACEDOOM", "dist",
-                        "ACEUIModLoaderMods-doom.kspkg")
+                        "ACEUIModLoaderApps-doom.kspkg")
 LOADER_TARGETS = ("uiresources/js/cohtml.js", "uiresources/hud.html")
 DOOM_TARGETS = ("content/sfx/gui.bank", "system/gui_events.table")
 

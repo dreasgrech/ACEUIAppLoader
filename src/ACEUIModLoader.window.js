@@ -1,7 +1,7 @@
 /**
- * ACEUIModLoader.window -- floating windows for mods, with a title bar and a close button.
+ * ACEUIModLoader.window -- floating windows for apps, with a title bar and a close button.
  *
- * A mod that needs a second surface -- settings, help, a picker, a report -- should not
+ * An app that needs a second surface -- settings, help, a picker, a report -- should not
  * have to hand-build a panel, wire dragging, remember where the player put it and manage
  * a frame loop. This does all of that:
  *
@@ -15,9 +15,9 @@
  *     ACEUIModLoader.window.get("doom.help");
  *     ACEUIModLoader.window.closeAll();
  *
- * The id is yours to choose and should be unique per window, not per mod -- a mod can
+ * The id is yours to choose and should be unique per window, not per app -- an app can
  * have several. It is also the storage key, so a window remembers its own position:
- * prefix it with the mod name (`"doom.help"`, `"telemetry.laps"`) to keep them apart.
+ * prefix it with the app name (`"doom.help"`, `"telemetry.laps"`) to keep them apart.
  *
  * Options, all optional: `title`, `width`, `left`, `top`, `onClose`, `onOpen`.
  *
@@ -159,7 +159,7 @@ ACEUIModLoader.window = (function () {
             fontWeight: "700",
             cursor: "pointer"
         }, CLOSE_TEXT);
-        // the body is where the mod puts its content; clicking in it must not drag
+        // the body is where the app puts its content; clicking in it must not drag
         const body = make("div", { padding: "0.4rem 0.6rem 0.6rem 0.6rem" });
 
         root.setAttribute(WINDOW_ATTR, id);

@@ -9,7 +9,7 @@
  *     page and the window each had a private copy of.
  *   - **the palette.** Those three copies had already drifted apart -- the same dim ink
  *     was 0.45 in one and 0.5 in the others -- so the colours live here once, as THEME.
- *   - **taking listeners off again.** A mod's detach has to mirror its attach exactly,
+ *   - **taking listeners off again.** An app's detach has to mirror its attach exactly,
  *     and the dev console had fourteen pairs to keep in step by hand. `listeners()` is a
  *     bag that remembers what it added:
  *
@@ -19,14 +19,14 @@
  *         ...
  *         bag.off();                      // every one of them, in one call
  *
- * Nothing here is required: a mod with its own stylesheet should keep using classes.
+ * Nothing here is required: an app with its own stylesheet should keep using classes.
  * This is for the surfaces that cannot have one, and for detach paths that must not
  * leak a listener into a HUD that reloads on every Escape.
  */
 ACEUIModLoader.dom = (function () {
 
     /**
-     * The library's own palette. Mods are free to ignore it, but anything the loader
+     * The library's own palette. Apps are free to ignore it, but anything the loader
      * draws -- drawer, window frames, settings controls -- uses these so the surfaces
      * look like one product rather than three.
      */

@@ -393,7 +393,7 @@ body.hide-hud .ace-profiler {
 }
 
 /*
- * Total is the branch, self is the row's own hands. A mod at 2 ms total and 0.05 ms self is
+ * Total is the branch, self is the row's own hands. An app at 2 ms total and 0.05 ms self is
  * not slow -- it is calling something slow, and the row under it names it. Total is the
  * brighter of the two because it is the one you scan for first.
  */
@@ -464,8 +464,8 @@ body.hide-hud .ace-profiler {
  * are declared in the script for the graph, and a test keeps the two in step.
  */
 
-.ace-profiler .pr-swatch[data-band="mod"],
-.ace-profiler .pr-bar[data-band="mod"] { background: #44ea78; }
+.ace-profiler .pr-swatch[data-band="app"],
+.ace-profiler .pr-bar[data-band="app"] { background: #44ea78; }
 
 .ace-profiler .pr-swatch[data-band="stock"],
 .ace-profiler .pr-bar[data-band="stock"] { background: #3aa6ff; }

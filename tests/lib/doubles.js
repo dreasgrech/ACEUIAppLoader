@@ -1,6 +1,6 @@
 /*
  * Test doubles and the harness helpers for browser harnesses (the loader's and every
- * mod's). Include this BEFORE the library so the library's console hook wraps the
+ * app's). Include this BEFORE the library so the library's console hook wraps the
  * capturing console.
  *
  *   window.__clock.step(t)   run the animation-frame callbacks queued so far

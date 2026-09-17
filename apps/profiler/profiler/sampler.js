@@ -22,8 +22,8 @@
  *     even for chains that were already running when we started;
  *   - names: the stock bundle ships unminified, so its callbacks arrive with real
  *     function names (`perFrameAllModelUpdate`, `visibilityChecker`, `fetchAllModels`).
- *     Our own mods' frame loops carry their mod name because `ACEUIModLoader.loop.start`
- *     takes an owner and `mod().panel` passes it.
+ *     Our own apps' frame loops carry their app name because `ACEUIModLoader.loop.start`
+ *     takes an owner and `app().panel` passes it.
  *
  * THE CLOCK, and what it means. Frame wall time is exact: the animation-frame timestamp
  * is precise and does advance between frames. Call counts are exact. Per-call *time* is
@@ -67,7 +67,7 @@ const ACEProfilerSampler = (function () {
     const MAX_SAMPLES = 400;
     /** Categories, in the order the panel stacks them. */
     const CATEGORY = {
-        mod: "mod",
+        app: "app",
         stock: "stock",
         event: "event",
         timer: "timer",
@@ -225,7 +225,7 @@ const ACEProfilerSampler = (function () {
      *
      * The boundary is the **timestamp**, not the callback: a page like this one has many
      * animation-frame callbacks per frame (the stock bundle's model sync, plus one per
-     * mod), and they all arrive with the same timestamp. Treating each as a new frame --
+     * app), and they all arrive with the same timestamp. Treating each as a new frame --
      * which is what this did first -- shreds one 17 ms frame into six 0 ms ones and every
      * total after that is wrong.
      */
@@ -385,7 +385,7 @@ const ACEProfilerSampler = (function () {
     /**
      * The call tree across a window of frames, merged by path: every frame's "pedalgraph >
      * render > commit" becomes one node carrying the totals of all of them. This is the
-     * view that answers "what inside this mod is taking the time", and it only means
+     * view that answers "what inside this app is taking the time", and it only means
      * anything across many frames -- one frame's reading of a 0.2 ms section is 0 or 1.
      *
      * Rows come back depth-first, each with `depth` for indenting, sorted by cost within
@@ -466,7 +466,7 @@ const ACEProfilerSampler = (function () {
 
     /** Per-category totals for one frame, for the stacked graph. */
     const totals = function (frame) {
-        const out = { mod: 0, stock: 0, event: 0, timer: 0, profiler: 0, other: 0 };
+        const out = { app: 0, stock: 0, event: 0, timer: 0, profiler: 0, other: 0 };
         let i;
 
         if (!frame) { return out; }
@@ -498,8 +498,8 @@ const ACEProfilerSampler = (function () {
         const raf = window.requestAnimationFrame;
 
         window.requestAnimationFrame = function (fn) {
-            // ACEUIModLoader.loop stamps the mod's name on the callback it schedules, so a
-            // mod's frames are attributed by name rather than guessed from a closure
+            // ACEUIModLoader.loop stamps the app's name on the callback it schedules, so a
+            // app's frames are attributed by name rather than guessed from a closure
             const owner = fn && fn.aceOwner ? fn.aceOwner : "";
 
             return raf.call(window, function (timestamp) {
@@ -508,7 +508,7 @@ const ACEProfilerSampler = (function () {
                 beginFrame(timestamp);
                 state.selfMs += now() - t0;
 
-                return measure(frameLabel(fn, owner), owner ? CATEGORY.mod : CATEGORY.stock, fn, window, [timestamp]);
+                return measure(frameLabel(fn, owner), owner ? CATEGORY.app : CATEGORY.stock, fn, window, [timestamp]);
             });
         };
         state.undo.push(function () { window.requestAnimationFrame = raf; });
@@ -626,7 +626,7 @@ const ACEProfilerSampler = (function () {
 
     /**
      * Wrap the methods of the stock widgets on this page, so `ks-huddamage.process` shows
-     * up in the table beside our own mods.
+     * up in the table beside our own apps.
      *
      * Descriptors only: reading a property off one of these prototypes runs its accessors
      * with the prototype as the receiver, and the stock widgets have accessors that throw
@@ -768,15 +768,15 @@ const ACEProfilerSampler = (function () {
     };
 
     /**
-     * Mods name their own work through `ACEUIModLoader.section`, which does nothing until
-     * something fills this slot. Filling it only while recording means a mod pays a
+     * Apps name their own work through `ACEUIModLoader.section`, which does nothing until
+     * something fills this slot. Filling it only while recording means an app pays a
      * property read and a call for being profilable, and nothing more.
      */
     const bindSections = function (on) {
         if (!window.ACEUIModLoader) { return false; }
 
         ACEUIModLoader.profiler = on
-            ? { section: function (name, fn) { return measure(name, CATEGORY.mod, fn, null, []); } }
+            ? { section: function (name, fn) { return measure(name, CATEGORY.app, fn, null, []); } }
             : null;
 
         return on;
@@ -831,8 +831,8 @@ const ACEProfilerSampler = (function () {
         widgets: function () { return state.widgets; },
         totals: totals,
         otherMs: otherMs,
-        /** For a mod that wants its own named section inside a frame. */
-        measure: function (name, fn) { return measure(name, CATEGORY.mod, fn, null, []); }
+        /** For an app that wants its own named section inside a frame. */
+        measure: function (name, fn) { return measure(name, CATEGORY.app, fn, null, []); }
     };
 }());
 
@@ -840,6 +840,6 @@ const ACEProfilerSampler = (function () {
 /*
  * Classic scripts: a top-level `const` is a page-wide binding but not a window property,
  * so anything reaching for `window.ACEProfilerSampler` -- a dev-console snippet, another
- * mod -- would find nothing. The library's core does the same for the same reason.
+ * app -- would find nothing. The library's core does the same for the same reason.
  */
 window.ACEProfilerSampler = ACEProfilerSampler;

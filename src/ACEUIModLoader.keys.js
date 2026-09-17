@@ -11,7 +11,7 @@
  *     under `key` and "Backquote" under `code`; space as " " and "Space". ALIASES folds
  *     the characters back onto the names.
  *   - **not while someone is typing.** A hotkey that fires while the player is in a text
- *     box eats their keystroke. `isTyping(e)` is the check every mod needs and two of
+ *     box eats their keystroke. `isTyping(e)` is the check every app needs and two of
  *     them had inlined.
  *
  *     const unbind = ACEUIModLoader.keys.bind(function () { return options.toggleKey; },
@@ -21,12 +21,12 @@
  * ACEUIModLoader.settings follows the player's choice without rebinding. `bind` skips
  * events aimed at a text box, and returns the function that unbinds it.
  *
- * A mod's hotkey is the mod's to move; the player's game bindings are not ours to shadow,
+ * An app's hotkey is the app's to move; the player's game bindings are not ours to shadow,
  * which is why every hotkey in this project is a setting rather than a constant.
  */
 ACEUIModLoader.keys = (function () {
 
-    /** Name -> legacy keyCode, for the keys mods actually bind. */
+    /** Name -> legacy keyCode, for the keys apps actually bind. */
     const CODES = {
         Backquote: 192, Backspace: 8, Tab: 9, Enter: 13, Shift: 16, Control: 17, Alt: 18,
         Escape: 27, Space: 32, PageUp: 33, PageDown: 34, End: 35, Home: 36,

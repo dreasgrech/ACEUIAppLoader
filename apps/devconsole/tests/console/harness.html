@@ -34,8 +34,8 @@ console.warn("early warning");
 (function () {
     const H = window.__harness;
     const t = H.t, eq = H.eq, ok = H.ok;
-    // what the loader knows about this mod; outside the game the title falls back to the name and the version reads "dev"
-    const me = ACEUIModLoader.mod("devconsole");
+    // what the loader knows about this app; outside the game the title falls back to the name and the version reads "dev"
+    const me = ACEUIModLoader.app("devconsole");
 
     const clock = window.__clock;
     const center = document.getElementById("center");
@@ -55,7 +55,7 @@ console.warn("early warning");
         eq(DevConsole.MAX_ROWS, 200); eq(DevConsole.TOGGLE_CODE, "Backquote"); eq(DevConsole.FILTERS.length, 3);
         eq(me.version, ACEUIModLoader.loader.DEV_VERSION, "version comes from the loader"); eq(me.prefix, "[devconsole]");
         eq(me.hudId, "hud_devconsole"); eq(me.storageKey, "acedevconsole.pos"); eq(me.key("open"), "acedevconsole.open");
-        ok(window.__log.some(function (l) { return l.indexOf(me.prefix + " script loaded, version " + me.version + ", library " + ACEUIModLoader.VERSION) >= 0; }), "the library logs the script-loaded line for every mod");
+        ok(window.__log.some(function (l) { return l.indexOf(me.prefix + " script loaded, version " + me.version + ", library " + ACEUIModLoader.VERSION) >= 0; }), "the library logs the script-loaded line for every app");
         eq(document.getElementById(me.name), null, "harness must not carry the auto-mount root");
         eq(typeof DevConsole.VERSION, "undefined", "identity is the loader's, not re-exported");
     });
@@ -382,7 +382,7 @@ console.warn("early warning");
 
         root.querySelector('[data-action="close"]').dispatchEvent(new MouseEvent("click", { bubbles: true }));
         eq(drawer.isVisible("devconsole"), false, "x closes");
-        ACEUIModLoader.mod("devconsole").show(true);
+        ACEUIModLoader.app("devconsole").show(true);
     });
 
     t("a hidden HUD skips rendering", function () {
@@ -391,7 +391,7 @@ console.warn("early warning");
         document.body.classList.remove(ACEUIModLoader.HUD_HIDDEN_CLASS); nextFrame(); eq(state.dirty, false);
     });
 
-    t("mousedown on the prompt or a button does not drag; on the header it does and saves under the mod's keys", function () {
+    t("mousedown on the prompt or a button does not drag; on the header it does and saves under the app's keys", function () {
         root.style.left = "100px"; root.style.top = "100px"; root.style.right = "auto";
         mouse("mousedown", 110, 110, input); mouse("mousemove", 300, 300); mouse("mouseup", 0, 0);
         eq(root.style.left, "100px", "prompt did not drag"); ok(!root.classList.contains("dragging"));
@@ -527,7 +527,7 @@ console.warn("early warning");
         input.value = ".5 + 1"; key(input, { key: "Enter" }); nextFrame();
         eq(texts(root).pop(), "1.5", "a number starting with a dot is still JavaScript");
         input.value = ".run hello"; key(input, { key: "Enter" }); nextFrame();
-        eq(texts(root).pop(), "run: loading ACEUIModLoaderMods/snippets/hello.js", "loading line");
+        eq(texts(root).pop(), "run: loading ACEUIModLoaderApps/snippets/hello.js", "loading line");
         eq(document.querySelectorAll("script[src$='snippets/hello.js']").length, 1, "script tag added");
         eq(state.history.pop(), ".run hello", "commands are in the history too");
     });
@@ -556,7 +556,7 @@ console.warn("early warning");
     };
 
     t("while attached it offers the other apps the one thing only it can do", function () {
-        const dc = ACEUIModLoader.apps.get("devconsole");
+        const dc = ACEUIModLoader.shared.get("devconsole");
 
         ok(dc, "registered while attached");
         dc.evaluate("40 + 2");

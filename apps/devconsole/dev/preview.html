@@ -51,7 +51,7 @@
     <button id="btn-flood" class="on">flood (1 line/s)</button>
     <button id="btn-hide">hide HUD</button>
     <button id="btn-reset">reset position</button>
-    <span class="dim">backquote toggles; try <code>ModelCurrentCar</code> or <code>ACEUIModLoader.mods</code> in the prompt</span>
+    <span class="dim">backquote toggles; try <code>ModelCurrentCar</code> or <code>ACEUIModLoader.apps</code> in the prompt</span>
 </div>
 
 <script>
@@ -99,7 +99,7 @@ const Preview = (function () {
     };
 
     const wire = function () {
-        q("#version").textContent = ACEUIModLoader.mod("devconsole").version;
+        q("#version").textContent = ACEUIModLoader.app("devconsole").version;
 
         ACEUIModLoader.toArray(document.querySelectorAll("[data-emit]")).forEach(function (button) {
             button.addEventListener("click", function () { emit(button.getAttribute("data-emit")); });

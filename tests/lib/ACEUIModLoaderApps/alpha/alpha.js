@@ -1,6 +1,6 @@
-/* Harness fixture: a mod that records what the loader gave it while its script ran. */
+/* Harness fixture: an app that records what the loader gave it while its script ran. */
 (function () {
-    const me = ACEUIModLoader.mod();
+    const me = ACEUIModLoader.app();
 
     window.__alpha = {
         name: me.name,
@@ -13,7 +13,7 @@
         filterKey: me.key("filters"),
         rootPresent: Boolean(me.root),
         rootParent: me.root && me.root.parentElement ? me.root.parentElement.id : "",
-        rootAttr: me.root ? me.root.getAttribute("data-mod") : null
+        rootAttr: me.root ? me.root.getAttribute("data-app") : null
     };
     me.log("alpha script ran");
 }());

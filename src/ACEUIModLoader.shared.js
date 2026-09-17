@@ -1,18 +1,18 @@
 /**
- * ACEUIModLoader.apps -- what one app offers another.
+ * ACEUIModLoader.shared -- what one app offers another.
  *
- * A mod that has something other mods can use registers it here, under its own name:
+ * An app that has something other apps can use registers it here, under its own name:
  *
- *     ACEUIModLoader.apps.register("profiler", { mark: mark, report: report });
+ *     ACEUIModLoader.shared.register("profiler", { mark: mark, report: report });
  *
- *     const profiler = ACEUIModLoader.apps.get("profiler");
+ *     const profiler = ACEUIModLoader.shared.get("profiler");
  *     if (profiler) { profiler.mark("my slow bit"); }
  *
  * Why a registry rather than a global each. Globals work -- `DevConsole`, `ACEUIProfiler`
  * and `CapabilitiesProbe` are all still there for anyone already using them -- but they
  * collide: `ACEUIModLoader.console` is this library's console hook, so the dev console
- * could never have taken that name. One table, keyed by the mod name the loader already
- * knows, has room for everyone's, including mods we have never heard of.
+ * could never have taken that name. One table, keyed by the app name the loader already
+ * knows, has room for everyone's, including apps we have never heard of.
  *
  * What registering does NOT do is promise anything. An app is registered only while it is
  * loaded on this page and switched on, so the answer to `get` changes over a session and
@@ -23,27 +23,27 @@
  *
  * Nothing here talks to the DOM or the engine: it is a table with a log line.
  */
-ACEUIModLoader.apps = (function () {
+ACEUIModLoader.shared = (function () {
 
     const log = ACEUIModLoader.log;
 
-    /** name -> whatever that mod handed us. */
+    /** name -> whatever that app handed us. */
     const registry = {};
 
     /**
-     * Offer this mod's surface to the others. Registering twice replaces the first -- a
-     * mod the drawer stopped and started again is the normal way that happens.
+     * Offer this app's surface to the others. Registering twice replaces the first -- a
+     * app the drawer stopped and started again is the normal way that happens.
      */
     const register = function (name, api) {
         if (typeof name !== "string" || !name || !api) { return null; }
 
         registry[name] = api;
-        log("[apps] " + name + " registered");
+        log("[shared] " + name + " registered");
 
         return api;
     };
 
-    /** Forget it again. A mod with a detach should do this in it. */
+    /** Forget it again. An app with a detach should do this in it. */
     const unregister = function (name) {
         const had = Object.prototype.hasOwnProperty.call(registry, name);
 
@@ -52,7 +52,7 @@ ACEUIModLoader.apps = (function () {
         return had;
     };
 
-    /** What that mod offers, or null. Ask every time rather than keeping the answer. */
+    /** What that app offers, or null. Ask every time rather than keeping the answer. */
     const get = function (name) {
         return Object.prototype.hasOwnProperty.call(registry, name) ? registry[name] : null;
     };

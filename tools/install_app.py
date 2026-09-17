@@ -1,22 +1,22 @@
 #!/usr/bin/env python3
 """
-install_mod.py - install (or remove) a loose UI mod for the ACEUIModLoader.
+install_app.py - install (or remove) a loose UI app for the ACEUIModLoader.
 
-A mod is a folder containing `mod.json` plus the files it lists; the folder's name is
-the mod's name (a legacy `src/` folder needs a "name" key). Installing copies
-the folder to `<ACE>/mods/uiresources/ACEUIModLoaderMods/<name>/` and writes the
-EMPTY marker file `<ACE>/Video/ACEUIModLoaderMods-<name>.settingspreset`. The game
+An app is a folder containing `app.json` plus the files it lists; the folder's name is
+the app's name (a legacy `src/` folder needs a "name" key). Installing copies
+the folder to `<ACE>/mods/uiresources/ACEUIModLoaderApps/<name>/` and writes the
+EMPTY marker file `<ACE>/Video/ACEUIModLoaderApps-<name>.settingspreset`. The game
 lists that folder for the UI (video settings presets), which is how the loader
-discovers installed mods without any registry. A release zip of a mod contains
+discovers installed apps without any registry. A release zip of an app contains
 exactly these two things, laid out relative to `Saved Games/ACE`.
 
 The marker must be empty: the game deserialises every listed file, and an empty
 file is a valid default message. No packaging, no padding, no manifest.
 
 Usage:
-  python tools/install_mod.py <mod folder>          install / update
-  python tools/install_mod.py --remove <name>       remove folder and marker
-  python tools/install_mod.py --list
+  python tools/install_app.py <app folder>          install / update
+  python tools/install_app.py --remove <name>       remove folder and marker
+  python tools/install_app.py --list
 
 Environment: ACE_MODS_DIR overrides the game's mods folder (its parent is <ACE>).
 """
@@ -28,21 +28,30 @@ import sys
 
 import _repos
 
-MODS_SUBDIR = os.path.join("uiresources", "ACEUIModLoaderMods")
+APPS_SUBDIR = os.path.join("uiresources", "ACEUIModLoaderApps")
 MARKER_DIR = "Video"
-MARKER_PREFIX = "ACEUIModLoaderMods-"
+MARKER_PREFIX = "ACEUIModLoaderApps-"
 MARKER_EXT = ".settingspreset"
-MOD_FILE = "mod.json"
+APP_FILE = "app.json"
 # "developer": a tool rather than something a player installed for fun; the app drawer
-# keeps those behind its own switch. Must match modkit.KNOWN_KEYS (a test checks).
+# keeps those behind its own switch. Must match appkit.KNOWN_KEYS (a test checks).
 KNOWN_KEYS = {"name", "version", "title", "pages", "scripts", "styles", "files", "root", "developer"}
 LEGACY_MANIFEST = "manifest.json"
+# Where apps lived while they were called mods (before 0.21.0). The loader no longer looks
+# here, so a copy left behind is invisible and confusing: installing and removing both
+# clear it. See docs/naming.md.
+LEGACY_APPS_SUBDIR = os.path.join("uiresources", "ACEUIModLoaderMods")
+LEGACY_MARKER_PREFIX = "ACEUIModLoaderMods-"
 NAME_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9_.-]*$")
 IGNORE = shutil.ignore_patterns("__pycache__", "*.swp", "*~", ".*")
 
 
-def mods_root_dir(mods_dir=None):
-    return os.path.join(mods_dir or _repos.mods_dir(), MODS_SUBDIR)
+def apps_root_dir(mods_dir=None):
+    return os.path.join(mods_dir or _repos.mods_dir(), APPS_SUBDIR)
+
+
+def legacy_root_dir(mods_dir=None):
+    return os.path.join(mods_dir or _repos.mods_dir(), LEGACY_APPS_SUBDIR)
 
 
 def ace_dir(mods_dir=None):
@@ -60,7 +69,7 @@ def marker_path(name, mods_dir=None):
 
 def check_name(name):
     if not NAME_RE.match(name or ""):
-        raise SystemExit(f"mod name {name!r} must be letters, digits, '_', '.', '-' (it becomes a file name)")
+        raise SystemExit(f"app name {name!r} must be letters, digits, '_', '.', '-' (it becomes a file name)")
     return name
 
 
@@ -81,7 +90,7 @@ def remove_marker(name, mods_dir=None):
 
 
 def marker_names(mods_dir=None):
-    """Mod names that have a marker, as the game would list them; non-empty markers are reported."""
+    """App names that have a marker, as the game would list them; non-empty markers are reported."""
     folder = marker_dir(mods_dir)
     names = []
     if not os.path.isdir(folder):
@@ -96,61 +105,79 @@ def marker_names(mods_dir=None):
 
 
 def folder_names(mods_dir=None):
-    root = mods_root_dir(mods_dir)
+    root = apps_root_dir(mods_dir)
     if not os.path.isdir(root):
         return []
     return sorted(n for n in os.listdir(root) if os.path.isdir(os.path.join(root, n)))
 
 
-def load_mod_info(src_dir):
-    path = os.path.join(src_dir, MOD_FILE)
+def load_app_info(src_dir):
+    path = os.path.join(src_dir, APP_FILE)
     if not os.path.exists(path):
-        raise SystemExit(f"{src_dir} has no {MOD_FILE}")
+        raise SystemExit(f"{src_dir} has no {APP_FILE}")
     with open(path, encoding="utf-8") as f:
         info = json.load(f)
     if not info.get("version"):
-        raise SystemExit(f"{MOD_FILE}: missing 'version'")
+        raise SystemExit(f"{APP_FILE}: missing 'version'")
     folder = os.path.basename(os.path.abspath(src_dir))
     info["name"] = check_name(info.get("name") or folder)
     if folder != info["name"] and folder != "src":
-        raise SystemExit(f"{MOD_FILE} names the mod {info['name']!r} but the folder is {folder!r}; they must match")
+        raise SystemExit(f"{APP_FILE} names the app {info['name']!r} but the folder is {folder!r}; they must match")
     unknown = sorted(set(info) - KNOWN_KEYS)
     if unknown:
-        raise SystemExit(f"{MOD_FILE}: unknown key(s) {unknown}; known: {sorted(KNOWN_KEYS)}")
+        raise SystemExit(f"{APP_FILE}: unknown key(s) {unknown}; known: {sorted(KNOWN_KEYS)}")
     for key in ("scripts", "styles", "files"):
         for rel in info.get(key, []):
             if os.path.basename(rel) != rel or not rel:
-                raise SystemExit(f"{MOD_FILE} lists {rel!r}: entries must be plain file names in the mod folder")
+                raise SystemExit(f"{APP_FILE} lists {rel!r}: entries must be plain file names in the app folder")
             if not os.path.isfile(os.path.join(src_dir, rel)):
-                raise SystemExit(f"{MOD_FILE} lists {rel} but the file is missing")
+                raise SystemExit(f"{APP_FILE} lists {rel} but the file is missing")
     return info
 
 
+def clear_legacy(name, mods_dir=None):
+    """Delete this app's pre-0.21.0 folder and marker. Returns what it removed."""
+    gone = []
+    old_dir = os.path.join(legacy_root_dir(mods_dir), name)
+    if os.path.isdir(old_dir):
+        shutil.rmtree(old_dir)
+        gone.append(old_dir)
+    old_marker = os.path.join(marker_dir(mods_dir), LEGACY_MARKER_PREFIX + name + MARKER_EXT)
+    if os.path.exists(old_marker):
+        os.remove(old_marker)
+        gone.append(old_marker)
+    return gone
+
+
 def install(src_dir, mods_dir=None):
-    info = load_mod_info(src_dir)
-    dest = os.path.join(mods_root_dir(mods_dir), info["name"])
+    info = load_app_info(src_dir)
+    dest = os.path.join(apps_root_dir(mods_dir), info["name"])
     if os.path.isdir(dest):
         shutil.rmtree(dest)
     shutil.copytree(src_dir, dest, ignore=IGNORE)
     marker = write_marker(info["name"], mods_dir)
-    print(f"installed mod {info['name']} {info['version']} -> {dest}")
+    print(f"installed app {info['name']} {info['version']} -> {dest}")
     print(f"marker: {marker}")
+    for path in clear_legacy(info["name"], mods_dir):
+        print(f"removed the pre-0.21.0 copy: {path}")
     return dest
 
 
 def remove(name, mods_dir=None):
-    dest = os.path.join(mods_root_dir(mods_dir), name)
+    dest = os.path.join(apps_root_dir(mods_dir), name)
     if os.path.isdir(dest):
         shutil.rmtree(dest)
     remove_marker(name, mods_dir)
-    print(f"removed mod {name} (folder and marker)")
+    for path in clear_legacy(name, mods_dir):
+        print(f"removed the pre-0.21.0 copy: {path}")
+    print(f"removed app {name} (folder and marker)")
 
 
-def list_mods(mods_dir=None):
+def list_apps(mods_dir=None):
     markers = marker_names(mods_dir)
     folders = folder_names(mods_dir)
     for name in sorted(set(markers) | set(folders)):
-        path = os.path.join(mods_root_dir(mods_dir), name, MOD_FILE)
+        path = os.path.join(apps_root_dir(mods_dir), name, APP_FILE)
         version = "?"
         if os.path.exists(path):
             with open(path, encoding="utf-8") as f:
@@ -163,8 +190,14 @@ def list_mods(mods_dir=None):
             status = "FOLDER ONLY (no marker, the game will not list it)"
         print(f"{name} {version} {status}")
     if not markers and not folders:
-        print("no mods installed")
-    legacy = os.path.join(mods_root_dir(mods_dir), LEGACY_MANIFEST)
+        print("no apps installed")
+    old_root = legacy_root_dir(mods_dir)
+    if os.path.isdir(old_root):
+        left = sorted(d for d in os.listdir(old_root) if os.path.isdir(os.path.join(old_root, d)))
+        if left:
+            print(f"note: {len(left)} app(s) still at the pre-0.21.0 path ({', '.join(left)});")
+            print(f"      the loader ignores {old_root} -- install each one again to clear it")
+    legacy = os.path.join(apps_root_dir(mods_dir), LEGACY_MANIFEST)
     if os.path.exists(legacy):
         print(f"note: stale {LEGACY_MANIFEST} present; the loader ignores it, you can delete it")
 
@@ -172,7 +205,7 @@ def list_mods(mods_dir=None):
 if __name__ == "__main__":
     argv = sys.argv[1:]
     if argv and argv[0] == "--list":
-        list_mods()
+        list_apps()
     elif len(argv) == 2 and argv[0] == "--remove":
         remove(argv[1])
     elif len(argv) == 1 and not argv[0].startswith("--"):

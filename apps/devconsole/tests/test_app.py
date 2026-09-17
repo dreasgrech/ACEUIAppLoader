@@ -1,4 +1,4 @@
-"""The shared ACEUIModLoader test kit (modkit.py in the loader repo) plus the console's own contract."""
+"""The shared ACEUIModLoader test kit (appkit.py in the loader repo) plus the console's own contract."""
 import json
 import os
 import re
@@ -13,30 +13,30 @@ LOADER = os.environ.get("ACE_LOADER_DIR")
 HERE = ROOT
 while not LOADER:
     for candidate in (HERE, os.path.join(HERE, "ACEUIModLoader")):
-        if os.path.isfile(os.path.join(candidate, "tools", "modkit.py")):
+        if os.path.isfile(os.path.join(candidate, "tools", "appkit.py")):
             LOADER = candidate
     if not LOADER and HERE == os.path.dirname(HERE):
         raise SystemExit("ACEUIModLoader not found: clone it next to this repo or set ACE_LOADER_DIR")
     HERE = os.path.dirname(HERE)
 sys.path.insert(0, os.path.join(LOADER, "tools"))
 
-from modkit import ModTests  # noqa: E402
+from appkit import AppTests  # noqa: E402
 
 JS = os.path.join(ROOT, "devconsole", "devconsole.js")
 
 
-class Tests(ModTests):
+class Tests(AppTests):
     ROOT = ROOT
     MIN_CASES = 21
     HOT_PATH = ("// ---- rendering", "// ---- state changes")
 
 
 class BundledAppContractTests(unittest.TestCase):
-    """What shipping inside the loader's package means for this mod's own files."""
+    """What shipping inside the loader's package means for this app's own files."""
 
     @classmethod
     def setUpClass(cls):
-        with open(os.path.join(ROOT, "devconsole", "mod.json"), encoding="utf-8") as f:
+        with open(os.path.join(ROOT, "devconsole", "app.json"), encoding="utf-8") as f:
             cls.info = json.load(f)
         with open(JS, encoding="utf-8") as f:
             cls.source = f.read()
@@ -47,9 +47,9 @@ class BundledAppContractTests(unittest.TestCase):
         self.assertIs(self.info.get("developer"), True)
 
     def test_it_offers_itself_only_while_it_is_running(self):
-        self.assertIn("ACEUIModLoader.apps.register(me.name, surface(state));", self.source)
-        self.assertIn("ACEUIModLoader.apps.unregister(me.name);", self.source)
-        self.assertLess(self.source.index("apps.unregister"), self.source.index("state.ui.stop();"),
+        self.assertIn("ACEUIModLoader.shared.register(me.name, surface(state));", self.source)
+        self.assertIn("ACEUIModLoader.shared.unregister(me.name);", self.source)
+        self.assertLess(self.source.index("shared.unregister"), self.source.index("state.ui.stop();"),
                         "withdrawn first thing in detach: there is no panel to answer into")
 
 
@@ -85,7 +85,7 @@ class ConsoleContractTests(unittest.TestCase):
         self.assertIn("scrolling.attach({", self.js, "the scrollbar is the library's")
         self.assertNotIn("const WHEEL_SIGN", self.js, "no private wheel handling")
         self.assertNotIn("const syncScrollbar", self.js, "no private thumb geometry")
-        self.assertIn('ACEUIModLoader.mod("devconsole").toggle(DevConsole.toggleKey);', self.js,
+        self.assertIn('ACEUIModLoader.app("devconsole").toggle(DevConsole.toggleKey);', self.js,
                       "the hotkey is the loader's, so it still works once the app is switched off")
         self.assertNotIn("state.unbindToggle", self.js, "and the panel no longer holds one of its own")
         self.assertNotIn("isToggleKey", self.js, "no private hotkey matching")

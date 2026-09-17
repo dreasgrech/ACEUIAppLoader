@@ -9,7 +9,7 @@ The package holds **two** copies of the library, reached two different ways:
 | what the package overrides | how the library gets in |
 |---|---|
 | `uiresources\js\cohtml.js` | the stock script with the library appended; runs on all 13 pages |
-| `uiresources\hud.html` | Kunos' page byte for byte with one `<script>` tag added, pointing at `ACEUIModLoaderApps/loader.js` |
+| `uiresources\hud.html` | Kunos' page byte for byte with one `<script>` tag added, pointing at `ACEUIModLoaderBuiltIn/loader.js` |
 
 The second exists because an override is not guaranteed to win (below), and two are far better than one. The script it adds sits at a **new** path, which always resolves whatever the merged package layout turns out to be, so winning the page is enough on its own — proven in game with the `cohtml.js` override deliberately left out.
 
@@ -86,27 +86,27 @@ worse as a folder fills: ACEDOOM at 21-30 other packages is the weakest number h
 install of the matching game version is the only case that is certain, because it can be
 computed exactly before shipping.
 
-## Finding the mods
+## Finding the apps
 
-A UI page cannot list folders, but the game lists one folder for it: the video settings presets in `Saved Games\ACE\Video\*.settingspreset`. On every page the loader sends the game's own `SettingsRequestVideoPresetList`, keeps the answers beginning `ACEUIModLoaderMods-`, and treats the rest of each name as an installed mod. It then reads that mod's `ACEUIModLoaderMods/<name>/mod.json` and injects its stylesheets and scripts, in order, on the pages the mod asked for.
+A UI page cannot list folders, but the game lists one folder for it: the video settings presets in `Saved Games\ACE\Video\*.settingspreset`. On every page the loader sends the game's own `SettingsRequestVideoPresetList`, keeps the answers beginning `ACEUIModLoaderApps-`, and treats the rest of each name as an installed app. It then reads that app's `ACEUIModLoaderApps/<name>/app.json` and injects its stylesheets and scripts, in order, on the pages the app asked for.
 
-So a mod is two things and no registration step. The markers must stay **empty**: the game deserialises every listed file before naming it, and an empty file is a valid default message. The stock UI shows the same list in its video presets menu, so the loader wraps `engine.on` and hands stock handlers a copy of the answer with our markers removed.
+So an app is two things and no registration step. The markers must stay **empty**: the game deserialises every listed file before naming it, and an empty file is a valid default message. The stock UI shows the same list in its video presets menu, so the loader wraps `engine.on` and hands stock handlers a copy of the answer with our markers removed.
 
-The game's answer is the only source of mod names. Without an engine, or without an answer within 1.5 s, the loader says why and loads nothing.
+The game's answer is the only source of app names. Without an engine, or without an answer within 1.5 s, the loader says why and loads nothing.
 
 ## Two roots, deliberately
 
-Bundled apps live inside the package at `uiresources\ACEUIModLoaderApps\<name>\`. Installed mods live loose at `mods\uiresources\ACEUIModLoaderMods\<name>\`.
+Bundled apps live inside the package at `uiresources\ACEUIModLoaderBuiltIn\<name>\`. Installed apps live loose at `mods\uiresources\ACEUIModLoaderApps\<name>\`.
 
-They must differ, because **loose files never beat packed files**. A bundled app sitting at the installed mods' path could never be overridden, and `install_mod.py` would silently stop working on it. Kept apart, the opposite holds and is the point: an installed mod of the same name **wins** over the bundled copy, so working on a bundled app is still install, reload, look.
+They must differ, because **loose files never beat packed files**. A bundled app sitting at the installed apps' path could never be overridden, and `install_app.py` would silently stop working on it. Kept apart, the opposite holds and is the point: an installed app of the same name **wins** over the bundled copy, so working on a bundled app is still install, reload, look.
 
 Those app files are *new* paths, which always resolve. Only the two entry points are overrides.
 
 ## Rules that cost a launch to learn
 
-**Never request a URL that could be a folder.** The loose-file lookup only checks that the path exists, so a folder passes; a Resource Manager worker then throws opening it and the game dies. The loader only ever requests plain file names listed in a `mod.json`.
+**Never request a URL that could be a folder.** The loose-file lookup only checks that the path exists, so a folder passes; a Resource Manager worker then throws opening it and the game dies. The loader only ever requests plain file names listed in an `app.json`.
 
-**Everything the loader logs** starts with `[ACEUIModLoader]` and lands in the game log as `[gameface]` lines; each mod's own lines start with its title. `check_ingame_log.py` reads the newest log and reports what loaded, what failed, and whether the game crashed.
+**Everything the loader logs** starts with `[ACEUIModLoader]` and lands in the game log as `[gameface]` lines; each app's own lines start with its title. `check_ingame_log.py` reads the newest log and reports what loaded, what failed, and whether the game crashed.
 
 **A missing file is harmless** — one warning line, about 5 ms. A folder is fatal. The difference is worth remembering when adding anything that fetches.
 

@@ -15,11 +15,11 @@ link, so anything that needs to move has to be a GIF.
 |---|---|---|
 | `hero.png` | 600 KB | The game while driving, app drawer open on the right, two or three apps on screen. This is the whole pitch in one picture: it has to look like the game, not like a web page. Daylight track, clean HUD, no dev console. |
 | `drawer.gif` | 3 MB | Mouse moves to the right edge, the drawer slides in, one app is switched on and appears. About 5 seconds. This answers "how do I use it" better than any paragraph. |
-| `mods-folder.png` | 250 KB | Explorer at `Saved Games\ACE\mods` with `ACEUIModLoader.kspkg` in it, address bar visible so the path can be read. Crop to the window. |
+| `apps-folder.png` | 250 KB | Explorer at `Saved Games\ACE\mods` with `ACEUIModLoader.kspkg` in it, address bar visible so the path can be read. Crop to the window. |
 | `apps-pedalgraph.png` | 300 KB | The pedal graph widget on the HUD, mid-corner so the traces are interesting. |
 | `apps-telemetry.png` | 300 KB | The telemetry app with a lap time and delta showing. |
 | `apps-doom.png` | 400 KB | DOOM running on the HUD. The showpiece -- pick a frame with an enemy in it. |
-| `settings.png` | 300 KB | A mod's settings page, showing that apps are configurable without editing files. |
+| `settings.png` | 300 KB | An app's settings page, showing that apps are configurable without editing files. |
 
 > **The three app shots sit side by side in one row**, each a third of the page wide.
 > Crop all three to the **same aspect ratio and the same pixel size** -- 16:9 at

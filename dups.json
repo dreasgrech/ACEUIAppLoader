@@ -1,8 +1,10 @@
 {
   "machine": {
-    "dups": 32,
-    "fingerprint": "7cfb9349b92705fe",
+    "dups": 16,
+    "fingerprint": "e832627bf377e424",
+    "game": "0.9.1+release.6",
     "release": false,
+    "require": "any",
     "scenarios": 60,
     "selection": 120,
     "selection_sets": 120,
@@ -14,8 +16,10 @@
   },
   "release": {
     "dups": 32,
-    "fingerprint": "7cfb9349b92705fe",
+    "fingerprint": "e832627bf377e424",
+    "game": "0.9.1+release.6",
     "release": true,
+    "require": "any",
     "scenarios": 60,
     "selection": 120,
     "selection_sets": 120,
@@ -23,6 +27,6 @@
       "uiresources\\js\\cohtml.js",
       "uiresources\\hud.html"
     ],
-    "unseen": 60
+    "unseen": 59
   }
 }

@@ -1,4 +1,4 @@
-"""Runs the shared ACEUIModLoader test kit against this mod (see modkit.py in the loader repo)."""
+"""Runs the shared ACEUIModLoader test kit against this app (see appkit.py in the loader repo)."""
 import json
 import os
 import sys
@@ -12,23 +12,23 @@ LOADER = os.environ.get("ACE_LOADER_DIR")
 HERE = ROOT
 while not LOADER:
     for candidate in (HERE, os.path.join(HERE, "ACEUIModLoader")):
-        if os.path.isfile(os.path.join(candidate, "tools", "modkit.py")):
+        if os.path.isfile(os.path.join(candidate, "tools", "appkit.py")):
             LOADER = candidate
     if not LOADER and HERE == os.path.dirname(HERE):
         raise SystemExit("ACEUIModLoader not found: clone it next to this repo or set ACE_LOADER_DIR")
     HERE = os.path.dirname(HERE)
 sys.path.insert(0, os.path.join(LOADER, "tools"))
 
-from modkit import ModTests  # noqa: E402
+from appkit import AppTests  # noqa: E402
 
 
-class Tests(ModTests):
+class Tests(AppTests):
     ROOT = ROOT
     MIN_CASES = 3
     # the per-frame code is the graph and the table (drawColumn, fillRow) plus tick;
     # the controls below it run on a click or a setting change, not on every frame
     HOT_PATH = ("// ---- the graph", "// ---- controls")
-    # A profiler is the one mod that has to reach past the library: it wraps the page's own
+    # A profiler is the one app that has to reach past the library: it wraps the page's own
     # requestAnimationFrame (that is how it sees the stock HUD's work, not only ours) and
     # counts getBoundingClientRect calls, which is the closest thing this engine has to an
     # allocation counter. Its wrappers also have to hand each wrapped function the receiver
@@ -38,11 +38,11 @@ class Tests(ModTests):
 
 
 class BundledAppContractTests(unittest.TestCase):
-    """What shipping inside the loader's package means for this mod's own files."""
+    """What shipping inside the loader's package means for this app's own files."""
 
     @classmethod
     def setUpClass(cls):
-        with open(os.path.join(ROOT, "profiler", "mod.json"), encoding="utf-8") as f:
+        with open(os.path.join(ROOT, "profiler", "app.json"), encoding="utf-8") as f:
             cls.info = json.load(f)
         with open(os.path.join(ROOT, "profiler", "profiler.js"), encoding="utf-8") as f:
             cls.js = f.read()
@@ -53,10 +53,10 @@ class BundledAppContractTests(unittest.TestCase):
         self.assertIs(self.info.get("developer"), True)
 
     def test_the_panel_handle_is_what_it_offers_and_only_while_there_is_a_panel(self):
-        self.assertIn("ACEUIModLoader.apps.register(me.name, live);", self.js,
+        self.assertIn("ACEUIModLoader.shared.register(me.name, live);", self.js,
                       "the registered surface is the same handle ACEUIProfiler.panel() returns")
-        self.assertIn("ACEUIModLoader.apps.unregister(me.name);", self.js)
-        self.assertLess(self.js.index("apps.unregister"), self.js.index("state.ui.stop();"),
+        self.assertIn("ACEUIModLoader.shared.unregister(me.name);", self.js)
+        self.assertLess(self.js.index("shared.unregister"), self.js.index("state.ui.stop();"),
                         "withdrawn first thing in detach: a stopped profiler has nothing to report")
 
 

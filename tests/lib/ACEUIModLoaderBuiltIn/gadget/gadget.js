@@ -3,7 +3,7 @@
    folder that does not exist -- the installed alpha must win, and this one must never be
    fetched. */
 (function () {
-    const me = ACEUIModLoader.mod();
+    const me = ACEUIModLoader.app();
 
     window.__gadget = {
         name: me.name,
@@ -14,7 +14,7 @@
         detached: 0
     };
 
-    ACEUIModLoader.apps.register("gadget", { answer: 42 });
+    ACEUIModLoader.shared.register("gadget", { answer: 42 });
 
     me.mount(function () {
         window.__gadget.attached += 1;

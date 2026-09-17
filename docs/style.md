@@ -1,6 +1,6 @@
 # Style
 
-Same conventions across the library, every mod, and the uplinkjs scripts:
+Same conventions across the library, every app, and the uplinkjs scripts:
 
 - one self-invoking module per file, assigned onto the namespace
 - **no classes, no `this`, no `var`, no arrow functions, no function declarations**
@@ -10,7 +10,7 @@ Same conventions across the library, every mod, and the uplinkjs scripts:
 - four-space indentation
 - braces on every `if`
 
-`tools/modkit.py` (`check_style`) enforces this on every mod, and as of 0.9.1 on the loader's own `src/` too — that was the one place the rule lived on memory rather than on a test.
+`tools/appkit.py` (`check_style`) enforces this on every app, and as of 0.9.1 on the loader's own `src/` too — that was the one place the rule lived on memory rather than on a test.
 
 ## Why these ones
 
@@ -20,7 +20,7 @@ Same conventions across the library, every mod, and the uplinkjs scripts:
 
 **No `var`** for the usual reasons.
 
-The rules are narrow deliberately. They are not a style opinion so much as a way to make every file in six repositories look like every other, so that moving between a mod and the library costs nothing.
+The rules are narrow deliberately. They are not a style opinion so much as a way to make every file in six repositories look like every other, so that moving between an app and the library costs nothing.
 
 ## Cohtml rules
 

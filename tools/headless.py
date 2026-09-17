@@ -1,7 +1,7 @@
 """
 headless.py - run an HTML test harness in a headless Chromium and collect its report.
 
-Shared by the loader's library tests and by the mod repos' widget tests. A harness
+Shared by the loader's library tests and by the app repos' widget tests. A harness
 is a self-contained page that runs its cases synchronously and writes
 
     <pre id="results">PASS name\nFAIL name  -- message\n...\nSUMMARY 12/12</pre>

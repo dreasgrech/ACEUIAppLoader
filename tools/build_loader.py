@@ -4,18 +4,18 @@ build_loader.py - build the ACEUIModLoader package.
 
 1. Extract the stock `uiresources/js/cohtml.js` from the installed content.kspkg
    (never committed; it is Kunos'/Coherent's file).
-2. Append the library files in LIB_ORDER (src/ACEUIModLoaderMods.*.js) to it
+2. Append the library files in LIB_ORDER (src/ACEUIModLoaderApps.*.js) to it
    -> build/uiresources/js/cohtml.js. The order matters: core defines the
    namespace, console hooks console.* before the stock bundle runs, loader
-   comes second to last and starts loading mods once the DOM exists, and the
+   comes second to last and starts loading apps once the DOM exists, and the
    drawer comes last because it registers an ACEUIModLoader.ready callback.
 3. Copy the bundled apps -- the developer tools in apps/, the manifest-listed files
-   and nothing else -- to build/uiresources/ACEUIModLoaderApps/<name>/, and write the
-   index the loader reads, ACEUIModLoaderApps/apps.json. They go in as NEW paths, which
+   and nothing else -- to build/uiresources/ACEUIModLoaderBuiltIn/<name>/, and write the
+   index the loader reads, ACEUIModLoaderBuiltIn/apps.json. They go in as NEW paths, which
    always resolve whatever the package layout turns out to be; only cohtml.js is an
-   override. They are deliberately not at the installed mods' path: loose files never
+   override. They are deliberately not at the installed apps' path: loose files never
    beat packed files, so a bundled app there could never be overridden, and iterating on
-   one with install_mod.py would silently do nothing.
+   one with install_app.py would silently do nothing.
 4. Pack build/ with tools/pack_kspkg.py (which adds the padding that makes this
    single override win the game's lookup) -> dist/ACEUIModLoader.kspkg.
 5. --install copies it to the game's mods folder.
@@ -28,7 +28,7 @@ Usage:
   --no-verify skip re-reading the package to check every entry against its source
   --no-apps   build the library alone, without the developer apps in apps/
   --no-host   leave out the cohtml.js override, so the HUD page is the only way in
-  --release   plan the padding for a STOCK install instead of this machine's mods
+  --release   plan the padding for a STOCK install instead of this machine's apps
               folder -- what a package other people will install has to be built for
   --dups=N    write N table records for each override instead of one, so the game's
               merged vector holds N of ours against the base package's single record.
@@ -43,7 +43,7 @@ import sys
 import tempfile
 
 import _repos
-import install_mod
+import install_app
 
 _repos.add_internals_to_path()
 import kspkg  # noqa: E402
@@ -55,13 +55,13 @@ HOST_PATH = "uiresources/js/cohtml.js"
 # and the script it adds sits at a new path, which always resolves whatever the merged
 # layout turns out to be. The loader runs if either tie falls our way.
 PAGE_PATH = "uiresources/hud.html"
-BOOT_PATH = "uiresources/ACEUIModLoaderApps/loader.js"
+BOOT_PATH = "uiresources/ACEUIModLoaderBuiltIn/loader.js"
 PAGE_ANCHOR = "<script src='js/cohtml.js'></script>"
-PAGE_TAG = "<script src='ACEUIModLoaderApps/loader.js'></script>"
+PAGE_TAG = "<script src='ACEUIModLoaderBuiltIn/loader.js'></script>"
 TARGETS = (HOST_PATH, PAGE_PATH)   # the overrides that carry duplicate records
 APPS_DIR = os.path.join(_repos.REPO, "apps")
-APPS_PATH = "uiresources/ACEUIModLoaderApps"
-APPS_INDEX = "apps.json"
+BUILTIN_PATH = "uiresources/ACEUIModLoaderBuiltIn"
+BUILTIN_INDEX = "apps.json"
 SRC_DIR = os.path.join(_repos.REPO, "src")
 LIB_ORDER = [
     "ACEUIModLoader.core.js",
@@ -73,7 +73,7 @@ LIB_ORDER = [
     "ACEUIModLoader.panel.js",
     "ACEUIModLoader.loop.js",
     "ACEUIModLoader.input.js",
-    "ACEUIModLoader.apps.js",
+    "ACEUIModLoader.shared.js",
     "ACEUIModLoader.loader.js",
     "ACEUIModLoader.drawer.js",
     "ACEUIModLoader.window.js",
@@ -147,33 +147,33 @@ def library_sources():
 def bundled_apps(apps_dir=APPS_DIR):
     """[(shipped folder, info)] for every app under apps/, in load order (by name).
 
-    The manifest is read through install_mod, so a bundled app is held to exactly the
+    The manifest is read through install_app, so a bundled app is held to exactly the
     rules a loose one is: known keys only, a version, listed files that exist, and a
-    folder whose name is the mod's.
+    folder whose name is the app's.
     """
     out = []
     for name in sorted(os.listdir(apps_dir) if os.path.isdir(apps_dir) else []):
         app = os.path.join(apps_dir, name)
         folders = [d for d in sorted(os.listdir(app))
-                   if os.path.isfile(os.path.join(app, d, install_mod.MOD_FILE))] if os.path.isdir(app) else []
+                   if os.path.isfile(os.path.join(app, d, install_app.APP_FILE))] if os.path.isdir(app) else []
         if not folders:
             continue
         if len(folders) > 1:
-            raise SystemExit(f"{app} holds more than one mod folder: {folders}")
+            raise SystemExit(f"{app} holds more than one app folder: {folders}")
         src = os.path.join(app, folders[0])
-        out.append((src, install_mod.load_mod_info(src)))
+        out.append((src, install_app.load_app_info(src)))
     return out
 
 
 def copy_apps(build_dir, apps_dir=APPS_DIR):
     """The listed files, the index the loader reads, and nothing else."""
     apps = bundled_apps(apps_dir)
-    root = os.path.join(build_dir, *APPS_PATH.split("/"))
+    root = os.path.join(build_dir, *BUILTIN_PATH.split("/"))
     index = []
     os.makedirs(root, exist_ok=True)
     for src, info in apps:
         dest = os.path.join(root, info["name"])
-        files = [install_mod.MOD_FILE]
+        files = [install_app.APP_FILE]
         for key in ("scripts", "styles", "files"):
             files.extend(info.get(key, []))
         os.makedirs(dest, exist_ok=True)
@@ -182,7 +182,7 @@ def copy_apps(build_dir, apps_dir=APPS_DIR):
         index.append({"name": info["name"], "version": info["version"],
                       "title": info.get("title", info["name"]), "developer": bool(info.get("developer"))})
         print(f"bundled app {info['name']} {info['version']}: {len(files)} file(s)")
-    with open(os.path.join(root, APPS_INDEX), "w", encoding="utf-8", newline="\n") as f:
+    with open(os.path.join(root, BUILTIN_INDEX), "w", encoding="utf-8", newline="\n") as f:
         json.dump({"apps": index}, f, indent=2)
         f.write("\n")
     return index
@@ -198,7 +198,7 @@ def assemble_page(build_dir, base_pkg, sources, built_for=""):
     The anchor check below is what makes that a build failure instead of a launch one.
 
     The library copy is wrapped in a guard because both ways in can win at once, and
-    loading it twice would register every mod twice. cohtml.js runs first (the page loads
+    loading it twice would register every app twice. cohtml.js runs first (the page loads
     it above our tag), so when that tie went our way this file does nothing at all.
     """
     stock = kspkg.extract(base_pkg, PAGE_PATH).decode("utf-8")

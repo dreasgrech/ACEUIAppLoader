@@ -8,7 +8,7 @@
  * want a number while driving and cannot look at a panel to get it -- the log is readable
  * afterwards, and `tools/check_ingame_log.py` already knows how to find these lines.
  *
- * It needs the profiler mod installed (it borrows its sampler), but not its panel open,
+ * It needs the profiler app installed (it borrows its sampler), but not its panel open,
  * and it leaves recording off when it finishes.
  *
  * What the columns mean, and why they are what they are: this engine freezes
@@ -32,7 +32,7 @@
     const S = window.ACEProfilerSampler;
 
     if (!S) {
-        log("the profiler mod is not loaded on this page, so there is no sampler to borrow");
+        log("the profiler app is not loaded on this page, so there is no sampler to borrow");
 
         return;
     }

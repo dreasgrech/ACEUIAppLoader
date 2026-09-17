@@ -1,16 +1,16 @@
 /**
  * ACE UI Capabilities Probe -- a capability probe for the Assetto Corsa EVO Gameface HUD.
  *
- * A loose UI mod, loaded into the HUD page by the ACEUIModLoader, whose only job is
+ * A loose UI app, loaded into the HUD page by the ACEUIModLoader, whose only job is
  * to answer "what can JavaScript actually do inside the game's Cohtml/V8?" It runs
  * a wide battery of feature detections -- language and engine, timers, storage,
  * network, the pixel path (canvas, pixel readback, the Blob route ACEDOOM presents
  * frames with), workers, media and audio, DOM, input/gamepad, the Gameface engine
  * bridge, and the live telemetry model globals (each with its field names and current
- * values, so a mod can be built against what the game actually publishes) -- and shows
+ * values, so an app can be built against what the game actually publishes) -- and shows
  * each as yes / no / partial / warn.
  *
- * The results are also written to the game log with the mod's prefix, so
+ * The results are also written to the game log with the app's prefix, so
  * check_ingame_log.py can read off exactly what is available after an in-game run:
  * a summary line, then the misses and the partials by name. That log is the point;
  * the panel is for reading it live. The list is long, so the body scrolls (wheel or
@@ -27,11 +27,11 @@
  * Rows are rewritten once, when a probe settles, not on a loop.
  *
  * Identity (name, version, title, root, logger, storage keys) comes from
- * ACEUIModLoader.mod("capabilities"); styling lives in capabilities.css.
+ * ACEUIModLoader.app("capabilities"); styling lives in capabilities.css.
  */
 const CapabilitiesProbe = (function () {
 
-    const me = ACEUIModLoader.mod("capabilities");
+    const me = ACEUIModLoader.app("capabilities");
 
     const el = ACEUIModLoader.el;
     const close = ACEUIModLoader.close;
@@ -1155,9 +1155,9 @@ const CapabilitiesProbe = (function () {
     };
 
     /**
-     * What another mod can ask the probe, rather than probing again for itself:
+     * What another app can ask the probe, rather than probing again for itself:
      *
-     *     const probe = ACEUIModLoader.apps.get("capabilities");
+     *     const probe = ACEUIModLoader.shared.get("capabilities");
      *     if (probe && probe.status("WebSocket") === "yes") { ... }
      *
      * It is offered while the probe is attached and withdrawn when it is not, because the
@@ -1199,14 +1199,14 @@ const CapabilitiesProbe = (function () {
         state.ui = me.panel(root, function () { tick(state); });
 
         runAll(state);
-        ACEUIModLoader.apps.register(me.name, surface(state));
+        ACEUIModLoader.shared.register(me.name, surface(state));
         log("attached, " + CHECKS.length + " checks, lib=" + ACEUIModLoader.VERSION);
 
         return state;
     };
 
     const detach = function (state) {
-        ACEUIModLoader.apps.unregister(me.name);
+        ACEUIModLoader.shared.unregister(me.name);
         state.ui.stop();
 
         // kept, not nulled: the probe's own checks finish after a detach and still
@@ -1232,4 +1232,4 @@ const CapabilitiesProbe = (function () {
 }());
 
 /* Attach to #capabilities: the loader creates it in game, the preview page carries it. */
-ACEUIModLoader.mod("capabilities").mount(CapabilitiesProbe.attach, CapabilitiesProbe.detach);
+ACEUIModLoader.app("capabilities").mount(CapabilitiesProbe.attach, CapabilitiesProbe.detach);

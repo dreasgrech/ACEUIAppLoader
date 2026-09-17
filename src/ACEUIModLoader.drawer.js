@@ -1,19 +1,19 @@
 /**
- * ACEUIModLoader.drawer -- the app drawer: every loaded mod in one place.
+ * ACEUIModLoader.drawer -- the app drawer: every loaded app in one place.
  *
  * A panel that lives off the right edge of the screen and slides in when the mouse
  * reaches that edge, in the spirit of Assetto Corsa Content Manager's app bar. It lists
- * every mod the loader discovered, with a switch that shows or hides it, and opens a
- * mod's own options pane if it registered one. Choices persist, so a mod you switched
+ * every app the loader discovered, with a switch that shows or hides it, and opens a
+ * app's own options pane if it registered one. Choices persist, so an app you switched
  * off stays off across the HUD reload on Escape/resume.
  *
- * Why this lives in the loader rather than in a mod: the loader is the only thing that
+ * Why this lives in the loader rather than in an app: the loader is the only thing that
  * knows what is installed, and an app drawer that only listed *some* apps would be
- * useless. It also gives mods somewhere to put settings without each one growing its own
+ * useless. It also gives apps somewhere to put settings without each one growing its own
  * settings window.
  *
- * A mod gets a way in by declaring settings -- ACEUIModLoader.settings registers the
- * opener on its behalf, and clicking it opens that mod's own window. A mod with something
+ * An app gets a way in by declaring settings -- ACEUIModLoader.settings registers the
+ * opener on its behalf, and clicking it opens that app's own window. An app with something
  * more bespoke than a settings page registers what to open itself:
  *
  *     ACEUIModLoader.drawer.registerOpener("telemetry", function () { myWindow.open(); });
@@ -33,7 +33,7 @@
  *
  * The slide is shaped by measurement, not taste (dev/snippets/fpsprobe.js, in game
  * 2026-09-15). The HUD page advances at a rock-steady 58.5 frames per second -- half the
- * game's 117, with no hitches and no measurable cost from any mod -- so an animation gets
+ * game's 117, with no hitches and no measurable cost from any app -- so an animation gets
  * a frame every 17 ms and no more. At the original 180 ms the panel crossed in eleven
  * frames, one of which moved it a quarter of its own width, and then spent its last five
  * frames creeping through the final 7%: a jump followed by a crawl, which is what
@@ -49,7 +49,7 @@ ACEUIModLoader.drawer = (function () {
      * Where the switches live. localStorage is read synchronously and is what makes a
      * switched-off app hide instantly on an Escape/resume reload -- but it dies with the
      * game. The stock HUD layout container is the one the game writes to disk, so it is
-     * what survives a restart; it only appears a little after mod scripts run, so it is
+     * what survives a restart; it only appears a little after app scripts run, so it is
      * adopted when it turns up (see adoptHudStore). Ids there follow the stock
      * `hud_<name>` convention.
      */
@@ -89,7 +89,7 @@ ACEUIModLoader.drawer = (function () {
      * check, so guessing one risks showing the wrong picture rather than none.
      */
     const OPTIONS_GLYPH = "OPTIONS";
-    const EMPTY_TEXT = "no mods loaded on this page";
+    const EMPTY_TEXT = "no apps loaded on this page";
     const DEV_TEXT = "DEVELOPER APPS";
 
     const state = {
@@ -113,7 +113,7 @@ ACEUIModLoader.drawer = (function () {
 
     /**
      * Read the saved switches immediately, while the library is still loading and before
-     * any mod root exists, so applyStored() can hide a switched-off mod the moment the
+     * any app root exists, so applyStored() can hide a switched-off app the moment the
      * loader creates it. The HUD store is preferred when it happens to be ready already;
      * otherwise localStorage carries us until adoptHudStore() picks it up.
      */
@@ -147,9 +147,9 @@ ACEUIModLoader.drawer = (function () {
     };
 
     /**
-     * Whether this mod calls itself a developer tool. The rows know once the drawer is
+     * Whether this app calls itself a developer tool. The rows know once the drawer is
      * built, but the question is asked before that too -- the loader calls applyStored the
-     * moment it creates a mod's root, and the drawer is not built until every mod has
+     * moment it creates an app's root, and the drawer is not built until every app has
      * loaded -- so the loader's own copy of the manifest answers until then.
      */
     const isDeveloper = function (name) {
@@ -164,7 +164,7 @@ ACEUIModLoader.drawer = (function () {
      * Is this app on? A developer app is also off while the developer switch is, and that
      * gate belongs here rather than in the code that flips switches: everything goes
      * through this one function -- applyVisibility, applyStored, refreshAll, and the
-     * loader's own `enabled`, which decides whether a mod is even started. So a developer
+     * loader's own `enabled`, which decides whether an app is even started. So a developer
      * app cannot be started, shown, or brought back by its hotkey while the switch is off,
      * and its own switch is left exactly as the user last set it, ready for when it is on
      * again. That default is "on": flipping the developer switch should show the tools
@@ -183,12 +183,12 @@ ACEUIModLoader.drawer = (function () {
     };
 
     /**
-     * Switch a mod on or off for real.
+     * Switch an app on or off for real.
      *
-     * Hiding the root is not enough: a hidden mod keeps its key handlers, its frame loop
+     * Hiding the root is not enough: a hidden app keeps its key handlers, its frame loop
      * and its sounds (DOOM still answered Insert and played music while "disabled"). So
      * the loader is asked to stop it through its own detach, and to start it again on
-     * the way back. The root is hidden as well, which is the whole story for a mod that
+     * the way back. The root is hidden as well, which is the whole story for an app that
      * never gave the loader a detach.
      */
     const applyVisibility = function (name) {
@@ -206,10 +206,10 @@ ACEUIModLoader.drawer = (function () {
     };
 
     /**
-     * Called by the loader the instant it creates a mod's root, before the mod's scripts
-     * run. Without this a switched-off mod is visible from the moment its root exists
+     * Called by the loader the instant it creates an app's root, before the app's scripts
+     * run. Without this a switched-off app is visible from the moment its root exists
      * until the drawer is built -- and the drawer is built on ACEUIModLoader.ready, which
-     * only fires once *every* mod has finished loading. With a large mod in the queue
+     * only fires once *every* app has finished loading. With a large app in the queue
      * that is about a second of the app flashing on and then vanishing again after a
      * pause-menu reload, which is exactly what it looked like.
      */
@@ -230,7 +230,7 @@ ACEUIModLoader.drawer = (function () {
     /**
      * Flip one app's switch. Returns whether it is actually on afterwards, which is not
      * always what was asked for: a developer app stays off while the developer switch is,
-     * and `mod().show(true)` says so in the log rather than leaving a panel unreachable.
+     * and `app().show(true)` says so in the log rather than leaving a panel unreachable.
      */
     const setVisible = function (name, on) {
         state.visible[name] = Boolean(on);
@@ -296,11 +296,11 @@ ACEUIModLoader.drawer = (function () {
         }
     };
 
-    /** Re-apply every switch: after adopting the HUD store, mods may need hiding. */
+    /** Re-apply every switch: after adopting the HUD store, apps may need hiding. */
     const refreshAll = function () {
-        const mods = ACEUIModLoader.mods || [];
+        const apps = ACEUIModLoader.apps || [];
 
-        mods.forEach(function (entry) { applyVisibility(entry.name); });
+        apps.forEach(function (entry) { applyVisibility(entry.name); });
         state.apps.forEach(function (app) {
             applyVisibility(app.name);
             paintSwitch(app);
@@ -313,7 +313,7 @@ ACEUIModLoader.drawer = (function () {
      * session hides switched-off apps instantly. A switch the user flipped in the meantime
      * wins: their intent is newer than anything on disk.
      *
-     * The container appears a little after mod scripts run, so this is called through
+     * The container appears a little after app scripts run, so this is called through
      * `persist.whenHudReady` rather than polling for it here.
      */
     const adoptHudStore = function () {
@@ -365,8 +365,8 @@ ACEUIModLoader.drawer = (function () {
     };
 
     /**
-     * What the OPTIONS button on a mod's row should open. ACEUIModLoader.settings calls
-     * this for every mod that declares settings, so most mods never call it themselves.
+     * What the OPTIONS button on an app's row should open. ACEUIModLoader.settings calls
+     * this for every app that declares settings, so most apps never call it themselves.
      */
     const registerOpener = function (name, open) {
         if (typeof open !== "function") { return; }
@@ -472,7 +472,7 @@ ACEUIModLoader.drawer = (function () {
         return row;
     };
 
-    /** A mod that did not load gets a row that says why, rather than vanishing silently. */
+    /** An app that did not load gets a row that says why, rather than vanishing silently. */
     const buildStatus = function (app) {
         return css(text(document.createElement("div"), app.status), {
             padding: "0 0.6rem 0.3rem 1.7rem",
@@ -518,7 +518,7 @@ ACEUIModLoader.drawer = (function () {
         return holder;
     };
 
-    const build = function (mods) {
+    const build = function (apps) {
         const selector = ACEUIModLoader.loader ? ACEUIModLoader.loader.CONTAINER_SELECTOR : "";
         const container = (selector && document.querySelector(selector)) || document.body;
         const stored = persist.readHud(HUD_ID) || persist.readLocal(STORE_KEY);
@@ -586,12 +586,12 @@ ACEUIModLoader.drawer = (function () {
         panel.appendChild(header);
         panel.appendChild(list);
 
-        mods.forEach(function (entry) {
+        apps.forEach(function (entry) {
             list.appendChild(buildApp(entry));
             applyVisibility(entry.name);
         });
 
-        if (!mods.length) {
+        if (!apps.length) {
             list.appendChild(css(text(document.createElement("div"), EMPTY_TEXT), {
                 padding: "0.5rem 0.6rem", color: THEME.inkDim, fontSize: "0.65rem"
             }));
@@ -624,10 +624,10 @@ ACEUIModLoader.drawer = (function () {
 
     /** Build once the loader knows what is installed. */
     if (typeof ACEUIModLoader.ready === "function") {
-        ACEUIModLoader.ready(function (mods) {
+        ACEUIModLoader.ready(function (apps) {
             if (state.built) { return; }
 
-            build(mods);
+            build(apps);
         });
     }
 

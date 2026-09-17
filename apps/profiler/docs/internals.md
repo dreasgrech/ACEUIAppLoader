@@ -1,7 +1,7 @@
 # How the profiler sees the page
 
 Why profiling the stock HUD is possible at all, what the numbers mean, and the API
-another mod can drive it with.
+another app can drive it with.
 
 ## What makes it possible
 
@@ -15,7 +15,7 @@ before the profiler started.
 **The work has names.** The stock bundle ships unminified, so its callbacks arrive as
 `perFrameAllModelUpdate`, `visibilityChecker`, `fetchAllModels`. Of the 27 kinds of custom
 element on a live HUD, 26 have wrappable methods with real names (`onBindingUpdate`,
-`updateDisplayValue`, `process`). Our own mods carry their name because
+`updateDisplayValue`, `process`). Our own apps carry their name because
 `ACEUIModLoader.loop.start` takes an owner and stamps it on the callback it schedules.
 
 **The clock, however, is poor.** `performance.now()` **does not advance within a frame**:
@@ -41,7 +41,7 @@ Reading a table through a HUD panel while driving is hopeless, so everything imp
 said in the game log as well, prefixed `[profiler]`:
 
 - **REC** logs what was instrumented: frames, timers, DOM and engine events, layout reads,
-  mods' named sections, and how many stock widget methods were wrapped, plus the clock and
+  apps' named sections, and how many stock widget methods were wrapped, plus the clock and
   the window size.
 - **pause** logs how many frames were kept and the window's average frame time.
 - **LOG** prints the view currently on screen -- window, tree or worst frame -- with share,

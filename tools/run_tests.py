@@ -3,7 +3,7 @@
 run_tests.py - the loader's own suite plus every bundled app's, in one command.
 
 `python -m unittest discover` cannot do this on its own: the apps each have a
-`tests/test_mod.py`, and three files of the same name in directories that are not
+`tests/test_app.py`, and three files of the same name in directories that are not
 packages collide on module name -- unittest imports the first and reports the rest as
 errors. So each suite runs in its own subprocess, with its own repo root as the working
 directory, exactly as it did when the app was its own repository.

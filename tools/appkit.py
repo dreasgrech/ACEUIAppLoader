@@ -1,29 +1,29 @@
 """
-modkit.py - the shared test kit for ACEUIModLoader mods.
+appkit.py - the shared test kit for ACEUIModLoader apps.
 
-A mod repo needs one test file. tools/new_mod.py writes it; the part worth knowing is
-that it finds this kit by walking up from the mod's own root, because the loader is
-either beside the mod (its own repo) or above it (a bundled app in the loader's apps/):
+An app repo needs one test file. tools/new_app.py writes it; the part worth knowing is
+that it finds this kit by walking up from the app's own root, because the loader is
+either beside the app (its own repo) or above it (a bundled app in the loader's apps/):
 
     import os, sys
     ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-    ... walk up for <dir>/tools/modkit.py or <dir>/ACEUIModLoader/tools/modkit.py ...
+    ... walk up for <dir>/tools/appkit.py or <dir>/ACEUIModLoader/tools/appkit.py ...
     sys.path.insert(0, os.path.join(LOADER, "tools"))
-    from modkit import ModTests
+    from appkit import AppTests
 
-    class Tests(ModTests):
+    class Tests(AppTests):
         ROOT = ROOT
 
-and gets: mod.json validity (the folder is the shipped mod), nothing ships that is
+and gets: app.json validity (the folder is the shipped app), nothing ships that is
 not listed, no stock file is overridden, no legacy boilerplate (VERSION file, mod.js,
 install wrapper, `const VERSION` in scripts), the project's JavaScript style rules,
 the Cohtml rules (no `var(--x, fallback)`, no per-frame SVG/canvas, no CSS in
 scripts), class names used by scripts exist in the stylesheet, identity comes from
-`ACEUIModLoader.mod(...)`, and every `tests/**/harness.html` passes in a headless
+`ACEUIModLoader.app(...)`, and every `tests/**/harness.html` passes in a headless
 browser (tools/headless.py; skipped without a browser).
 
 Optional class attributes:
-    MOD_DIR       shipped folder (default: the one directory under ROOT with a mod.json)
+    APP_DIR       shipped folder (default: the one directory under ROOT with an app.json)
     MIN_CASES     minimum cases a harness must report (default 1)
     HOT_PATH      (start marker, end marker) in the main script: that slice must not
                   build markup or touch style, and must not hold magic numbers
@@ -38,7 +38,7 @@ import unittest
 
 import headless
 
-MOD_FILE = "mod.json"
+APP_FILE = "app.json"
 KNOWN_KEYS = {"name", "version", "title", "pages", "scripts", "styles", "files", "root", "developer"}
 STOCK_FILES = ("hud.html", "cohtml.js", "components.js")
 LEGACY = ("VERSION", os.path.join("tools", "install.py"))
@@ -65,12 +65,12 @@ def strip_comments(src):
     return re.sub(r"//[^\n]*", "", src)
 
 
-def find_mod_dir(root):
-    """The one directory directly under root that holds a mod.json."""
+def find_app_dir(root):
+    """The one directory directly under root that holds an app.json."""
     found = [d for d in sorted(os.listdir(root))
-             if os.path.isdir(os.path.join(root, d)) and os.path.isfile(os.path.join(root, d, MOD_FILE))]
+             if os.path.isdir(os.path.join(root, d)) and os.path.isfile(os.path.join(root, d, APP_FILE))]
     if len(found) != 1:
-        raise AssertionError(f"expected exactly one folder with {MOD_FILE} under {root}, found {found}")
+        raise AssertionError(f"expected exactly one folder with {APP_FILE} under {root}, found {found}")
     return os.path.join(root, found[0])
 
 
@@ -80,12 +80,12 @@ def check_style(testcase, name, js, allow_this=False):
     `allow_this` exists for one shape of code these rules were not written for: a
     wrapper standing in front of somebody else's function has to hand that function
     the receiver it was called with, and there is no way to say that without `this`.
-    A mod opts in per file, in its own test class, so the exception is visible next
+    An app opts in per file, in its own test class, so the exception is visible next
     to the file it applies to rather than hidden in the kit.
     """
     code = strip_js(js)
     testcase.assertIsNone(re.search(r"\bclass\s+[A-Za-z_$]", code), f"{name}: class")
-    # defining one is the hazard: the stock framework owns the ks-* registry and a mod
+    # defining one is the hazard: the stock framework owns the ks-* registry and an app
     # that registers a tag can collide with it. Reading the registry is not a hazard --
     # ACEUIProfiler does it to wrap the stock widgets' methods and profile them by name.
     testcase.assertNotIn("customElements.define", code, f"{name}: defines a custom element")
@@ -106,9 +106,9 @@ def check_style(testcase, name, js, allow_this=False):
     testcase.assertIsNotNone(re.search(r"\(function \(\) \{", code), f"{name}: no IIFE")
 
 
-class ModTests(unittest.TestCase):
+class AppTests(unittest.TestCase):
     ROOT = None
-    MOD_DIR = None
+    APP_DIR = None
     MIN_CASES = 1
     HOT_PATH = None
     ALLOW_OWN = ()
@@ -117,16 +117,16 @@ class ModTests(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
         if cls.ROOT is None:
-            raise unittest.SkipTest("ModTests is a base class; subclass it with ROOT set")
-        cls.mod_dir = cls.MOD_DIR or find_mod_dir(cls.ROOT)
-        cls.name = os.path.basename(cls.mod_dir)
-        cls.info = json.loads(read(os.path.join(cls.mod_dir, MOD_FILE)))
-        cls.scripts = {f: read(os.path.join(cls.mod_dir, f)) for f in cls.info.get("scripts", [])}
-        cls.styles = {f: read(os.path.join(cls.mod_dir, f)) for f in cls.info.get("styles", [])}
+            raise unittest.SkipTest("AppTests is a base class; subclass it with ROOT set")
+        cls.app_dir = cls.APP_DIR or find_app_dir(cls.ROOT)
+        cls.name = os.path.basename(cls.app_dir)
+        cls.info = json.loads(read(os.path.join(cls.app_dir, APP_FILE)))
+        cls.scripts = {f: read(os.path.join(cls.app_dir, f)) for f in cls.info.get("scripts", [])}
+        cls.styles = {f: read(os.path.join(cls.app_dir, f)) for f in cls.info.get("styles", [])}
 
     # ---- the shipped folder ----------------------------------------------------------
 
-    def test_mod_json_is_minimal_and_valid(self):
+    def test_app_json_is_minimal_and_valid(self):
         info = self.info
         self.assertRegex(info.get("version", ""), r"^\d+\.\d+\.\d+$", "version x.y.z")
         self.assertEqual(sorted(set(info) - KNOWN_KEYS), [], f"unknown keys; known: {sorted(KNOWN_KEYS)}")
@@ -137,22 +137,22 @@ class ModTests(unittest.TestCase):
             self.assertIsInstance(info.get(key, []), list, key)
         for rel in info.get("scripts", []) + info.get("styles", []) + info.get("files", []):
             self.assertEqual(os.path.basename(rel), rel, f"{rel}: plain file names only (folders crash the game)")
-            self.assertTrue(os.path.isfile(os.path.join(self.mod_dir, rel)), f"{rel} listed but missing")
+            self.assertTrue(os.path.isfile(os.path.join(self.app_dir, rel)), f"{rel} listed but missing")
         self.assertTrue(info.get("scripts"), "at least one script")
 
     def test_nothing_ships_that_is_not_listed(self):
-        listed = set(self.info.get("scripts", [])) | set(self.info.get("styles", [])) | set(self.info.get("files", [])) | {MOD_FILE}
-        present = {n for n in os.listdir(self.mod_dir) if not n.startswith(".")}
-        self.assertEqual(present, listed, "mod.json must list exactly the files in the mod folder")
+        listed = set(self.info.get("scripts", [])) | set(self.info.get("styles", [])) | set(self.info.get("files", [])) | {APP_FILE}
+        present = {n for n in os.listdir(self.app_dir) if not n.startswith(".")}
+        self.assertEqual(present, listed, "app.json must list exactly the files in the app folder")
         for stock in STOCK_FILES:
             self.assertNotIn(stock, present, f"{stock} must not be overridden")
 
     def test_no_legacy_boilerplate(self):
         for rel in LEGACY:
-            self.assertFalse(os.path.exists(os.path.join(self.ROOT, rel)), f"{rel}: gone since loader 0.4.0 (mod.json holds the version)")
-        self.assertFalse(os.path.exists(os.path.join(self.mod_dir, "mod.js")), "mod.js: the loader creates the root now")
+            self.assertFalse(os.path.exists(os.path.join(self.ROOT, rel)), f"{rel}: gone since loader 0.4.0 (app.json holds the version)")
+        self.assertFalse(os.path.exists(os.path.join(self.app_dir, "mod.js")), "mod.js: the loader creates the root now")
         for name, js in self.scripts.items():
-            self.assertIsNone(re.search(r"const VERSION\s*=", js), f"{name}: the version lives in mod.json; read ACEUIModLoader.mod().version")
+            self.assertIsNone(re.search(r"const VERSION\s*=", js), f"{name}: the version lives in app.json; read ACEUIModLoader.app().version")
 
     # ---- the scripts ----------------------------------------------------------------
 
@@ -173,8 +173,8 @@ class ModTests(unittest.TestCase):
 
     def test_identity_comes_from_the_loader(self):
         joined = "\n".join(self.scripts.values())
-        self.assertIn("ACEUIModLoader.mod(", joined, "read name/version/title/root/log/keys from ACEUIModLoader.mod(...)")
-        self.assertIn(".mount(", joined, "attach through ACEUIModLoader.mod(name).mount(attach), not your own boot code")
+        self.assertIn("ACEUIModLoader.app(", joined, "read name/version/title/root/log/keys from ACEUIModLoader.app(...)")
+        self.assertIn(".mount(", joined, "attach through ACEUIModLoader.app(name).mount(attach), not your own boot code")
         for name, js in self.scripts.items():
             code = strip_js(js)
             for own in ("DOMContentLoaded", "readyState"):

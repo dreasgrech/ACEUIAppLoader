@@ -3,8 +3,8 @@
 Everything the README leaves out, for anyone building the loader rather than installing it.
 Installing is one file in a folder; this is the rest.
 
-[`writing-a-mod.md`](writing-a-mod.md) is the guide to writing a mod against the library --
-that needs none of this, because a mod is loose files and no build step.
+[`writing-a-app.md`](writing-a-app.md) is the guide to writing an app against the library --
+that needs none of this, because an app is loose files and no build step.
 
 ## Commands
 
@@ -14,7 +14,7 @@ Needs Python 3.12, the game installed, and [`ACEGameInternals`](https://github.c
 python tools/build_loader.py --dups=auto --install   # build and install for this machine
 python tools/build_loader.py --dups=auto --release   # build for someone else's stock install
 python tools/tune_dups.py --write                    # re-measure after the package gains a file
-python tools/install_mod.py <repo>/<name>            # install a loose mod and write its marker
+python tools/install_app.py <repo>/<name>            # install a loose app and write its marker
 python tools/check_ingame_log.py                     # after a launch: what loaded, what failed
 python tools/post_update.py --install                # after the game has been patched
 python tools/repad.py                                # after installing or removing another package mod
@@ -48,15 +48,15 @@ tools/
   build_loader.py          assembles the library into the package and packs it
   tune_dups.py             measures how many records the overrides need
   pack_kspkg.py            writes a .kspkg, with the padding and duplicate records that win the lookup
-  install_mod.py           installs a loose mod folder and writes its empty marker
-  new_mod.py               scaffolds a mod repo
-  modkit.py                the shared test kit every mod's suite subclasses
+  install_app.py           installs a loose app folder and writes its empty marker
+  new_app.py               scaffolds an app repo
+  appkit.py                the shared test kit every app's suite subclasses
   headless.py              runs an HTML harness in a headless browser and reads its report
   check_ingame_log.py      reads the newest game log and says what the loader did
   post_update.py           rebuild, re-measure, reinstall and re-check after a game patch
   repad.py                 rebuild whichever installed packages have lost their override
   run_tests.py             this repo's suite plus each app's, one subprocess each
-  absorb_app.py            one-off git surgery: move a mod repo into apps/ with its history
+  absorb_app.py            one-off git surgery: move an app repo into apps/ with its history
 tests/
   lib/                     harness pages, test doubles, and the fixtures the loader is tested against
 docs/                      see below
@@ -64,4 +64,4 @@ docs/                      see below
 
 ## Style
 
-No classes, no `this`, no `var`, no arrow functions, no function declarations. One self-invoking module per file assigned onto the namespace, four-space indent, double quotes, braces on every `if`. The test kit enforces it on every mod and on `src/` — see [`docs/style.md`](docs/style.md).
+No classes, no `this`, no `var`, no arrow functions, no function declarations. One self-invoking module per file assigned onto the namespace, four-space indent, double quotes, braces on every `if`. The test kit enforces it on every app and on `src/` — see [`docs/style.md`](docs/style.md).

@@ -1,25 +1,25 @@
 #!/usr/bin/env python3
 """
-new_mod.py - start a UI mod for the ACEUIModLoader with everything in place.
+new_app.py - start a UI app for the ACEUIModLoader with everything in place.
 
-    python tools/new_mod.py <name> [<parent dir>] [--title "Nice Name"] [--developer]
+    python tools/new_app.py <name> [<parent dir>] [--title "Nice Name"] [--developer]
 
 creates <parent dir>/ACE<Title>/ (default parent: next to this repo) holding
 
-    <name>/mod.json          version, styles, scripts  (the folder IS the shipped mod)
+    <name>/app.json          version, styles, scripts  (the folder IS the shipped app)
     <name>/<name>.js         an IIFE module: attach/detach, draggable persistent panel, frame loop
     <name>/<name>.css        stock-looking panel styling
-    tests/test_mod.py        the shared test kit (modkit.py) pointed at this repo
+    tests/test_app.py        the shared test kit (appkit.py) pointed at this repo
     tests/harness.html       browser cases run headlessly by the kit
-    dev/preview.html         the mod outside the game
+    dev/preview.html         the app outside the game
     README.md, .gitignore
 
---developer marks it a developer tool in its mod.json, which keeps it behind the app
+--developer marks it a developer tool in its app.json, which keeps it behind the app
 drawer's "developer apps" switch -- for a profiler or a probe rather than a HUD widget.
 
 Nothing here repeats the version or the name in a second place: the script reads
-both from `ACEUIModLoader.mod("<name>")`, and the loader creates `#<name>` before the
-script runs. Install with `python tools/install_mod.py <repo>/<name>`.
+both from `ACEUIModLoader.app("<name>")`, and the loader creates `#<name>` before the
+script runs. Install with `python tools/install_app.py <repo>/<name>`.
 """
 import os
 import re
@@ -29,7 +29,7 @@ import _repos
 
 NAME_RE = re.compile(r"^[a-z][a-z0-9_-]*$")
 
-MOD_JSON = """{
+APP_JSON = """{
   "version": "0.1.0",
   "title": "__TITLE__",__DEVELOPER__
   "styles": ["__NAME__.css"],
@@ -41,11 +41,11 @@ DEVELOPER_KEY = """
   "developer": true,"""
 
 SCRIPT = """/**
- * __TITLE__ -- a UI mod for Assetto Corsa EVO, built on the ACEUIModLoader library.
+ * __TITLE__ -- a UI app for Assetto Corsa EVO, built on the ACEUIModLoader library.
  *
  * The loader creates `<div id="__NAME__">` inside the HUD container before this
- * script runs and `ACEUIModLoader.mod("__NAME__")` describes the mod (name, version
- * from mod.json, title, root, a prefixed logger, derived storage keys), so none of
+ * script runs and `ACEUIModLoader.app("__NAME__")` describes the app (name, version
+ * from app.json, title, root, a prefixed logger, derived storage keys), so none of
  * that is declared here. Styling lives in __NAME__.css.
  *
  * Cohtml rules: build the markup once, then only change textContent, classes,
@@ -53,7 +53,7 @@ SCRIPT = """/**
  */
 const __GLOBAL__ = (function () {
 
-    const me = ACEUIModLoader.mod("__NAME__");
+    const me = ACEUIModLoader.app("__NAME__");
 
     /** Class names shared with __NAME__.css. */
     const CLASS = {
@@ -132,7 +132,7 @@ const __GLOBAL__ = (function () {
 }());
 
 /* Attach to #__NAME__: the loader creates it in game, the preview page carries it. */
-ACEUIModLoader.mod("__NAME__").mount(__GLOBAL__.attach);
+ACEUIModLoader.app("__NAME__").mount(__GLOBAL__.attach);
 """
 
 STYLE = """/*
@@ -188,7 +188,7 @@ body.hide-hud .ace-__NAME__ {
 }
 """
 
-TEST = """\"\"\"Runs the shared ACEUIModLoader test kit against this mod (see modkit.py in the loader repo).\"\"\"
+TEST = """\"\"\"Runs the shared ACEUIModLoader test kit against this app (see appkit.py in the loader repo).\"\"\"
 import os
 import sys
 import unittest
@@ -201,17 +201,17 @@ LOADER = os.environ.get("ACE_LOADER_DIR")
 HERE = ROOT
 while not LOADER:
     for candidate in (HERE, os.path.join(HERE, "ACEUIModLoader")):
-        if os.path.isfile(os.path.join(candidate, "tools", "modkit.py")):
+        if os.path.isfile(os.path.join(candidate, "tools", "appkit.py")):
             LOADER = candidate
     if not LOADER and HERE == os.path.dirname(HERE):
         raise SystemExit("ACEUIModLoader not found: clone it next to this repo or set ACE_LOADER_DIR")
     HERE = os.path.dirname(HERE)
 sys.path.insert(0, os.path.join(LOADER, "tools"))
 
-from modkit import ModTests  # noqa: E402
+from appkit import AppTests  # noqa: E402
 
 
-class Tests(ModTests):
+class Tests(AppTests):
     ROOT = ROOT
     MIN_CASES = 3
     HOT_PATH = ("// ---- rendering", "// ---- lifecycle")
@@ -252,7 +252,7 @@ HARNESS = """<!DOCTYPE html>
     document.getElementById("center").appendChild(root);
     const state = __GLOBAL__.attach(root);
 
-    t("attach builds the markup once, hidden until placed, and logs with the mod's prefix", function () {
+    t("attach builds the markup once, hidden until placed, and logs with the app's prefix", function () {
         ok(root.classList.contains("ace-__NAME__"), "root class");
         ok(root.querySelector(".__ABBR__-header"), "header"); eq(root.querySelector(".__ABBR__-header").textContent, "__NAME__", "title falls back to the name outside the game");
         eq(root.style.visibility, "hidden", "hidden until positioned"); ok(state.loop.running, "loop running");
@@ -284,7 +284,7 @@ PREVIEW = """<!DOCTYPE html>
 <head>
 <meta charset="utf-8">
 <title>__TITLE__ preview</title>
-<!-- The mod outside the game: the library from the sibling loader checkout, then the real files. Open directly in Edge or Chrome. -->
+<!-- The app outside the game: the library from the sibling loader checkout, then the real files. Open directly in Edge or Chrome. -->
 <script src="__LIB__/lib.js"></script>
 <link rel="stylesheet" type="text/css" href="../__NAME__/__NAME__.css">
 <style>
@@ -304,18 +304,18 @@ PREVIEW = """<!DOCTYPE html>
 
 README = """# __REPO__
 
-__TITLE__: a UI mod for Assetto Corsa EVO, loaded by the
+__TITLE__: a UI app for Assetto Corsa EVO, loaded by the
 [ACEUIModLoader](../ACEUIModLoader) and built on its library.
 
 ## Layout
 
-- `__NAME__/` - the shipped mod, exactly what lands in
-  `Saved Games\\ACE\\mods\\uiresources\\ACEUIModLoaderMods\\__NAME__\\`:
-  `mod.json` (version, styles, scripts), `__NAME__.js`, `__NAME__.css`.
-- `tests/test_mod.py` - runs the loader's shared test kit (`modkit.py`) against
-  this repo: mod.json, style and Cohtml rules, and `tests/harness.html` in a
+- `__NAME__/` - the shipped app, exactly what lands in
+  `Saved Games\\ACE\\mods\\uiresources\\ACEUIModLoaderApps\\__NAME__\\`:
+  `app.json` (version, styles, scripts), `__NAME__.js`, `__NAME__.css`.
+- `tests/test_app.py` - runs the loader's shared test kit (`appkit.py`) against
+  this repo: app.json, style and Cohtml rules, and `tests/harness.html` in a
   headless browser.
-- `dev/preview.html` - the mod outside the game.
+- `dev/preview.html` - the app outside the game.
 
 ## Install
 
@@ -323,7 +323,7 @@ With the loader package installed (`python tools/build_loader.py --install` in
 the loader repo):
 
 ```
-python ..\\ACEUIModLoader\\tools\\install_mod.py __NAME__
+python ..\\ACEUIModLoader\\tools\\install_app.py __NAME__
 ```
 
 Escape and resume in the car reloads the HUD and picks up changes.
@@ -339,7 +339,7 @@ GITIGNORE = """# python
 __pycache__/
 *.pyc
 
-# editor swap / temp files (install_mod.py skips them too)
+# editor swap / temp files (install_app.py skips them too)
 *.swp
 *~
 """
@@ -369,10 +369,10 @@ def create(name, parent, title=None, developer=False):
     values = dict(NAME=name, TITLE=title, GLOBAL=global_name, ABBR=abbreviation(name), LIB=lib,
                   REPO="ACE" + global_name, DEVELOPER=DEVELOPER_KEY if developer else "")
     files = {
-        os.path.join(name, "mod.json"): MOD_JSON,
+        os.path.join(name, "app.json"): APP_JSON,
         os.path.join(name, f"{name}.js"): SCRIPT,
         os.path.join(name, f"{name}.css"): STYLE,
-        os.path.join("tests", "test_mod.py"): TEST,
+        os.path.join("tests", "test_app.py"): TEST,
         os.path.join("tests", "harness.html"): HARNESS,
         os.path.join("dev", "preview.html"): PREVIEW,
         "README.md": README,

@@ -28,11 +28,11 @@
  *     scroller.detach();                  // releases every listener
  *
  * A handle that has been detached stays safe to call: every method becomes a no-op. Work
- * that outlives a panel is normal here -- a mod switched off in the app drawer is detached
+ * that outlives a panel is normal here -- an app switched off in the app drawer is detached
  * within milliseconds of loading, while its own timers and probes are still in flight --
  * and such a callback should find a scroller that does nothing, not one that throws.
  *
- * The body needs `overflow: hidden` and the track/thumb need sizes from the mod's own
+ * The body needs `overflow: hidden` and the track/thumb need sizes from the app's own
  * stylesheet; this owns behaviour, not appearance.
  */
 ACEUIModLoader.scroll = (function () {

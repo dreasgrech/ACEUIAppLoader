@@ -1,8 +1,8 @@
 /**
- * ACEUIModLoader.settings -- a settings page per mod, rendered by the loader.
+ * ACEUIModLoader.settings -- a settings page per app, rendered by the loader.
  *
- * A mod declares what it has; the loader stores the values, draws the controls in the
- * app drawer's options pane, and tells the mod when something changes. The mod never
+ * An app declares what it has; the loader stores the values, draws the controls in the
+ * app drawer's options pane, and tells the app when something changes. The app never
  * touches storage or builds a form.
  *
  *     const opts = ACEUIModLoader.settings.define("devconsole", [
@@ -23,11 +23,11 @@
  * prompt), and takes the keyboard through ACEUIModLoader.input while focused so typing a
  * value cannot drive the car.
  *
- * The `key` type exists because mods hardcoding hotkeys collide with whatever the player
+ * The `key` type exists because apps hardcoding hotkeys collide with whatever the player
  * has bound; this lets them move ours.
  *
  * Declaring settings is all it takes for the drawer to offer a way in. Clicking it opens
- * that mod's own settings window -- an ACEUIModLoader.window, draggable, with an [X] --
+ * that app's own settings window -- an ACEUIModLoader.window, draggable, with an [X] --
  * rather than unfolding a pane inside the drawer, which would push every row below it
  * down the list. The window can also be driven directly:
  *
@@ -38,14 +38,14 @@
  *
  * Values are written to both stores (see ACEUIModLoader.persist): the HUD layout
  * container, which the game writes to disk and is the only thing that survives a restart,
- * and localStorage, which is read synchronously so a value is there the moment a mod asks.
+ * and localStorage, which is read synchronously so a value is there the moment an app asks.
  */
 ACEUIModLoader.settings = (function () {
 
     /**
-     * `action` and `info` carry no value: an action is a button the mod handles, an info
-     * is a line of text the mod computes. They are here because a settings page that can
-     * only hold values forces a mod back to hand-building a pane for one button.
+     * `action` and `info` carry no value: an action is a button the app handles, an info
+     * is a line of text the app computes. They are here because a settings page that can
+     * only hold values forces an app back to hand-building a pane for one button.
      */
     const TYPES = ["toggle", "range", "choice", "text", "key", "action", "info"];
     const VALUE_TYPES = ["toggle", "range", "choice", "text", "key"];
@@ -69,50 +69,50 @@ ACEUIModLoader.settings = (function () {
     const persist = ACEUIModLoader.persist;
 
     /** name -> { specs, values, listeners } */
-    const mods = {};
+    const declared = {};
 
     const css = ACEUIModLoader.dom.css;
     const make = ACEUIModLoader.dom.make;
 
-    const hudId = function (mod) {
-        return HUD_PREFIX + mod + HUD_SUFFIX;
+    const hudId = function (app) {
+        return HUD_PREFIX + app + HUD_SUFFIX;
     };
 
-    const localKey = function (mod) {
-        return LOCAL_PREFIX + mod + LOCAL_SUFFIX;
+    const localKey = function (app) {
+        return LOCAL_PREFIX + app + LOCAL_SUFFIX;
     };
 
-    const entry = function (mod) {
-        return mods[mod] || null;
+    const entry = function (app) {
+        return declared[app] || null;
     };
 
     /**
-     * What to call the mod in its window title. Resolved when the window opens rather
+     * What to call the app in its window title. Resolved when the window opens rather
      * than when settings are declared, so it does not depend on which ran first: the
-     * drawer knows the title from mod.json, and the loader's description is the fallback.
+     * drawer knows the title from app.json, and the loader's description is the fallback.
      */
-    const titleFor = function (mod) {
+    const titleFor = function (name) {
         const drawer = ACEUIModLoader.drawer;
-        const apps = drawer && drawer.state ? drawer.state.apps : [];
-        const found = apps.filter(function (app) { return app.name === mod; })[0];
-        const described = ACEUIModLoader.mod ? ACEUIModLoader.mod(mod) : null;
+        const listed = drawer && drawer.state ? drawer.state.apps : [];
+        const found = listed.filter(function (entry) { return entry.name === name; })[0];
+        const described = ACEUIModLoader.app ? ACEUIModLoader.app(name) : null;
 
         if (found && found.title) { return found.title; }
 
-        return described && described.title ? described.title : mod;
+        return described && described.title ? described.title : name;
     };
 
-    const save = function (mod) {
-        const held = entry(mod);
+    const save = function (app) {
+        const held = entry(app);
 
         if (!held) { return; }
 
-        persist.save(hudId(mod), localKey(mod), held.values);
+        persist.save(hudId(app), localKey(app), held.values);
     };
 
-    /** Stored values for a mod, HUD store first because it outlives the session. */
-    const stored = function (mod) {
-        return persist.readHud(hudId(mod)) || persist.readLocal(localKey(mod)) || {};
+    /** Stored values for an app, HUD store first because it outlives the session. */
+    const stored = function (app) {
+        return persist.readHud(hudId(app)) || persist.readLocal(localKey(app)) || {};
     };
 
     const clampNumber = function (spec, value) {
@@ -142,43 +142,43 @@ ACEUIModLoader.settings = (function () {
         return String(value);
     };
 
-    const notify = function (mod, key, value) {
-        const held = entry(mod);
+    const notify = function (app, key, value) {
+        const held = entry(app);
 
         if (!held) { return; }
 
         held.listeners.forEach(function (listener) {
-            ACEUIModLoader.safely("[settings] " + mod + " listener", function () {
+            ACEUIModLoader.safely("[settings] " + app + " listener", function () {
                 listener(key, value, held.values);
             });
         });
     };
 
-    const get = function (mod, key) {
-        const held = entry(mod);
+    const get = function (app, key) {
+        const held = entry(app);
 
         return held ? held.values[key] : undefined;
     };
 
-    const all = function (mod) {
-        const held = entry(mod);
+    const all = function (app) {
+        const held = entry(app);
 
         return held ? held.values : {};
     };
 
-    const specsOf = function (mod) {
-        const held = entry(mod);
+    const specsOf = function (app) {
+        const held = entry(app);
 
         return held ? held.specs : [];
     };
 
-    const specFor = function (mod, key) {
-        return specsOf(mod).filter(function (spec) { return spec.key === key; })[0] || null;
+    const specFor = function (app, key) {
+        return specsOf(app).filter(function (spec) { return spec.key === key; })[0] || null;
     };
 
-    const set = function (mod, key, value) {
-        const held = entry(mod);
-        const spec = specFor(mod, key);
+    const set = function (app, key, value) {
+        const held = entry(app);
+        const spec = specFor(app, key);
 
         if (!held || !spec || VALUE_TYPES.indexOf(spec.type) < 0) { return undefined; }
 
@@ -187,42 +187,42 @@ ACEUIModLoader.settings = (function () {
         if (held.values[key] === next) { return next; }
 
         held.values[key] = next;
-        save(mod);
+        save(app);
         held.repaint.forEach(function (fn) { fn(); });
-        notify(mod, key, next);
+        notify(app, key, next);
 
         return next;
     };
 
-    const reset = function (mod) {
-        const held = entry(mod);
+    const reset = function (app) {
+        const held = entry(app);
 
         if (!held) { return; }
 
         held.specs.forEach(function (spec) {
             if (VALUE_TYPES.indexOf(spec.type) >= 0) { held.values[spec.key] = spec.value; }
         });
-        save(mod);
+        save(app);
         held.repaint.forEach(function (fn) { fn(); });
         held.specs.forEach(function (spec) {
-            if (VALUE_TYPES.indexOf(spec.type) >= 0) { notify(mod, spec.key, held.values[spec.key]); }
+            if (VALUE_TYPES.indexOf(spec.type) >= 0) { notify(app, spec.key, held.values[spec.key]); }
         });
     };
 
     /**
-     * How many listeners a mod has registered. A mod's attach runs again every time the
+     * How many listeners an app has registered. An app's attach runs again every time the
      * app drawer switches it back on, so "did detach really unsubscribe" is a question its
      * tests need to be able to ask -- the console's buffer has had the same counter for
      * the same reason.
      */
-    const listenerCount = function (mod) {
-        const held = entry(mod);
+    const listenerCount = function (app) {
+        const held = entry(app);
 
         return held ? held.listeners.length : 0;
     };
 
-    const onChange = function (mod, listener) {
-        const held = entry(mod);
+    const onChange = function (app, listener) {
+        const held = entry(app);
 
         if (!held || typeof listener !== "function") { return function () { return undefined; }; }
 
@@ -264,7 +264,7 @@ ACEUIModLoader.settings = (function () {
         return node;
     };
 
-    const toggleControl = function (mod, spec, repaint) {
+    const toggleControl = function (app, spec, repaint) {
         const box = make("span", {
             display: "inline-block",
             width: "0.6rem",
@@ -275,13 +275,13 @@ ACEUIModLoader.settings = (function () {
         });
 
         repaint.push(function () {
-            const on = Boolean(get(mod, spec.key));
+            const on = Boolean(get(app, spec.key));
 
             box.style.background = on ? THEME.on : "transparent";
             box.style.borderColor = on ? THEME.on : THEME.inkOff;
         });
 
-        box.addEventListener("click", function () { set(mod, spec.key, !get(mod, spec.key)); });
+        box.addEventListener("click", function () { set(app, spec.key, !get(app, spec.key)); });
 
         return box;
     };
@@ -290,16 +290,16 @@ ACEUIModLoader.settings = (function () {
      * A pair of buttons rather than <input type="range">: range inputs are unproven in
      * this Cohtml build, and -/+ is already how the console and DOOM scale themselves.
      */
-    const rangeControl = function (mod, spec, repaint) {
+    const rangeControl = function (app, spec, repaint) {
         const wrap = make("span", { display: "flex", flexDirection: "row", alignItems: "center" });
         const value = make("span", { minWidth: "2.2rem", textAlign: "right", color: THEME.inkDim });
         const step = typeof spec.step === "number" ? spec.step : 1;
         const digits = typeof spec.digits === "number" ? spec.digits : 2;
         const nudge = function (by) {
-            return function () { set(mod, spec.key, Number((Number(get(mod, spec.key)) + by).toFixed(digits))); };
+            return function () { set(app, spec.key, Number((Number(get(app, spec.key)) + by).toFixed(digits))); };
         };
 
-        repaint.push(function () { value.textContent = String(get(mod, spec.key)); });
+        repaint.push(function () { value.textContent = String(get(app, spec.key)); });
 
         wrap.appendChild(value);
         wrap.appendChild(button("−", nudge(-step)));
@@ -309,20 +309,20 @@ ACEUIModLoader.settings = (function () {
     };
 
     /** Clicking cycles the options: <select> is unproven here, a cycle button is not. */
-    const choiceControl = function (mod, spec, repaint) {
+    const choiceControl = function (app, spec, repaint) {
         const options = spec.options || [];
         const node = button("", function () {
-            const at = options.indexOf(get(mod, spec.key));
+            const at = options.indexOf(get(app, spec.key));
 
-            set(mod, spec.key, options[(at + 1) % options.length]);
+            set(app, spec.key, options[(at + 1) % options.length]);
         });
 
-        repaint.push(function () { node.textContent = String(get(mod, spec.key)); });
+        repaint.push(function () { node.textContent = String(get(app, spec.key)); });
 
         return node;
     };
 
-    const textControl = function (mod, spec, repaint) {
+    const textControl = function (app, spec, repaint) {
         const node = css(document.createElement("input"), {
             width: "6rem",
             padding: "0.1rem 0.3rem",
@@ -336,18 +336,18 @@ ACEUIModLoader.settings = (function () {
 
         node.type = "text";
         repaint.push(function () {
-            if (node !== document.activeElement) { node.value = String(get(mod, spec.key)); }
+            if (node !== document.activeElement) { node.value = String(get(app, spec.key)); }
         });
 
-        node.addEventListener("input", function () { set(mod, spec.key, node.value); });
+        node.addEventListener("input", function () { set(app, spec.key, node.value); });
 
         // typing a value must not also drive the car. bindFocus listens on the window as
         // well as the element, so its undo is kept: a settings window opened and closed a
         // few times would otherwise leave a pile of them behind, each still releasing the
         // keyboard on every click anywhere.
         if (ACEUIModLoader.input) {
-            const held = entry(mod);
-            const unbind = ACEUIModLoader.input.bindFocus(node, "settings:" + mod);
+            const held = entry(app);
+            const unbind = ACEUIModLoader.input.bindFocus(node, "settings:" + app);
 
             if (held) { held.undo.push(unbind); }
         }
@@ -356,17 +356,17 @@ ACEUIModLoader.settings = (function () {
     };
 
     /**
-     * Rebindable hotkey. The mod's own key is ours to move, not the player's -- this is
-     * how a mod avoids colliding with whatever they have bound in the game.
+     * Rebindable hotkey. The app's own key is ours to move, not the player's -- this is
+     * how an app avoids colliding with whatever they have bound in the game.
      */
-    const keyControl = function (mod, spec, repaint) {
-        const held = entry(mod);
+    const keyControl = function (app, spec, repaint) {
+        const held = entry(app);
         /**
          * While `stop` is set, this control is waiting for a key and the window keydown
          * listener is live. It has to be cancellable: clicking it and then thinking better
          * of it used to leave that listener bound for the rest of the session, so the next
          * key pressed anywhere -- W, on the way out of the menu -- was silently swallowed
-         * and became the mod's hotkey.
+         * and became the app's hotkey.
          */
         const listening = { stop: null };
         const node = button("", function () {
@@ -383,7 +383,7 @@ ACEUIModLoader.settings = (function () {
                 e.stopPropagation();
 
                 // Escape is the way out of a menu, not a hotkey worth binding
-                if (!ACEUIModLoader.keys.is(e, CANCEL_KEY)) { set(mod, spec.key, e.code || e.key); }
+                if (!ACEUIModLoader.keys.is(e, CANCEL_KEY)) { set(app, spec.key, e.code || e.key); }
 
                 finish();
             };
@@ -400,33 +400,33 @@ ACEUIModLoader.settings = (function () {
 
         // while it is waiting, the prompt is what the control says
         repaint.push(function () {
-            if (!listening.stop) { node.textContent = String(get(mod, spec.key)); }
+            if (!listening.stop) { node.textContent = String(get(app, spec.key)); }
         });
 
         return node;
     };
 
-    /** A button the mod handles: `{ type: "action", label, press: fn }`. */
-    const actionControl = function (mod, spec) {
+    /** A button the app handles: `{ type: "action", label, press: fn }`. */
+    const actionControl = function (app, spec) {
         return button(spec.button || "Run", function () {
             if (typeof spec.press !== "function") { return; }
 
-            ACEUIModLoader.safely("[settings] " + mod + " action " + spec.key, function () {
-                spec.press(mod);
+            ACEUIModLoader.safely("[settings] " + app + " action " + spec.key, function () {
+                spec.press(app);
             });
         });
     };
 
     /**
-     * A line the mod computes: `{ type: "info", label, text: fn }`. Recomputed whenever
+     * A line the app computes: `{ type: "info", label, text: fn }`. Recomputed whenever
      * anything on the page repaints, so it can show live state.
      */
-    const infoControl = function (mod, spec, repaint) {
+    const infoControl = function (app, spec, repaint) {
         const node = make("span", { color: THEME.inkDim });
 
         repaint.push(function () {
             try {
-                node.textContent = typeof spec.text === "function" ? String(spec.text(mod)) : String(spec.text || "");
+                node.textContent = typeof spec.text === "function" ? String(spec.text(app)) : String(spec.text || "");
             } catch (e) {
                 node.textContent = "?";
             }
@@ -450,15 +450,15 @@ ACEUIModLoader.settings = (function () {
      * listeners, and a key control still waiting for a key. Called before a pane is drawn
      * again and when its window closes, so neither piles up over a session.
      */
-    const teardown = function (mod) {
-        const held = entry(mod);
+    const teardown = function (app) {
+        const held = entry(app);
 
         if (!held) { return 0; }
 
         const count = held.undo.length;
 
         held.undo.forEach(function (fn) {
-            ACEUIModLoader.safely("[settings] " + mod + " teardown", fn);
+            ACEUIModLoader.safely("[settings] " + app + " teardown", fn);
         });
         held.undo = [];
         held.repaint = [];
@@ -466,13 +466,13 @@ ACEUIModLoader.settings = (function () {
         return count;
     };
 
-    /** Draw a mod's settings into `container`; the drawer calls this for its options pane. */
-    const render = function (mod, container) {
-        const held = entry(mod);
+    /** Draw an app's settings into `container`; the drawer calls this for its options pane. */
+    const render = function (app, container) {
+        const held = entry(app);
 
         if (!held || !container) { return null; }
 
-        teardown(mod);
+        teardown(app);
 
         held.specs.forEach(function (spec) {
             const row = make("div", rowStyle);
@@ -480,7 +480,7 @@ ACEUIModLoader.settings = (function () {
 
             row.appendChild(make("span", { color: THEME.inkDim, marginRight: "0.5rem" }, spec.label || spec.key));
 
-            if (control) { row.appendChild(control(mod, spec, held.repaint)); }
+            if (control) { row.appendChild(control(app, spec, held.repaint)); }
 
             container.appendChild(row);
 
@@ -489,7 +489,7 @@ ACEUIModLoader.settings = (function () {
             }
         });
 
-        container.appendChild(css(button(CLEAR_TEXT, function () { reset(mod); }), { marginTop: "0.3rem", marginLeft: "0" }));
+        container.appendChild(css(button(CLEAR_TEXT, function () { reset(app); }), { marginTop: "0.3rem", marginLeft: "0" }));
         held.repaint.forEach(function (fn) { fn(); });
 
         return container;
@@ -498,64 +498,64 @@ ACEUIModLoader.settings = (function () {
     // ---- the settings window -------------------------------------------------------
 
     /**
-     * Each mod's settings open as their own window, not as a panel that unfolds inside
-     * the drawer: with more than a couple of mods an inline pane pushes every row below
+     * Each app's settings open as their own window, not as a panel that unfolds inside
+     * the drawer: with more than a couple of apps an inline pane pushes every row below
      * it down the list and the drawer becomes unusable. The window itself is
-     * ACEUIModLoader.window, so it looks and behaves like any other mod window.
+     * ACEUIModLoader.window, so it looks and behaves like any other app window.
      */
-    const windowId = function (mod) {
-        return mod + WINDOW_ID_SUFFIX;
+    const windowId = function (app) {
+        return app + WINDOW_ID_SUFFIX;
     };
 
-    const isOpen = function (mod) {
-        return ACEUIModLoader.window.isOpen(windowId(mod));
+    const isOpen = function (app) {
+        return ACEUIModLoader.window.isOpen(windowId(app));
     };
 
-    const close = function (mod) {
-        return ACEUIModLoader.window.close(windowId(mod));
+    const close = function (app) {
+        return ACEUIModLoader.window.close(windowId(app));
     };
 
-    const open = function (mod) {
-        const held = entry(mod);
+    const open = function (app) {
+        const held = entry(app);
 
         if (!held) { return null; }
 
-        const win = ACEUIModLoader.window.open(windowId(mod), {
-            title: titleFor(mod) + " settings",
+        const win = ACEUIModLoader.window.open(windowId(app), {
+            title: titleFor(app) + " settings",
             width: WINDOW_WIDTH,
-            onClose: function () { teardown(mod); }
+            onClose: function () { teardown(app); }
         });
 
-        if (win && !win.body.childNodes.length) { render(mod, win.body); }
+        if (win && !win.body.childNodes.length) { render(app, win.body); }
 
         return win;
     };
 
     /** Open it if it is shut, shut it if it is open. Returns true when it ended up open. */
-    const toggle = function (mod) {
-        if (isOpen(mod)) {
-            close(mod);
+    const toggle = function (app) {
+        if (isOpen(app)) {
+            close(app);
 
             return false;
         }
 
-        open(mod);
+        open(app);
 
         return true;
     };
 
     /**
-     * Declare a mod's settings. Returns the live values object: stored values are already
-     * merged in, so a mod can read it immediately. Calling again replaces the schema.
+     * Declare an app's settings. Returns the live values object: stored values are already
+     * merged in, so an app can read it immediately. Calling again replaces the schema.
      */
-    const define = function (mod, specs) {
+    const define = function (app, specs) {
         // a mistyped `type` used to drop the control with nothing said, which reads in
         // game as "my setting did not appear" with no way to tell why
         const list = (specs || []).filter(function (spec) {
             const usable = Boolean(spec) && Boolean(spec.key) && TYPES.indexOf(spec.type) >= 0;
 
             if (!usable) {
-                ACEUIModLoader.log("[settings] " + mod + ": ignoring "
+                ACEUIModLoader.log("[settings] " + app + ": ignoring "
                     + (spec && spec.key ? "\"" + spec.key + "\"" : "a spec with no key")
                     + " -- type must be one of " + TYPES.join(", ")
                     + (spec && spec.type ? " (got \"" + spec.type + "\")" : ""));
@@ -563,25 +563,25 @@ ACEUIModLoader.settings = (function () {
 
             return usable;
         });
-        const saved = stored(mod);
+        const saved = stored(app);
         const values = {};
 
         list.forEach(function (spec) {
             if (VALUE_TYPES.indexOf(spec.type) >= 0) { values[spec.key] = coerce(spec, saved[spec.key]); }
         });
 
-        mods[mod] = {
+        declared[app] = {
             specs: list,
             values: values,
-            listeners: (mods[mod] && mods[mod].listeners) || [],
+            listeners: (declared[app] && declared[app].listeners) || [],
             repaint: [],
             undo: []            // what the drawn controls bound outside their own elements
         };
 
-        // the drawer offers a way in for any mod that has something to configure; clicking
-        // it opens this mod's own window rather than unfolding a pane inside the drawer
+        // the drawer offers a way in for any app that has something to configure; clicking
+        // it opens this app's own window rather than unfolding a pane inside the drawer
         if (ACEUIModLoader.drawer && typeof ACEUIModLoader.drawer.registerOpener === "function") {
-            ACEUIModLoader.drawer.registerOpener(mod, function () { toggle(mod); });
+            ACEUIModLoader.drawer.registerOpener(app, function () { toggle(app); });
         }
 
         return values;

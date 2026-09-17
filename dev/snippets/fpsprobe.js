@@ -16,7 +16,7 @@
  *      transition can ever look smooth.
  *   2. How many frames does the drawer's 180 ms slide actually get, and is the
  *      transform interpolated per frame or jumped in a couple of steps?
- *   3. Does per-frame mod work cost the page frames? Each running mod is stopped for
+ *   3. Does per-frame app work cost the page frames? Each running app is stopped for
  *      two seconds in turn and the rate re-measured; then everything is started again.
  *
  * Nothing is saved and nothing is left switched off.
@@ -180,46 +180,46 @@
         }, SETTLE_MS);
     };
 
-    // ---- per-mod cost --------------------------------------------------------------
+    // ---- per-app cost --------------------------------------------------------------
 
     const running = function () {
-        return (ACEUIModLoader.mods || []).filter(function (entry) {
+        return (ACEUIModLoader.apps || []).filter(function (entry) {
             return entry.status === "loaded" && drawer.isVisible(entry.name);
         });
     };
 
-    /** Stop each mod in turn, measure without it, start it again. */
-    const eachMod = function (mods, index, then) {
-        if (index >= mods.length) {
+    /** Stop each app in turn, measure without it, start it again. */
+    const eachApp = function (apps, index, then) {
+        if (index >= apps.length) {
             then();
 
             return;
         }
 
-        const name = mods[index].name;
+        const name = apps[index].name;
         const stopped = loader.deactivate(name);
 
         if (!stopped) {
             log("without " + name + ": it has no detach, cannot stop it -- skipped");
-            eachMod(mods, index + 1, then);
+            eachApp(apps, index + 1, then);
 
             return;
         }
 
         phase("without " + name, MOD_SAMPLE_MS, function () {
             loader.activate(name);
-            eachMod(mods, index + 1, then);
+            eachApp(apps, index + 1, then);
         });
     };
 
-    const allOff = function (mods, then) {
+    const allOff = function (apps, then) {
         const stopped = [];
 
-        mods.forEach(function (entry) {
+        apps.forEach(function (entry) {
             if (loader.deactivate(entry.name)) { stopped.push(entry.name); }
         });
 
-        phase("all mods stopped (" + stopped.length + ")", SAMPLE_MS, function () {
+        phase("all apps stopped (" + stopped.length + ")", SAMPLE_MS, function () {
             stopped.forEach(function (name) { loader.activate(name); });
             then();
         });
@@ -227,10 +227,10 @@
 
     // ---- the run -------------------------------------------------------------------
 
-    const mods = running();
+    const apps = running();
 
     log("start: page " + ACEUIModLoader.page + ", loader " + ACEUIModLoader.VERSION
-        + ", " + mods.length + " mods running (" + mods.map(function (e) { return e.name; }).join(", ")
+        + ", " + apps.length + " apps running (" + apps.map(function (e) { return e.name; }).join(", ")
         + "), game " + gameFps() + " fps -- sit still for about 25 s");
 
     phase("baseline, drawer closed", SAMPLE_MS, function () {
@@ -240,12 +240,12 @@
             phase("drawer open and idle", SAMPLE_MS, function () {
                 drawer.close();
 
-                eachMod(mods, 0, function () {
-                    allOff(mods, function () {
+                eachApp(apps, 0, function () {
+                    allOff(apps, function () {
                         log("summary: " + results.map(function (r) {
                             return r.label + " " + r.fps;
                         }).join(" | "));
-                        log("done -- every mod is running again");
+                        log("done -- every app is running again");
                     });
                 });
             });

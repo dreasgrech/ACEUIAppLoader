@@ -57,18 +57,18 @@
      */
     const frameAt = function (i) {
         const spike = i % 71 === 0;
-        const mod = 1.15 + noise(i, 0.35) + (spike ? 6 : 0);
+        const app = 1.15 + noise(i, 0.35) + (spike ? 6 : 0);
         const stock = 2.4 + noise(i + 11, 0.5);
         const event = i % 3 === 0 ? 0.35 + noise(i, 0.1) : 0;
         const timer = i % 29 === 0 ? 1.8 : 0;
         const profilerMs = 0.16;
-        const script = mod + stock + event + timer + profilerMs;
+        const script = app + stock + event + timer + profilerMs;
 
         return {
             count: 4,
             parent: [-1, -1, -1, -1],
-            category: ["mod", "stock", "event", "timer"],
-            totalMs: [mod, stock, event, timer],
+            category: ["app", "stock", "event", "timer"],
+            totalMs: [app, stock, event, timer],
             profilerMs: profilerMs,
             scriptMs: script,
             wallMs: script + 9.4 + noise(i + 5, 1.6) + (spike ? 7 : 0)
@@ -79,10 +79,10 @@
     const WINDOW_ROWS = [
         ["engine (style, layout, paint)", "other", 1, 9.62, 9.62, 0, 0.562],
         ["perFrameAllModelUpdate", "stock", 1, 2.41, 0.32, 4, 0.141],
-        ["pedalgraph", "mod", 1, 0.74, 0.11, 2, 0.043],
-        ["telemetry", "mod", 1, 0.31, 0.31, 0, 0.018],
+        ["pedalgraph", "app", 1, 0.74, 0.11, 2, 0.043],
+        ["telemetry", "app", 1, 0.31, 0.31, 0, 0.018],
         ["houseKeeping", "timer", 0.03, 0.06, 0.06, 0, 0.004],
-        ["devconsole", "mod", 1, 0.12, 0.12, 1, 0.007],
+        ["devconsole", "app", 1, 0.12, 0.12, 1, 0.007],
         ["onMouseMove", "event", 0.4, 0.05, 0.05, 0, 0.003],
         ["profiler", "profiler", 1, 0.16, 0.16, 0, 0.009]
     ];
@@ -92,11 +92,11 @@
         ["perFrameAllModelUpdate", "stock", 1, 2.41, 0.32, 4, 0.141, 0],
         ["fetchAllModels", "stock", 1, 1.62, 1.62, 3, 0.095, 1],
         ["ks-hudtyres.onBindingUpdate", "stock", 1, 0.47, 0.47, 1, 0.027, 1],
-        ["pedalgraph", "mod", 1, 0.74, 0.11, 2, 0.043, 0],
-        ["read telemetry", "mod", 1, 0.38, 0.38, 2, 0.022, 1],
-        ["draw pedals", "mod", 1, 0.25, 0.25, 0, 0.015, 1],
-        ["telemetry", "mod", 1, 0.31, 0.31, 0, 0.018, 0],
-        ["devconsole", "mod", 1, 0.12, 0.12, 1, 0.007, 0],
+        ["pedalgraph", "app", 1, 0.74, 0.11, 2, 0.043, 0],
+        ["read telemetry", "app", 1, 0.38, 0.38, 2, 0.022, 1],
+        ["draw pedals", "app", 1, 0.25, 0.25, 0, 0.015, 1],
+        ["telemetry", "app", 1, 0.31, 0.31, 0, 0.018, 0],
+        ["devconsole", "app", 1, 0.12, 0.12, 1, 0.007, 0],
         ["draw graph", "profiler", 1, 0.11, 0.11, 0, 0.006, 0],
         ["refresh table", "profiler", 0.08, 0.05, 0.05, 0, 0.003, 1]
     ];
@@ -104,7 +104,7 @@
     /** The worst view: one frame, in the order it happened. */
     const WORST_ROWS = [
         ["engine (style, layout, paint)", "other", 1, 16.42, 16.42, 0, 0.549],
-        ["pedalgraph", "mod", 1, 7.19, 7.19, 2, 0.240],
+        ["pedalgraph", "app", 1, 7.19, 7.19, 2, 0.240],
         ["perFrameAllModelUpdate", "stock", 1, 4.88, 1.02, 9, 0.163],
         ["houseKeeping", "timer", 1, 1.21, 1.21, 0, 0.040],
         ["profiler", "profiler", 1, 0.21, 0.21, 0, 0.007]

@@ -1,7 +1,7 @@
 /**
  * ACEUIModLoader.input -- stop the game reading keystrokes as car controls.
  *
- * A mod that takes typed input has a problem: the game still treats those keys as
+ * An app that takes typed input has a problem: the game still treats those keys as
  * gameplay bindings, so typing an expression toggles headlights and wipers, and the
  * arrow keys shove the seat about. The engine has the switches for this; they are just
  * not obvious.
@@ -18,17 +18,17 @@
  * game that anyone copying the chat box inherits. Setting both is what actually works.
  * Either method may be missing on a given build; whichever exists is used.
  *
- * **Ownership is counted, not a boolean.** Two mods can want the keyboard at once -- the
+ * **Ownership is counted, not a boolean.** Two apps can want the keyboard at once -- the
  * console while its prompt has focus, DOOM while it is open. If the console released on
  * blur it would yank the keyboard out from under DOOM. So each holder captures under its
  * own name and the flags only drop when the last one lets go.
  *
- *     const release = ACEUIModLoader.input.bindFocus(myInput, "mymod");       // a text box
- *     const release = ACEUIModLoader.input.bindClickFocus(myPanel, "mymod");  // click to focus
- *     ACEUIModLoader.input.capture("mymod");                             // or by hand
- *     ACEUIModLoader.input.release("mymod");                             // and in detach
+ *     const release = ACEUIModLoader.input.bindFocus(myInput, "myapp");       // a text box
+ *     const release = ACEUIModLoader.input.bindClickFocus(myPanel, "myapp");  // click to focus
+ *     ACEUIModLoader.input.capture("myapp");                             // or by hand
+ *     ACEUIModLoader.input.release("myapp");                             // and in detach
  *
- * Releasing matters more than capturing: a mod that keeps the capture after it is gone
+ * Releasing matters more than capturing: an app that keeps the capture after it is gone
  * leaves the car unable to read its own controls, so call `release(owner)` in detach --
  * or use the unbind function `bindFocus`/`bindClickFocus` hand back, which does it.
  */
@@ -243,7 +243,7 @@ ACEUIModLoader.input = (function () {
     /**
      * Click-to-focus, for a panel that is not a text box: the keyboard is taken when the
      * pointer goes down inside `element` and given back when it goes down anywhere else.
-     * That is what lets a mod stay open without holding the keyboard hostage -- DOOM can
+     * That is what lets an app stay open without holding the keyboard hostage -- DOOM can
      * sit in a corner while you drive, and take the keys again when you click it.
      *
      * Listens on the capture phase so it sees the click wherever it lands. Returns the
@@ -267,7 +267,7 @@ ACEUIModLoader.input = (function () {
 
     /**
      * Wire an element so the keyboard is held exactly while it has focus. Returns the
-     * function that unbinds it and releases, so a mod's detach is one call.
+     * function that unbinds it and releases, so an app's detach is one call.
      */
     const bindFocus = function (element, owner) {
         const who = name(owner);
