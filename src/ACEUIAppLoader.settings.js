@@ -58,6 +58,9 @@
  * Values are written to both stores (see ACEUIAppLoader.persist): the HUD layout
  * container, which the game writes to disk and is the only thing that survives a restart,
  * and localStorage, which is read synchronously so a value is there the moment an app asks.
+ * If the HUD store is not there yet when an app declares its settings, it is adopted when
+ * it turns up (`adopt`, like the drawer's switches): stored values replace the defaults,
+ * listeners hear about it, and a value the player changed in the meantime wins instead.
  */
 ACEUIAppLoader.settings = (function () {
 
@@ -89,6 +92,7 @@ ACEUIAppLoader.settings = (function () {
     const FOLDED_GLYPH = "+";
     const COLUMNS_MAX = 2;
     const SECTIONS_SUFFIX = ".sections";
+    const FOLDS_HUD_SUFFIX = "_folds";
 
     /** The settings window is an ACEUIAppLoader.window; this is its id and width. */
     const WINDOW_ID_SUFFIX = ".settings";
@@ -98,7 +102,7 @@ ACEUIAppLoader.settings = (function () {
 
     const persist = ACEUIAppLoader.persist;
 
-    /** name -> { specs, values, listeners, collapsed, repaint, undo } */
+    /** name -> { specs, values, listeners, collapsed, touched, touchedFolds, repaint, undo } */
     const declared = {};
 
     const css = ACEUIAppLoader.dom.css;
@@ -146,11 +150,20 @@ ACEUIAppLoader.settings = (function () {
     };
 
     /**
-     * Which sections the player folded, per app. localStorage only: it is a view
-     * preference, not a setting, and localStorage is what the app drawer's own folds use.
+     * Which sections the player folded, per app. Kept in both stores like the values
+     * (see ACEUIAppLoader.persist): only the HUD layout store survives a game restart, and
+     * a fold that reopened itself every launch would be worse than no fold at all.
      */
+    const foldsHudId = function (app) {
+        return hudId(app) + FOLDS_HUD_SUFFIX;
+    };
+
+    const foldsLocalKey = function (app) {
+        return localKey(app) + SECTIONS_SUFFIX;
+    };
+
     const storedFolds = function (app) {
-        const folds = persist.readLocal(localKey(app) + SECTIONS_SUFFIX);
+        const folds = persist.readHud(foldsHudId(app)) || persist.readLocal(foldsLocalKey(app));
 
         return folds && typeof folds === "object" ? folds : {};
     };
@@ -172,7 +185,8 @@ ACEUIAppLoader.settings = (function () {
         if (!held || !specFor(app, key)) { return false; }
 
         held.collapsed[key] = Boolean(on);
-        persist.writeLocal(localKey(app) + SECTIONS_SUFFIX, held.collapsed);
+        held.touchedFolds = true;
+        persist.save(foldsHudId(app), foldsLocalKey(app), held.collapsed);
         held.repaint.forEach(function (fn) { fn(); });
 
         return held.collapsed[key];
@@ -277,6 +291,7 @@ ACEUIAppLoader.settings = (function () {
         if (same(held.values[key], next)) { return held.values[key]; }
 
         held.values[key] = next;
+        held.touched = true;
         save(app);
         held.repaint.forEach(function (fn) { fn(); });
         notify(app, key, next);
@@ -292,11 +307,73 @@ ACEUIAppLoader.settings = (function () {
         held.specs.forEach(function (spec) {
             if (VALUE_TYPES.indexOf(spec.type) >= 0) { held.values[spec.key] = spec.value; }
         });
+        held.touched = true;
         save(app);
         held.repaint.forEach(function (fn) { fn(); });
         held.specs.forEach(function (spec) {
             if (VALUE_TYPES.indexOf(spec.type) >= 0) { notify(app, spec.key, held.values[spec.key]); }
         });
+    };
+
+    /**
+     * The HUD layout store has turned up: take what it holds for every app declared so
+     * far. An app whose settings the player already changed this session has a newer
+     * value than the disk does, so its values are written *to* the store instead, the way
+     * the drawer treats a switch flipped before the store existed. Apps that declare
+     * later read the store directly in `define`. Returns the apps whose values changed.
+     */
+    const adoptOne = function (app) {
+        const held = entry(app);
+        const fromHud = persist.readHud(hudId(app));
+        const changed = [];
+
+        if (!held) { return changed; }
+
+        if (held.touched) {
+            save(app);
+        } else if (fromHud) {
+            held.specs.forEach(function (spec) {
+                if (VALUE_TYPES.indexOf(spec.type) < 0 || !(spec.key in fromHud)) { return; }
+
+                const next = coerce(spec, fromHud[spec.key]);
+
+                if (!same(held.values[spec.key], next)) {
+                    held.values[spec.key] = next;
+                    changed.push(spec.key);
+                }
+            });
+
+            if (changed.length > 0) { persist.writeLocal(localKey(app), held.values); }
+        }
+
+        const folds = persist.readHud(foldsHudId(app));
+
+        if (held.touchedFolds) {
+            persist.save(foldsHudId(app), foldsLocalKey(app), held.collapsed);
+        } else if (folds && typeof folds === "object") {
+            held.collapsed = folds;
+            persist.writeLocal(foldsLocalKey(app), folds);
+        }
+
+        if (changed.length > 0) {
+            held.repaint.forEach(function (fn) { fn(); });
+            changed.forEach(function (key) { notify(app, key, held.values[key]); });
+            ACEUIAppLoader.log("[settings] " + app + ": adopted from the HUD store: " + changed.join(", "));
+        }
+
+        return changed;
+    };
+
+    const adopt = function () {
+        const adopted = {};
+
+        Object.keys(declared).forEach(function (app) {
+            const changed = adoptOne(app);
+
+            if (changed.length > 0) { adopted[app] = changed; }
+        });
+
+        return adopted;
     };
 
     /**
@@ -349,13 +426,17 @@ ACEUIAppLoader.settings = (function () {
         userSelect: "none"
     };
 
+    /**
+     * A thin upright bar, deliberately nothing like the toggle's square: a row that reads
+     * "square, name, square" makes the colour chip look like a second switch.
+     */
     const swatchStyle = {
         display: "inline-block",
         flexShrink: "0",
-        width: "0.55rem",
-        height: "0.55rem",
-        borderRadius: "0.12rem",
-        marginRight: "0.4rem"
+        width: "0.2rem",
+        height: "0.8rem",
+        borderRadius: "0.1rem",
+        marginRight: "0.45rem"
     };
 
     /** A colour chip before a label: a colour string, or a class and attributes the app's stylesheet colours. */
@@ -895,6 +976,8 @@ ACEUIAppLoader.settings = (function () {
             values: values,
             listeners: (declared[app] && declared[app].listeners) || [],
             collapsed: storedFolds(app),
+            touched: false,     // set() or reset() ran this session: newer than the disk
+            touchedFolds: false,
             repaint: [],
             undo: []            // what the drawn controls bound outside their own elements
         };
@@ -908,9 +991,14 @@ ACEUIAppLoader.settings = (function () {
         return values;
     };
 
+    // the store appears a little after app scripts may have run; whatever it holds for
+    // the apps declared by then replaces their defaults (see adopt)
+    persist.whenHudReady(adopt);
+
     return {
         TYPES: TYPES,
         define: define,
+        adopt: adopt,
         render: render,
         teardown: teardown,
         get: get,

@@ -91,6 +91,8 @@ ACEUIAppLoader.loader = (function () {
     const KEY_PREFIX = "ace";
     const HUD_ID_PREFIX = "hud_";
     const POSITION_SUFFIX = "pos";
+    /** Between app name and suffix in a remembered value's HUD id: `hud_doom.open`. */
+    const REMEMBER_SEPARATOR = ".";
     /** Panel scale: one font-size in rem on a root whose insides are sized in em. */
     const SCALE_KEY = "scale";
     const SCALE_DEFAULT = 1;
@@ -405,23 +407,35 @@ ACEUIAppLoader.loader = (function () {
         const log = ACEUIAppLoader.logger("[" + title + "]");
 
         /**
-         * A value this app wants back after the HUD reloads on Escape/resume. It lives in
-         * `localStorage`, which is per view: it survives that reload and dies with the
-         * game. Anything that must outlive the game belongs in a declared setting
-         * (ACEUIAppLoader.settings) or, if it is large, in the engine's own container
-         * (ACEUIAppLoader.persist.writeStore).
+         * A small value this app wants back: after the HUD reloads on Escape/resume, and
+         * after a game restart. It goes to both stores (see ACEUIAppLoader.persist): the
+         * stock HUD layout store, the only one the game writes to disk, and localStorage,
+         * read synchronously so the value is there the moment the script asks. The HUD
+         * store holds element records, so the value travels there wrapped as
+         * `{ value, app, suffix }` -- the two names are what `adoptRemembered` needs to
+         * copy it into localStorage when the store turns up after the script has read its
+         * fallback. localStorage holds the bare value, as it always did. Anything large
+         * belongs in the engine's own container (ACEUIAppLoader.persist.writeStore).
          */
+        const rememberedId = function (suffix) { return HUD_ID_PREFIX + name + REMEMBER_SEPARATOR + suffix; };
+
         const recall = function (suffix, fallback) {
-            const value = ACEUIAppLoader.persist.readLocal(key(suffix));
+            const fromHud = ACEUIAppLoader.persist.readHud(rememberedId(suffix));
+            const value = fromHud && Object.prototype.hasOwnProperty.call(fromHud, "value")
+                ? fromHud.value
+                : ACEUIAppLoader.persist.readLocal(key(suffix));
 
             return value === null || value === undefined ? fallback : value;
         };
 
         const remember = function (suffix, value) {
+            ACEUIAppLoader.persist.writeHud(rememberedId(suffix), { value: value, app: name, suffix: suffix });
+
             return ACEUIAppLoader.persist.writeLocal(key(suffix), value);
         };
 
         const forget = function (suffix) {
+            ACEUIAppLoader.persist.writeHud(rememberedId(suffix), { value: null, app: name, suffix: suffix });
             ACEUIAppLoader.persist.removeLocal(key(suffix));
         };
 
@@ -699,6 +713,39 @@ ACEUIAppLoader.loader = (function () {
         return describe(wanted, findEntry(wanted));
     };
 
+    /**
+     * The HUD layout store has turned up: every remembered value it holds (see `remember`)
+     * is copied into localStorage, so a script that read its fallback before the store
+     * existed finds the stored value the next time it asks -- on its next attach, or on
+     * the HUD reload. A value already in localStorage is newer (written this session) and
+     * is left alone. Returns the localStorage keys written.
+     */
+    const adoptRemembered = function () {
+        const elements = ACEUIAppLoader.persist.hudElements() || {};
+        const written = [];
+
+        Object.keys(elements).forEach(function (id) {
+            const record = elements[id];
+
+            if (!record || typeof record !== "object" || !record.app || !record.suffix) { return; }
+
+            if (!Object.prototype.hasOwnProperty.call(record, "value") || record.value === null) { return; }
+
+            const localKey = KEY_PREFIX + record.app + "." + record.suffix;
+
+            if (ACEUIAppLoader.persist.readLocal(localKey) !== null) { return; }
+
+            ACEUIAppLoader.persist.writeLocal(localKey, record.value);
+            written.push(localKey);
+        });
+
+        if (written.length > 0) { ACEUIAppLoader.log("[loader] remembered values adopted from the HUD store: " + written.join(", ")); }
+
+        return written;
+    };
+
+    ACEUIAppLoader.persist.whenHudReady(adoptRemembered);
+
     const loadApp = function (name, root, onDone) {
         const base = root + name + "/";
         const entry = { name: name, info: null, status: "pending", base: base, builtin: root === BUILTIN_ROOT };
@@ -899,6 +946,7 @@ ACEUIAppLoader.loader = (function () {
         DEV_VERSION: DEV_VERSION,
         apps: state.apps,
         app: app,
+        adoptRemembered: adoptRemembered,
         source: source,
         filtering: filtering,
         isMarker: isMarker,

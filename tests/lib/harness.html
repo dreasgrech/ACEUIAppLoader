@@ -826,6 +826,45 @@ document.addEventListener("DOMContentLoaded", function () {
         pane.remove();
     });
 
+    t("settings: values declared before the HUD store loads are adopted from it when it turns up, unless the player moved them first", function () {
+        const S = ACEUIAppLoader.settings;
+        const heard = [];
+        window.HUD = null; localStorage.clear();
+
+        const v = S.define("late", [
+            { key: "scale", type: "range", label: "Scale", value: 1, min: 0, max: 4, step: 0.1 },
+            { key: "on", type: "toggle", label: "On", value: false },
+            { key: "stack", type: "order", label: "Stack", value: ["a", "b"], items: [{ key: "a" }, { key: "b" }] },
+            { key: "sec", type: "section", label: "Sec" }
+        ]);
+        S.onChange("late", function (key, value) { heard.push(key + "=" + JSON.stringify(value)); });
+        eq(v.scale, 1, "no store yet: the default");
+
+        // the game wrote these last session; now the store loads
+        window.HUD = makeHud({});
+        window.HUD.StoredData.layouts.default.elements[S.hudId("late")] = { scale: 1.7, on: true, stack: ["b", "a"], junk: 9 };
+        window.HUD.StoredData.layouts.default.elements[S.hudId("late") + "_folds"] = { sec: true };
+        const adopted = S.adopt();
+        eq(JSON.stringify(adopted.late), JSON.stringify(["scale", "on", "stack"]), "every stored value that differed was adopted, unknown keys ignored");
+        eq(v.scale, 1.7, "the live values object the app holds moved"); eq(v.on, true); eq(v.stack.join(","), "b,a");
+        eq(heard.join(" "), "scale=1.7 on=true stack=[\"b\",\"a\"]", "listeners heard it, as if the player had moved them");
+        eq(JSON.parse(localStorage.getItem(S.localKey("late"))).scale, 1.7, "localStorage caught up, for the next define this session");
+        eq(S.isCollapsed("late", "sec"), true, "the folds were adopted too");
+        ok(window.__log.some(function (l) { return l.indexOf("[settings] late: adopted from the HUD store: scale, on, stack") >= 0; }), "logged");
+        eq(JSON.stringify(S.adopt()), "{}", "a second pass adopts nothing: it is idempotent");
+
+        // the other way round: the player moved a value before the store loaded
+        window.HUD = null; localStorage.clear();
+        const w = S.define("eager", [{ key: "scale", type: "range", label: "Scale", value: 1, min: 0, max: 4, step: 0.1 }]);
+        S.set("eager", "scale", 2.5);
+        window.HUD = makeHud({});
+        window.HUD.StoredData.layouts.default.elements[S.hudId("eager")] = { scale: 0.5 };
+        S.adopt();
+        eq(w.scale, 2.5, "the player's newer value stands");
+        eq(window.HUD.StoredData.layouts.default.elements[S.hudId("eager")].scale, 2.5, "and is what the store now holds, so the disk catches up");
+        window.HUD = null; localStorage.clear();
+    });
+
     t("settings: sections group the rows, fold on click, remember the fold, and can lay rows in two columns", function () {
         const S = ACEUIAppLoader.settings;
         const pane = document.createElement("div");
@@ -863,6 +902,7 @@ document.addEventListener("DOMContentLoaded", function () {
         headers[0].dispatchEvent(new MouseEvent("click", { bubbles: true }));
         eq(getComputedStyle(inputsBody).display, "none", "folding a two-column section hides it too");
         eq(JSON.parse(localStorage.getItem(S.localKey("sectioned") + ".sections")).inputs, true, "the fold is remembered in localStorage");
+        ok(window.__log.some(function (l) { return l.indexOf(S.hudId("sectioned") + "_folds") >= 0; }) || !window.HUD, "and offered to the HUD store, which is what survives a restart");
 
         S.define("sectioned", S.specs("sectioned"));       // a reload: define again
         eq(S.isCollapsed("sectioned", "inputs"), true, "and comes back after define"); eq(S.isCollapsed("sectioned", "demo"), false);
@@ -1246,6 +1286,31 @@ document.addEventListener("DOMContentLoaded", function () {
         eq(me.recall("scale", 1), 1.4, "remembered under the app's own key instead");
         scale.stop();
         root.parentNode.removeChild(root);
+    });
+
+    t("app: remember writes both stores, recall prefers the HUD store, and the loader adopts remembered values when the store turns up", function () {
+        const me = ACEUIAppLoader.app("memo");
+        window.HUD = makeHud({}); localStorage.clear();
+        me.remember("filters", { a: true, b: false });
+        const record = window.HUD.StoredData.layouts.default.elements["hud_memo.filters"];
+        eq(JSON.stringify(record), JSON.stringify({ value: { a: true, b: false }, app: "memo", suffix: "filters" }), "the HUD store holds the value wrapped with its owner");
+        eq(JSON.stringify(ACEUIAppLoader.persist.readLocal(me.key("filters"))), JSON.stringify({ a: true, b: false }), "localStorage holds it bare, as before");
+        // a new game: localStorage is gone, the HUD store is what the disk kept
+        localStorage.clear();
+        eq(me.recall("filters", null).a, true, "recall reads the HUD store when localStorage has nothing");
+        window.HUD.StoredData.layouts.default.elements["hud_memo.filters"].value.a = false;
+        eq(me.recall("filters", null).a, false, "and prefers it");
+        me.forget("filters");
+        eq(me.recall("filters", "gone"), "gone", "forget clears both");
+        // a script that read its fallback before the store existed: adoption fills localStorage for its next read
+        window.HUD.StoredData.layouts.default.elements["hud_memo.open"] = { value: true, app: "memo", suffix: "open" };
+        window.HUD.StoredData.layouts.default.elements["hud_other"] = { x: "1px" };
+        localStorage.setItem(me.key("newer"), JSON.stringify("this session"));
+        window.HUD.StoredData.layouts.default.elements["hud_memo.newer"] = { value: "last session", app: "memo", suffix: "newer" };
+        eq(ACEUIAppLoader.loader.adoptRemembered().join(","), me.key("open"), "only remembered records without a localStorage value are copied");
+        eq(ACEUIAppLoader.persist.readLocal(me.key("open")), true, "so the next recall finds it even without the HUD store");
+        eq(ACEUIAppLoader.persist.readLocal(me.key("newer")), "this session", "a value written this session is newer and kept");
+        window.HUD = null; localStorage.clear();
     });
 
     t("app: recall and remember keep a small value under the app's own key", function () {

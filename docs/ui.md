@@ -122,6 +122,15 @@ ACEUIAppLoader.settings.get("devconsole", "scale");
 ACEUIAppLoader.settings.onChange("devconsole", function (key, value) { ... });
 ```
 
+Values live in both stores (the HUD layout store on disk, localStorage for the session).
+If the HUD store is not loaded yet when an app declares its settings, its contents are
+**adopted** when it appears: stored values replace the defaults and `onChange` listeners
+hear about it, exactly as if the player had just moved them; a value the player changed
+before that moment is newer than the disk and is written to the store instead. The same
+goes for `me.remember` / `me.recall`, which keep a small value under the app's own key in
+both stores -- console filters, profiler bands, DOOM's open state -- so they, too, survive a
+game restart, not only the HUD reload.
+
 Declaring settings is all it takes for a way in to appear on that app's drawer row.
 Clicking it opens **that app's own settings window** — an `ACEUIAppLoader.window`, so it
 is a normal draggable panel with an [X] at its top right, whose position is remembered per
@@ -139,8 +148,8 @@ is exactly what the settings page is meant to replace.
 
 A page with more than a handful of rows is a wall. **`section`** breaks it up: a header
 that every spec after it belongs to, until the next section. Clicking the header folds
-the rows under it and the loader remembers which sections are folded, per app, in
-localStorage (a view preference, not a setting, so it is not in the HUD store). A section
+the rows under it and the loader remembers which sections are folded, per app, in the
+same two stores as the values (only the HUD layout store survives a game restart). A section
 with `columns: 2` lays its rows out at half width, which halves a run of toggles;
 `collapsed: true` starts it folded until the player opens it.
 
