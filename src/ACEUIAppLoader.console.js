@@ -54,7 +54,8 @@ ACEUIAppLoader.console = (function () {
         notifying: false,
         carried: 0,
         saveTimer: 0,
-        savePending: 0
+        savePending: 0,
+        formatFailed: false
     };
 
     const readStored = function () {
@@ -196,6 +197,26 @@ ACEUIAppLoader.console = (function () {
         return push(level, text);
     };
 
+    /**
+     * Never throw back into whoever logged. Formatting reads the logged values -- their
+     * keys, their getters -- and a value that refuses (a host object, a getter that
+     * throws) must not abort the caller: that caller is usually the stock bundle in the
+     * middle of its own work, and the log line was the least important thing it was
+     * doing. The buffer misses that one line and says so, once per page.
+     */
+    const FORMAT_FAILED_TEXT = "[console] a logged value could not be formatted; that line reached the game log only";
+
+    const record = function (level, args, prefix) {
+        try {
+            push(level, (prefix || "") + formatArgs(args));
+        } catch (ignore) {
+            if (!state.formatFailed) {
+                state.formatFailed = true;
+                push(level, FORMAT_FAILED_TEXT);
+            }
+        }
+    };
+
     const wrap = function (level) {
         const original = console[level];
 
@@ -205,7 +226,7 @@ ACEUIAppLoader.console = (function () {
         console[level] = function () {
             const args = ACEUIAppLoader.toArray(arguments);
 
-            push(level, formatArgs(args));
+            record(level, args);
             original.apply(console, args);
         };
     };
@@ -213,11 +234,15 @@ ACEUIAppLoader.console = (function () {
     const onError = function (e) {
         const where = e.filename ? " at " + e.filename + ":" + e.lineno : "";
 
-        push("error", "uncaught: " + (e.message || formatValue(e.error, 0)) + where);
+        if (e.message) {
+            record("error", ["uncaught: " + e.message + where]);
+        } else {
+            record("error", ["uncaught:", e.error].concat(where ? [where.trim()] : []));
+        }
     };
 
     const onRejection = function (e) {
-        push("error", "unhandled rejection: " + formatValue(e.reason, 0));
+        record("error", ["unhandled rejection:", e.reason]);
     };
 
     /** console.assert(cond, ...rest): record only the failures, as errors. */
@@ -230,7 +255,7 @@ ACEUIAppLoader.console = (function () {
         console.assert = function (condition) {
             const args = ACEUIAppLoader.toArray(arguments).slice(1);
 
-            if (!condition) { push(ASSERT_LEVEL, ASSERT_PREFIX + formatArgs(args)); }
+            if (!condition) { record(ASSERT_LEVEL, args, ASSERT_PREFIX); }
 
             original.apply(console, arguments);
         };
@@ -281,6 +306,7 @@ ACEUIAppLoader.console = (function () {
 
     return {
         MAX_ENTRIES: MAX_ENTRIES,
+        FORMAT_FAILED_TEXT: FORMAT_FAILED_TEXT,
         STORE_KEY: STORE_KEY,
         CARRY_MAX: CARRY_MAX,
         LEVELS: LEVELS,

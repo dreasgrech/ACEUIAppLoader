@@ -35,6 +35,7 @@ Nothing here proves Cohtml compatibility. It exercises logic deterministically; 
 | `tests/test_loader_tools.py` | library style and contracts, `install_app`, the bundled apps, a real build and both entry points (needs the game) |
 | `tests/test_pack_kspkg.py` | the package format, padding, duplicate records and what `verify` rejects |
 | `tests/test_lib_browser.py`, `tests/lib/harness.html` | the library's behaviour in a headless browser, against a fake clock, storage, HUD store and engine |
+| `tests/test_loader_tools.py` (SecondEntryPointTests), `tests/lib/timeline/hud.html` | the **shipped** `cohtml.js` (stock file plus library) on a page called `hud.html`, with Coherent's own engine implementation and a scripted game: bindings ready after DOMContentLoaded, the stock UI wiping the preset-answer handlers while ours is pending, the game version filled in late and mismatched, a stock pause menu holding the input flags, the HUD store arriving late. Asserts that no error escapes and that every recovery path fires |
 | `tests/test_check_ingame_log.py` | the in-game smoke test's verdicts, against synthetic game logs |
 | `tests/test_appkit.py` | that `new_app.py` output passes the kit, and that the kit catches legacy boilerplate |
 | `apps/<name>/tests/` | each bundled app's own suite, through the same kit |

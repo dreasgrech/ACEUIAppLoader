@@ -28,6 +28,19 @@ python tools/repad.py                                # after installing or remov
 
 **Another package mod can take your override away.** Padding is chosen against everything installed when a package is built, so installing or removing one can make another stop winning, silently. `repad.py` replays the lookup over the whole mods folder, rebuilds whichever packages lost, and repeats until they all resolve or nothing improves. It needs a registry beside the mods folder saying how to rebuild each one, because the padding lives in each package's own repo — run it once to see the format.
 
+## Releasing
+
+```
+python tools/release.py                # tests, a --release build, dist/ACEUIAppLoader-<version>-<game build>.kspkg
+```
+
+It refuses a dirty tree, runs every suite, builds for a stock install with the recorded
+duplicate count, verifies the package, and names the artifact after the loader version and
+the game build it was made for, so a download can never be mistaken for another version's.
+Before uploading: install that same file here, launch once, `check_ingame_log.py` clean, and
+`grep -c "Text transformation" <log>` and `grep -c "alignItems" <log>` both zero -- those two
+warnings are how a stylesheet that the engine only pretends to accept shows up.
+
 ## Tests
 
 ```

@@ -30,6 +30,13 @@ The app's name is its folder's, and its marker's. Everything else is optional:
 
 Scripts run in order as classic scripts, and the loader waits for each before adding the next.
 
+**Never request a URL that could be a folder.** The loader only ever asks for the plain file
+names an `app.json` lists, and refuses anything with a separator in it, because the game's
+loose-file lookup accepts a folder as a hit and then dies opening it -- three launches
+proved it. An app that fetches its own `files` inherits that rule: fetch `me.base + "name.ext"`,
+never a path built from anything a player could have typed, and never a name without an
+extension. A missing file is harmless (one warning in the log); a folder is fatal.
+
 ## The lifecycle
 
 Before your scripts run, the loader creates the app's root — `<div id="<name>" data-app="<name>">` — inside the HUD's positioning container. `ACEUIAppLoader.app("<name>")` then tells the app who it is, so its script declares none of it:

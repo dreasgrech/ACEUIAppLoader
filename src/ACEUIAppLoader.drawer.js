@@ -78,6 +78,15 @@ ACEUIAppLoader.drawer = (function () {
     /** Above the stock HUD, below nothing in particular; the HUD does not use z-index much. */
     const Z_INDEX = "9000";
 
+    /**
+     * Where the drawer belongs: the HUD, and any other page an app actually runs on. The
+     * loader is on every page, so ready() fires on every page too; on the menus nothing
+     * loads, and a hot zone there sat over the stock menus' own scrollbars at the right
+     * edge and opened a drawer whose every row said "not-for-this-page".
+     */
+    const HUD_PAGE = "hud.html";
+    const LOADED_STATUS = "loaded";
+
     /** One palette for every surface the loader draws; see ACEUIAppLoader.dom. */
     const THEME = ACEUIAppLoader.dom.THEME;
 
@@ -546,7 +555,7 @@ ACEUIAppLoader.drawer = (function () {
             flex: "0 0 auto",
             display: "flex",
             flexDirection: "row",
-            alignItems: "baseline",
+            alignItems: "center",
             justifyContent: "space-between",
             padding: "0.45rem 0.6rem",
             background: THEME.headerBg
@@ -622,10 +631,23 @@ ACEUIAppLoader.drawer = (function () {
     // the HUD store shows up shortly after this file runs; adopt it when it does
     persist.whenHudReady(adoptHudStore, { pollMs: HUD_POLL_MS, waitMs: HUD_WAIT_MS });
 
-    /** Build once the loader knows what is installed. */
+    /** Whether this page gets a drawer at all; see HUD_PAGE. */
+    const belongsOn = function (apps) {
+        return ACEUIAppLoader.page === HUD_PAGE || (apps || []).some(function (entry) {
+            return entry.status === LOADED_STATUS;
+        });
+    };
+
+    /** Build once the loader knows what is installed, where anything is. */
     if (typeof ACEUIAppLoader.ready === "function") {
         ACEUIAppLoader.ready(function (apps) {
             if (state.built) { return; }
+
+            if (!belongsOn(apps)) {
+                ACEUIAppLoader.log("[drawer] not built: no app runs on this page");
+
+                return;
+            }
 
             build(apps);
         });
@@ -637,6 +659,7 @@ ACEUIAppLoader.drawer = (function () {
         FADE_MS: FADE_MS,
         CLOSE_DELAY_MS: CLOSE_DELAY_MS,
         state: state,
+        belongsOn: belongsOn,
         build: build,
         open: open,
         close: close,

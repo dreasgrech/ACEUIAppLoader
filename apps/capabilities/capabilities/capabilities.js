@@ -820,8 +820,9 @@ const CapabilitiesProbe = (function () {
             rows += rowMarkup(check, startId + i);
         });
 
+        // upper-cased here: the engine ignores text-transform and warns about it every frame
         return el("div", CLASS.cat)
-            + el("div", CLASS.catName) + category.cat + close("div")
+            + el("div", CLASS.catName) + category.cat.toUpperCase() + close("div")
             + rows
             + close("div");
     };

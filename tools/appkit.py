@@ -162,7 +162,12 @@ class AppTests(unittest.TestCase):
 
     def test_cohtml_rules(self):
         for name, css in self.styles.items():
-            self.assertIsNone(re.search(r"var\(--[a-z0-9-]+\s*,", css), f"{name}: var(--x, fallback) is not supported by the game's Cohtml")
+            rules = re.sub(r"/\*.*?\*/", "", css, flags=re.S)
+            self.assertIsNone(re.search(r"var\(--[a-z0-9-]+\s*,", rules), f"{name}: var(--x, fallback) is not supported by the game's Cohtml")
+            # ignored by the engine, and it logs a warning for every element that asks, on
+            # every frame: 19,672 lines in one 13-minute session came from one legend
+            self.assertNotIn("text-transform", rules, f"{name}: text-transform is ignored and floods the game log; upper-case the string in the script")
+            self.assertIsNone(re.search(r"align-items\s*:\s*baseline", rules), f"{name}: align-items: baseline is not supported (use center or flex-end)")
         for name, js in self.scripts.items():
             low = js.lower()
             self.assertNotIn("<svg", low, f"{name}: no SVG built by script (per-frame geometry crashed the game)")
@@ -170,6 +175,8 @@ class AppTests(unittest.TestCase):
             self.assertNotIn('createElement("style")', js, f"{name}: no CSS in scripts")
             self.assertNotIn("background:", js, f"{name}: no CSS in scripts")
             self.assertIsNone(re.search(r"var\(--", js), f"{name}: no CSS variables in scripts")
+            self.assertNotIn("textTransform", js, f"{name}: text-transform is ignored and floods the game log")
+            self.assertNotIn('alignItems: "baseline"', js, f"{name}: align-items: baseline is not supported")
 
     def test_identity_comes_from_the_loader(self):
         joined = "\n".join(self.scripts.values())

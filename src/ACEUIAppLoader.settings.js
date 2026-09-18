@@ -669,7 +669,6 @@ ACEUIAppLoader.settings = (function () {
             fontSize: "0.58rem",
             fontWeight: "700",
             letterSpacing: "0.1em",
-            textTransform: "uppercase",
             color: THEME.inkDim,
             cursor: "pointer",
             userSelect: "none"
@@ -679,7 +678,9 @@ ACEUIAppLoader.settings = (function () {
             ? { display: "flex", flexDirection: "row", flexWrap: "wrap" }
             : {});
 
-        header.appendChild(make("span", {}, spec.label || spec.key));
+        // upper-cased here, not by the stylesheet: this engine ignores text-transform and
+        // logs a warning for every element that asks for it, on every frame
+        header.appendChild(make("span", {}, String(spec.label || spec.key).toUpperCase()));
         header.appendChild(glyph);
         header.addEventListener("click", function () { setCollapsed(app, spec.key, !isCollapsed(app, spec.key)); });
 

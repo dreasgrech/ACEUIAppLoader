@@ -23,12 +23,14 @@ window.engine = {
         list.push(entry);
         return { clear: function () { const i = list.indexOf(entry); if (i >= 0) { list.splice(i, 1); } } };
     },
+    mute: 0,
     trigger: function (name, command, data) {
         window.__engine.triggered.push([name, command, data]);
         if (command !== "SettingsRequestVideoPresetList") { return; }
+        if (window.engine.mute > 0) { window.engine.mute -= 1; return; }
         window.setTimeout(function () {
             const response = { __Type: "SettingsResponseVideoPresetList", response: "OK",
-                filenames: ["ACEUIAppLoader-beta", "MyLowSettings", "ACEUIAppLoader-alpha", "ACEUIAppLoader-"] };
+                filenames: ["ACEUIAppLoader-beta", "MyLowSettings", "ACEUIAppLoader-alpha", "ACEUIAppLoader-", "ACEUIAppLoader-bad#name"] };
             (window.__engine.handlers["SettingsResponseVideoPresetList"] || []).slice().forEach(function (e) { e.cb.call(e.ctx || window.engine, response); });
         }, 0);
     },
@@ -150,6 +152,23 @@ document.addEventListener("DOMContentLoaded", function () {
         console.log("x".repeat(1000));
         eq(ACEUIAppLoader.console.entries()[2].text.length, 403, "text cap");
         eq(ACEUIAppLoader.console.format([1, [2, [3]]]), "[1, [2, [...]]]", "format export");
+    });
+
+    t("console: a value that refuses to be formatted never throws back into whoever logged it", function () {
+        ACEUIAppLoader.console.clear();
+        const hostile = {};
+        Object.defineProperty(hostile, "boom", { enumerable: true, get: function () { throw new Error("no"); } });
+        let threw = false;
+        try { console.log("before", hostile); } catch (e) { threw = true; }
+        eq(threw, false, "the caller -- the stock bundle, in the middle of its own work -- is not aborted");
+        eq(last(window.__log).indexOf("before"), 0, "the original console.log still ran");
+        const e = ACEUIAppLoader.console.entries();
+        eq(e.length, 1); eq(e[0].text, ACEUIAppLoader.console.FORMAT_FAILED_TEXT, "the buffer says a line was lost");
+        console.log("again", hostile);
+        eq(ACEUIAppLoader.console.entries().length, 1, "and says it once per page, not once per line");
+        console.log("fine"); eq(ACEUIAppLoader.console.entries().length, 2, "later lines are captured as before");
+        window.dispatchEvent(new ErrorEvent("error", { message: "", error: hostile, filename: "y.js", lineno: 3 }));
+        eq(ACEUIAppLoader.console.entries().length, 2, "an uncaught error carrying a hostile value is swallowed the same way");
     });
 
     t("console: ring buffer keeps the last MAX_ENTRIES", function () {
@@ -610,6 +629,31 @@ document.addEventListener("DOMContentLoaded", function () {
         eq(ACEUIAppLoader.input.isCaptured(), false);
     });
 
+    t("input: a page-load reset happens only when a page of ours left the keyboard held", function () {
+        const calls = [];
+        const I = ACEUIAppLoader.input;
+        window.ksUI = { menuState: {
+            toggleKeyboardInput: function (on) { calls.push(on); },
+            ignoreInputActions: function (on) { calls.push(on); }
+        } };
+        I.releaseEverything("test setup");
+        localStorage.removeItem(I.HELD_KEY);
+        calls.length = 0;
+        I.clearOnLoad(Date.now() + 100);
+        eq(calls.length, 0, "nothing of ours outstanding: the stock menus' flags are left alone");
+        eq(I.heldAcrossPages(), false);
+        I.capture("typist");
+        eq(localStorage.getItem(I.HELD_KEY), "1", "holding the keyboard is remembered across the HUD reload");
+        ok(I.heldAcrossPages());
+        I.release("typist");
+        eq(localStorage.getItem(I.HELD_KEY), null, "and forgotten when it is given back");
+        localStorage.setItem(I.HELD_KEY, "1");    // a previous page died holding it
+        calls.length = 0;
+        I.clearOnLoad(Date.now() + 100);
+        eq(calls.join(" "), "false false", "the fresh page releases what the old one left");
+        eq(localStorage.getItem(I.HELD_KEY), null, "once");
+    });
+
     t("input: a missed blur does not strand the capture -- a click elsewhere releases too", function () {
         window.ksUI = { menuState: { toggleKeyboardInput: function () {}, ignoreInputActions: function () {} } };
         const box = document.createElement("input");
@@ -908,7 +952,8 @@ document.addEventListener("DOMContentLoaded", function () {
         eq(S.isCollapsed("sectioned", "a"), false, "a non-section is never folded");
 
         S.render("sectioned", pane);
-        const headers = Array.prototype.slice.call(pane.children).filter(function (el) { return /^(Inputs|Demo)/.test(el.textContent); });
+        // upper-cased by the loader, not by text-transform, which this engine ignores and warns about every frame
+        const headers = Array.prototype.slice.call(pane.children).filter(function (el) { return /^(INPUTS|DEMO)/.test(el.textContent); });
         eq(headers.length, 2, "two headers, direct children of the pane");
         const inputsBody = headers[0].nextSibling, demoBody = headers[1].nextSibling;
         eq(inputsBody.children.length, 3, "the three toggles sit in the Inputs body");
@@ -1393,6 +1438,11 @@ document.addEventListener("DOMContentLoaded", function () {
         const L = ACEUIAppLoader.loader;
         eq(L.markerNames(["ACEUIAppLoader-b", "Other", "ACEUIAppLoader-a", "ACEUIAppLoader-", 7]).join(","), "a,b");
         eq(L.markerNames(null).length, 0);
+        eq(L.markerNames(["ACEUIAppLoader-ok.app-1", "ACEUIAppLoader-bad#x", "ACEUIAppLoader-a b", "ACEUIAppLoader-.hidden"]).join(","), "ok.app-1",
+            "a name that could not be a plain URL segment is dropped: # would cut the request off at the folder above");
+        ok(window.__log.some(function (l) { return l === "[ACEUIAppLoader] app \"bad#x\" ignored: a name is letters, digits, _ . - and nothing else"; }), "and it says so");
+        ["alpha", "pedal-graph", "a.b_c1"].forEach(function (n) { ok(L.isAppName(n), n); });
+        ["", "-x", ".x", "a/b", "a\\b", "a#b", "a b", "a?b", 5, null].forEach(function (n) { ok(!L.isAppName(n), JSON.stringify(n)); });
         const r = L.withoutMarkers({ __Type: "x", response: "OK", filenames: ["ACEUIAppLoader-a", "Mine"] });
         eq(r.filenames.join(","), "Mine"); eq(r.response, "OK"); eq(r.__Type, "x");
         eq(L.withoutMarkers(null), null);
@@ -1450,7 +1500,7 @@ document.addEventListener("DOMContentLoaded", function () {
             eq(apps[0].status, "loaded", "gadget is bundled in the package");
             eq(apps[1].status, "loaded", "alpha has a folder with app.json in the harness");
             eq(apps[2].status, "missing", "beta has none");
-            ok(window.__log.indexOf("[ACEUIAppLoader] presets: 2 app(s)") >= 0, "discovery line");
+            ok(window.__log.indexOf("[ACEUIAppLoader] presets: 2 app(s)") >= 0, "discovery line: the malformed marker in the answer was dropped");
             ok(window.__log.indexOf("[ACEUIAppLoader] app alpha 1.2.3: loading 1 script(s), 0 stylesheet(s)") >= 0, "version from app.json");
             ok(!window.__log.some(function (l) { return l.indexOf("nothing to load") >= 0; }), "no give-up line");
         });
@@ -1503,6 +1553,56 @@ document.addEventListener("DOMContentLoaded", function () {
             eq(window.__gadget.detached, 1, "and hiding them stops them again, rather than leaving them running unreachable");
             eq(document.getElementById("gadget").style.display, "none");
             eq(ACEUIAppLoader.persist.readLocal(drawer.DEV_STORE_KEY).on, false, "the choice is remembered");
+        });
+
+        t("loader: an app whose id the page already uses for something else is refused, not handed that element", function () {
+            const L = ACEUIAppLoader.loader;
+            const stock = document.createElement("div"); stock.id = "mainhud"; center.appendChild(stock);
+            ok(L.idTaken("mainhud"), "a stock element with the app's id");
+            eq(L.idTaken("alpha"), false, "our own root, created by the loader, is not a collision");
+            eq(L.idTaken("nobody"), false, "no element at all is not one either");
+            stock.remove();
+        });
+
+        t("loader: ready() after everything loaded calls back at once instead of never", function () {
+            let calls = 0;
+            ACEUIAppLoader.ready(function (apps) { calls += 1; eq(apps, ACEUIAppLoader.loader.apps); });
+            eq(calls, 1, "a late subscriber is not lost");
+        });
+
+        t("loader: a package built for another game build says so on the HUD, not only in the log", function () {
+            const L = ACEUIAppLoader.loader;
+            const had = ACEUIAppLoader.builtFor;
+            ACEUIAppLoader.builtFor = "0.9.1+release.6";
+            window.ModelUIState = { game_version: "0.9.1+release.6" };
+            eq(L.warnIfGameMoved(), false, "same build: nothing to say");
+            // what the game really publishes is the release alone; the first launch of the
+            // notice fired on a matching build because of exactly this
+            window.ModelUIState = { game_version: "0.9.1" };
+            eq(L.warnIfGameMoved(), false, "the release the game publishes matches the build's release: nothing to say");
+            eq(L.releaseOf("0.9.1+release.6"), "0.9.1"); eq(L.releaseOf("0.9.1"), "0.9.1");
+            window.ModelUIState = { game_version: "0.9.2" };
+            eq(L.warnIfGameMoved(), true, "a different release is noticed");
+            ok(last(window.__log).indexOf("[ACEUIAppLoader] built for game 0.9.1+release.6 but running on 0.9.2") === 0, "the log line");
+            window.ModelUIState = { game_version: "0.9.2+release.1" };
+            eq(L.warnIfGameMoved(), true, "and a full build string, should the game ever publish one, is compared the same way");
+            eq(document.querySelector("[" + L.NOTICE_ATTR + "]"), null, "this page is not the HUD, so no strip here");
+            const notice = L.showMoved("0.9.1+release.6", "0.9.2+release.1");
+            eq(document.querySelector("[" + L.NOTICE_ATTR + "]"), notice, "on the HUD it is a strip across the top");
+            eq(notice.style.position, "fixed");
+            ok(notice.textContent.indexOf("delete ACEUIAppLoader.kspkg from Saved Games\\ACE\\mods") > 0, "and it says what to do");
+            notice.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+            eq(document.querySelector("[" + L.NOTICE_ATTR + "]"), null, "gone with a click");
+            ACEUIAppLoader.builtFor = had;
+            delete window.ModelUIState;
+        });
+
+        t("drawer: belongs on the HUD, and on any other page an app actually runs on", function () {
+            const d = ACEUIAppLoader.drawer;
+            ok(d.belongsOn(ACEUIAppLoader.loader.apps), "this page loaded alpha and gadget");
+            eq(d.belongsOn([{ status: "not-for-this-page" }, { status: "missing" }]), false, "a menu page where nothing runs gets no hot zone over the stock scrollbars");
+            eq(d.belongsOn([]), false);
+            ok(d.belongsOn([{ status: "not-for-this-page" }, { status: "loaded" }]), "one running app is enough");
         });
 
         t("loader: app(name).mount(attach) attaches once to #name when the DOM has it, and is a no-op otherwise", function () {
@@ -1773,7 +1873,43 @@ document.addEventListener("DOMContentLoaded", function () {
                 handle.clear();
                 eq((window.__engine.handlers["SettingsResponseVideoPresetList"] || []).length, 0, "clear() still works through the wrapper");
             });
-            finish();
+
+            // The retry: the fake engine swallows the next request, as a stock engine.off(name)
+            // clearing our handler or a late engine would, and answers the one after.
+            const L = ACEUIAppLoader.loader;
+            const asked = window.__engine.triggered.length;
+            let found = null;
+            window.engine.mute = 1;
+            L.discover(function (names, source) { found = { names: names, source: source }; });
+            waitFor(function () { return found !== null; }, function () {
+                t("loader: a silent first answer is asked again before the installed apps are given up on", function () {
+                    ok(found, "discovery finished");
+                    eq(found.source, "presets", "the second answer counted");
+                    eq(found.names.join(","), "alpha,beta");
+                    ok(window.__log.some(function (l) { return l === "[ACEUIAppLoader] no preset list answer in " + L.PRESET_TIMEOUT_MS + " ms; asking again"; }), "it said it was asking again");
+                    eq(window.__engine.triggered.slice(asked).filter(function (x) { return x[1] === L.PRESET_REQUEST; }).length, 2, "two requests went out");
+                    eq((window.__engine.handlers["SettingsResponseVideoPresetList"] || []).length, 0, "and no handler was left behind");
+                });
+
+                // The version check waits for the model to be filled in rather than reading it once.
+                const hadBuilt = ACEUIAppLoader.builtFor;
+                ACEUIAppLoader.builtFor = "0.9.1+release.6";
+                delete window.ModelUIState;
+                const early = L.watchGameVersion(Date.now() + 3000);
+                window.setTimeout(function () { window.ModelUIState = { game_version: "0.9.3" }; }, 300);
+                const noticed = function () {
+                    return window.__log.some(function (l) { return l.indexOf("built for game 0.9.1+release.6 but running on 0.9.3") > 0; });
+                };
+                waitFor(noticed, function () {
+                    t("loader: the version check waits for the game to publish its version instead of reading it once", function () {
+                        eq(early, false, "nothing to compare yet: the model is not filled in at DOMContentLoaded");
+                        ok(noticed(), "and it spoke once the version arrived");
+                        ACEUIAppLoader.builtFor = hadBuilt;
+                        delete window.ModelUIState;
+                    });
+                    finish();
+                }, Date.now() + 4000);
+            }, Date.now() + L.PRESET_TIMEOUT_MS + L.PRESET_RETRY_MS + 2000);
         }, Date.now() + 2000);
     });
 });

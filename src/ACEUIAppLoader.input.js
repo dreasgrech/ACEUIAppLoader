@@ -53,6 +53,16 @@ ACEUIAppLoader.input = (function () {
     const ESCAPE_CODE = 27;
     const CLEAR_POLL_MS = 50;
     const CLEAR_WAIT_MS = 10000;
+    /**
+     * Whether a page of ours left the engine holding the keyboard. The flags live in the
+     * game's menu state and outlive the HUD page, so the next page has to know whether to
+     * release them -- and only then. The stock menus set the same flags for their own text
+     * boxes and pause screens, and a page that reset them unasked would be racing the
+     * stock UI for a switch it does not own. localStorage rather than ACEUIAppLoader.persist,
+     * which loads after this file.
+     */
+    const HELD_KEY = "aceinput.held";
+    const HELD_VALUE = "1";
 
     const state = {
         owners: {},         // name -> true, for every holder that currently wants the keyboard
@@ -62,6 +72,24 @@ ACEUIAppLoader.input = (function () {
 
     const menuState = function () {
         return window.ksUI && window.ksUI.menuState ? window.ksUI.menuState : null;
+    };
+
+    const readHeld = function () {
+        try {
+            return localStorage.getItem(HELD_KEY) === HELD_VALUE;
+        } catch (ignore) { /* no storage: nothing recorded, nothing to undo */ }
+
+        return false;
+    };
+
+    const writeHeld = function (on) {
+        try {
+            if (on) {
+                localStorage.setItem(HELD_KEY, HELD_VALUE);
+            } else {
+                localStorage.removeItem(HELD_KEY);
+            }
+        } catch (ignore) { /* no storage: the release nets on this page still work */ }
     };
 
     /** True when the engine offers at least one of the levers on this page. */
@@ -96,7 +124,10 @@ ACEUIAppLoader.input = (function () {
             }
         });
 
-        if (taken) { state.applied = want; }
+        if (taken) {
+            state.applied = want;
+            writeHeld(want);
+        }
 
         return taken;
     };
@@ -211,10 +242,14 @@ ACEUIAppLoader.input = (function () {
 
     /**
      * A fresh HUD page has no holders, so the engine should not still be ignoring input
-     * from a previous one. The library loads before the stock bundle, so ksUI is not there
-     * yet; retry briefly until it is. This is what recovers a session that got stuck.
+     * from a previous one -- when it was one of OURS that left it so. The library loads
+     * before the stock bundle, so ksUI is not there yet; retry briefly until it is. This is
+     * what recovers a session that got stuck. A page nothing of ours captured on is left
+     * alone: the stock menus own those flags on their pages (see HELD_KEY).
      */
     const clearOnLoad = function (deadline) {
+        if (!readHeld()) { return; }
+
         if (available()) {
             state.applied = true;              // force the write even though we hold nothing
             releaseEverything("page load");
@@ -305,8 +340,11 @@ ACEUIAppLoader.input = (function () {
 
     return {
         LEVERS: LEVERS,
+        HELD_KEY: HELD_KEY,
         state: state,
         available: available,
+        heldAcrossPages: readHeld,
+        clearOnLoad: clearOnLoad,
         isCaptured: isCaptured,
         holders: holders,
         capture: capture,

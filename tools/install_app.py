@@ -75,6 +75,10 @@ def marker_path(name, mods_dir=None):
 def check_name(name):
     if not NAME_RE.match(name or ""):
         raise SystemExit(f"app name {name!r} must be letters, digits, '_', '.', '-' (it becomes a file name)")
+    if name != name.lower():
+        # the loader accepts it; the test kit every app runs does not, so say so here rather
+        # than let the two disagree in silence
+        print(f"WARNING: app name {name!r} has upper-case letters; the test kit requires lower case ({name.lower()!r})")
     return name
 
 

@@ -1,0 +1,193 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<title>ACEUIAppLoader on a game-like timeline</title>
+<style>
+  body { margin: 0; background: #222; color: #ddd; font: 12px monospace; }
+  /* stand-in for the game's HUD container */
+  .absolutecenter { position: relative; width: 1600px; height: 900px; overflow: hidden; }
+  #results { white-space: pre; }
+</style>
+<script>
+/*
+ * The shipped artefact -- the stock cohtml.js with the library appended, copied here by
+ * the test as cohtml.js -- on a page named hud.html, driven the way the game drives it.
+ * The things that went wrong, or nearly went wrong, in real sessions are replayed on a
+ * clock:
+ *
+ *   - the engine is the stock file's own (mock mode: no native `engine` is predefined),
+ *     so engine.on / off / trigger / whenReady are Coherent's implementation, not a fake;
+ *   - "bindings ready" arrives after DOMContentLoaded, as in the game, and nothing can be
+ *     sent before it;
+ *   - the stock UI's own preset request clears EVERY handler for the answer while ours is
+ *     pending (what `engine.off(name)` with no callback does natively), so the first ask
+ *     is lost and the loader has to ask again;
+ *   - ModelUIState exists from the start but its game_version is filled in later, by the
+ *     per-frame sync, and it is not the build the package was made for;
+ *   - ksUI.menuState appears late and a stock pause menu then takes the input flags for
+ *     itself; nothing of ours may undo that;
+ *   - the HUD layout store appears late.
+ *
+ * Every uncaught error and unhandled rejection is counted, because the whole point is
+ * that none escapes.
+ */
+window.__errors = [];
+window.addEventListener("error", function (e) { window.__errors.push(e.message || String(e.error)); });
+window.addEventListener("unhandledrejection", function (e) { window.__errors.push("rejection: " + String(e.reason)); });
+// the model object exists before the bundle fills it, as in the game
+window.ModelUIState = {};
+</script>
+<script src="doubles.js"></script>
+<script src="cohtml.js"></script>
+</head>
+<body>
+<div class="absolutecenter" id="center"></div>
+<pre id="results"></pre>
+<div id="done" hidden></div>
+<script>
+(function () {
+    const H = window.__harness;
+    const t = H.t;
+    const eq = H.eq;
+    const ok = H.ok;
+    const L = ACEUIAppLoader.loader;
+    // the game publishes the release alone, never the "+release.N" build
+    const RUNNING = "9.9.9";
+    const game = { requests: 0, wiped: 0, levers: [], stockSeen: null };
+    const answer = {
+        __Type: L.PRESET_RESPONSE,
+        response: "OK",
+        filenames: ["ACEUIAppLoader-beta", "MyLowSettings", "ACEUIAppLoader-alpha", "ACEUIAppLoader-bad#name"]
+    };
+    const logged = function (text) {
+        return window.__log.some(function (line) { return line.indexOf(text) >= 0; });
+    };
+    const makeHud = function () {
+        const hud = { currentLayout: "default", StoredData: { lastLayout: "default", layouts: { default: { elements: {} } } } };
+
+        hud.elementModified = function (id, props) { hud.StoredData.layouts.default.elements[id] = props; };
+
+        return hud;
+    };
+
+    // The game's side of OnUICommand. Coherent's mock-mode trigger hands an event nobody
+    // handles in JavaScript to the engine.mock handler for it, a tick later.
+    engine.mock("OnUICommand", function (command) {
+        if (command !== L.PRESET_REQUEST) { return; }
+
+        game.requests += 1;
+
+        if (game.requests === 1) {
+            // the stock video settings component got its own answer first and cleared every
+            // handler for the event, ours included: natively that is engine.off(name) with
+            // no callback; in mock mode the same effect is this
+            delete engine.events[L.PRESET_RESPONSE];
+            game.wiped += 1;
+
+            return;
+        }
+
+        window.setTimeout(function () { engine.trigger(L.PRESET_RESPONSE, answer); }, 5);
+    });
+
+    // t=50: the native side says its bindings are ready; only now can anything be sent
+    window.setTimeout(function () { engine.BindingsReady(); }, 50);
+
+    // t=400: the stock bundle has created its menu state; t=500: a stock pause menu takes
+    // the input flags for itself
+    window.setTimeout(function () {
+        window.ksUI = { menuState: {
+            toggleKeyboardInput: function (on) { game.levers.push(["toggleKeyboardInput", on]); },
+            ignoreInputActions: function (on) { game.levers.push(["ignoreInputActions", on]); }
+        } };
+    }, 400);
+    window.setTimeout(function () { window.ksUI.menuState.ignoreInputActions(true); }, 500);
+
+    // t=700: the per-frame sync fills the model in, with a build this package was not made for
+    window.setTimeout(function () { window.ModelUIState.game_version = RUNNING; }, 700);
+
+    // t=900: the HUD layout store turns up
+    window.setTimeout(function () { window.HUD = makeHud(); }, 900);
+
+    // t=1600: a stock handler for the preset list, registered through the wrapped engine.on
+    window.setTimeout(function () {
+        engine.on(L.PRESET_RESPONSE, function (response) { game.stockSeen = response; });
+    }, 1600);
+
+    // t=5200: everything above has had time to play out, including the second ask
+    window.setTimeout(function () {
+        const apps = L.apps;
+        const names = apps.map(function (m) { return m.name; }).join(",");
+        const statuses = apps.map(function (m) { return m.name + "=" + m.status; }).join(" ");
+        const notice = document.querySelector("[" + L.NOTICE_ATTR + "]");
+
+        t("the page is the HUD and the shipped library announced itself on it", function () {
+            eq(ACEUIAppLoader.page, "hud.html");
+            ok(logged("[ACEUIAppLoader] loader " + ACEUIAppLoader.VERSION + " on /hud.html"), "boot line");
+            ok(/^\d+\.\d+\.\d+\+release\.\d+$/.test(ACEUIAppLoader.builtFor), "the artefact carries the game build it was made for: " + ACEUIAppLoader.builtFor);
+        });
+
+        t("no uncaught error or unhandled rejection escaped anything on the timeline", function () {
+            eq(window.__errors.length, 0, JSON.stringify(window.__errors));
+        });
+
+        t("the first ask was lost to the stock's off-all, the loader asked again, and the installed apps still arrived", function () {
+            eq(game.wiped, 1, "the stock wiped the handlers once");
+            eq(game.requests, 2, "two requests reached the game");
+            ok(logged("no preset list answer in " + L.PRESET_TIMEOUT_MS + " ms; asking again"), "it said it was asking again");
+            ok(!logged("(attempt "), "and never gave up");
+            eq(L.source(), "presets");
+            eq(names, "gadget,alpha,beta", "the bundled app, then the markers: " + statuses);
+            eq(apps[0].status, "loaded", "gadget (bundled) " + statuses);
+            eq(apps[1].status, "loaded", "alpha (installed, pages *) " + statuses);
+            eq(apps[2].status, "missing", "beta has no folder " + statuses);
+        });
+
+        t("a marker whose name could not be a URL segment was dropped, and it said so", function () {
+            ok(logged("app \"bad#name\" ignored: a name is letters, digits, _ . - and nothing else"));
+            eq(names.indexOf("bad"), -1);
+        });
+
+        t("a stock handler registered through the wrapped engine.on got the answer without our markers", function () {
+            ok(L.filtering(), "engine.on is wrapped");
+            engine.trigger(L.PRESET_RESPONSE, answer);
+            ok(game.stockSeen, "the stock handler ran");
+            eq(game.stockSeen.filenames.join(","), "MyLowSettings");
+        });
+
+        t("the game version arrived after DOMContentLoaded and the notice still appeared, on the HUD, saying what to do", function () {
+            ok(logged("built for game " + ACEUIAppLoader.builtFor + " but running on " + RUNNING), "the log line");
+            ok(notice, "the strip is on the page");
+            ok(notice.textContent.indexOf(RUNNING) > 0 && notice.textContent.indexOf(ACEUIAppLoader.builtFor) > 0, "both versions named");
+            ok(notice.textContent.indexOf("delete ACEUIAppLoader.kspkg") > 0, "and the remedy");
+            eq(notice.style.position, "fixed");
+        });
+
+        t("nothing of ours touched the input flags while the stock UI held them", function () {
+            eq(JSON.stringify(game.levers), JSON.stringify([["ignoreInputActions", true]]),
+                "only the stock's own write, and it was not undone");
+            eq(ACEUIAppLoader.input.heldAcrossPages(), false);
+        });
+
+        t("the drawer was built on the HUD with a row per app and its hot zone", function () {
+            const d = ACEUIAppLoader.drawer;
+
+            ok(d.state.built, "built");
+            eq(d.state.apps.length, 3, "one row per app");
+            ok(d.state.hot && d.state.hot.parentNode, "hot zone on the page");
+            eq(d.isVisible("gadget"), false, "a developer app stays off until asked for");
+        });
+
+        t("the HUD store that appeared late was found by everyone waiting for it", function () {
+            ok(ACEUIAppLoader.persist.hudAvailable(), "the store is there");
+            ok(window.__log.filter(function (line) { return line.indexOf("[ACEUIAppLoader]") === 0; }).length > 5, "the loader kept talking");
+        });
+
+        H.finish(["loader log: " + window.__log.filter(function (line) { return line.indexOf("[ACEUIAppLoader]") === 0; }).join(" | "),
+            "errors: " + JSON.stringify(window.__errors)]);
+    }, 5200);
+}());
+</script>
+</body>
+</html>

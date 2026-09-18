@@ -103,12 +103,28 @@ Each is a separate download with its own instructions.
 > After the game updates, come back here for the matching release.
 
 <details>
+<summary><b>The game updated and the HUD is blank, missing, or the menus misbehave</b></summary><br>
+
+The file carries two of the game's own pages from the version it was built for. After an
+update those are the *old* game's, and if they still get used the HUD can come up empty or
+wrong. The loader tells you when this has happened: a red strip across the top of the HUD
+reading *ACE UI App Loader was built for game … but this is …*.
+
+**Delete `ACEUIAppLoader.kspkg`** from the `mods` folder, start the game once to confirm it
+is back to normal, then install the release built for the new version. Whenever the game
+misbehaves right after an update, removing this file is the first thing to try.
+
+</details>
+
+<details>
 <summary><b>The drawer doesn't appear</b></summary><br>
 
-1. **The game updated.** By far the most common cause.
+1. **The game updated.** By far the most common cause. See above.
 2. **The file is in the wrong place.** Straight into `mods`, not a subfolder, and it keeps
    the name `ACEUIAppLoader.kspkg`.
-3. **Another mod that installs a `.kspkg` file.** Two of those can occasionally clash.
+3. **Two copies.** Exactly one `ACEUIAppLoader…kspkg` in `mods` — an older copy left beside
+   the new one (`ACEUIAppLoader (1).kspkg`, say) can win instead of it.
+4. **Another mod that installs a `.kspkg` file.** Two of those can occasionally clash.
 
 </details>
 
@@ -116,7 +132,9 @@ Each is a separate download with its own instructions.
 <summary><b>An app isn't in the drawer</b></summary><br>
 
 Check that app's own instructions. Most are two pieces — a folder and a small marker file —
-and it's easy to install one and miss the other.
+and it's easy to install one and miss the other. The marker file must be **completely
+empty** (0 bytes): the game tries to read every file in that folder as a preset, and one
+it cannot read stops the whole list from arriving.
 
 </details>
 
@@ -133,8 +151,9 @@ question on its own.
 
 ## Uninstalling
 
-Delete `ACEUIAppLoader.kspkg`. That's the whole procedure — nothing else to undo, nothing
-left behind.
+Delete `ACEUIAppLoader.kspkg`. That's the whole procedure — nothing runs, nothing to undo.
+The only trace left is a few small settings records (which apps were switched on, where you
+put them) inside the game's own UI settings file, which the game ignores.
 
 ---
 
@@ -192,5 +211,5 @@ The game mechanics all of this rests on are documented in
 ---
 
 <div align="center">
-<sub>Loader 0.23.0 · built for Assetto Corsa EVO <b>0.9.1+release.6</b></sub>
+<sub>Loader 0.24.0 · built for Assetto Corsa EVO <b>0.9.1+release.6</b></sub>
 </div>

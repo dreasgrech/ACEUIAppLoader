@@ -95,3 +95,13 @@ dev/
   gallery.html    the panel with fixed numbers, for judging the design
 docs/internals.md why profiling the stock HUD works, what it logs, and its API
 ```
+
+## Known limits
+
+Recording wraps the page's entry points, and two of those wrappers are not perfectly
+transparent. A listener added *while* recording is registered through a wrapper; once
+recording stops, `removeEventListener` with the original function no longer finds it, so
+such a listener stays for the life of the page. And `setTimeout`/`setInterval` extra
+arguments (`setTimeout(fn, ms, a, b)`) are not forwarded while wrapped. Neither matters for
+a profiling session on the HUD, which is what this is for; both are why recording is off by
+default and the developer switch is off by default.

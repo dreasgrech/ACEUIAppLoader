@@ -114,9 +114,14 @@ class LibrarySourceTests(unittest.TestCase):
         # original -- the line is captured once and the bundle's behaviour is unchanged.
         self.assertIn('const LEVELS = ["log", "info", "debug", "warn", "error", "trace", "dir", "table"];', js)
         # console.assert must only record when the condition is false, so it is wrapped apart
-        self.assertIn("if (!condition) { push(ASSERT_LEVEL, ASSERT_PREFIX + formatArgs(args)); }", js)
+        self.assertIn("if (!condition) { record(ASSERT_LEVEL, args, ASSERT_PREFIX); }", js)
         self.assertIn("wrapAssert();", js, "the assert wrapper is installed by hook()")
-        self.assertIn("original.apply(console, args);", js)
+        # formatting reads the logged values, and a value that throws must not abort the
+        # caller -- the stock bundle, in the middle of its own work
+        self.assertIn("const record = function (level, args, prefix) {\n        try {\n            push(level, (prefix || \"\") + formatArgs(args));\n        } catch (ignore) {", js,
+                      "capture is guarded so the hook never throws back into whoever logged")
+        self.assertIn("            record(level, args);\n            original.apply(console, args);", js)
+        self.assertNotIn("push(level, formatArgs(args));", js, "no unguarded capture on the console path")
         self.assertIn("const MAX_ENTRIES = 500;", js)
         self.assertIn('window.addEventListener("error", onError);', js)
         self.assertIn('window.addEventListener("unhandledrejection", onRejection);', js)
@@ -171,7 +176,8 @@ class LibrarySourceTests(unittest.TestCase):
         self.assertIn("styles.concat(scripts).every(isFileName)", js, "never request anything that could be a folder")
         for name in ("PRESET_REQUEST", "PRESET_RESPONSE", "MARKER_PREFIX", "MARKER_EXT", "PRESET_TIMEOUT_MS", "source",
                      "filtering", "isMarker", "markerNames", "withoutMarkers", "isFileName", "CONTAINER_SELECTOR",
-                     "APP_ATTR", "DEV_VERSION", "app", "BUILTIN_ROOT", "BUILTIN_INDEX", "merge", "isDeveloper"):
+                     "APP_ATTR", "DEV_VERSION", "app", "BUILTIN_ROOT", "BUILTIN_INDEX", "merge", "isDeveloper",
+                     "PRESET_RETRY_MS", "HUD_PAGE", "isAppName", "discover", "idTaken", "warnIfGameMoved"):
             self.assertRegex(js, rf"\n\s+{name}: [A-Za-z_.]+,?\n", f"loader.{name} not exported")
         for alias in ("ROOT", "apps", "app", "ready", "addStylesheet", "addScript"):
             self.assertIn(f"ACEUIAppLoader.{alias} = ACEUIAppLoader.loader.{alias};", js)
@@ -205,6 +211,11 @@ class LibrarySourceTests(unittest.TestCase):
         js = self.files["ACEUIAppLoader.loader.js"]
         self.assertIn(f'const MARKER_PREFIX = "{install_app.MARKER_PREFIX}";', js)
         self.assertIn(f'const MARKER_EXT = "{install_app.MARKER_EXT}";', js)
+        # the name becomes a URL, and a `#` in it would turn the request into one for the
+        # folder above -- the request that kills the game -- so the loader applies the
+        # installer's rule to what the game lists, not only what the installer wrote
+        self.assertIn(f"const NAME_RE = /{install_app.NAME_RE.pattern}/;", js, "the loader and the installer agree on what a name is")
+        self.assertIn(".filter(function (name) {\n            if (isAppName(name)) { return true; }", js, "and the loader applies it to the markers")
         self.assertEqual(install_app.MARKER_DIR, "Video", "the game lists Saved Games/ACE/Video for SettingsRequestVideoPresetList")
         self.assertEqual(install_app.APPS_SUBDIR.replace(os.sep, "/") + "/", "uiresources/" + "ACEUIAppLoader/")
 
@@ -213,6 +224,38 @@ class LibrarySourceTests(unittest.TestCase):
             self.assertNotIn("<svg", js.lower(), name)
             self.assertNotIn("innerHTML", js, f"{name}: the library builds no markup")
             self.assertNotIn('createElement("style")', js, name)
+
+    def test_no_css_the_engine_warns_about_in_library(self):
+        """Measured in the game log: `text-transform` is ignored AND warned about for every
+        element that asks, every frame (19,672 lines in a 13-minute session); `align-items:
+        baseline` is refused with a warning per write. The library draws with inline styles,
+        so the check is on the scripts."""
+        for name, js in self.files.items():
+            self.assertNotIn("textTransform", js, f"{name}: upper-case the string instead")
+            self.assertNotIn('"baseline"', js, f"{name}: align-items: baseline is not supported")
+
+    def test_an_app_cannot_be_handed_a_stock_element_as_its_root(self):
+        js = self.files["ACEUIAppLoader.loader.js"]
+        self.assertIn("existing.getAttribute(APP_ATTR) !== name", js, "an element with the app's id that is not an app root is not ours to give away")
+        self.assertIn("if (info.root !== false && idTaken(name)) {", js, "checked before the root is mounted")
+
+    def test_discovery_asks_twice_before_giving_up(self):
+        js = self.files["ACEUIAppLoader.loader.js"]
+        self.assertIn("const PRESET_RETRY_MS = 3000;", js)
+        self.assertIn("const PRESET_ATTEMPTS = 2;", js)
+        self.assertIn('" ms; asking again"', js)
+        self.assertIn("NO_ANSWER_HINT", js, "the give-up line says what a silent folder usually means")
+
+    def test_the_drawer_is_built_only_where_an_app_runs(self):
+        js = self.files["ACEUIAppLoader.drawer.js"]
+        self.assertIn("if (!belongsOn(apps)) {", js, "no hot zone over the stock menus' scrollbars on pages nothing loads on")
+        self.assertIn('const HUD_PAGE = "hud.html";', js)
+
+    def test_the_input_reset_on_load_is_conditional(self):
+        js = self.files["ACEUIAppLoader.input.js"]
+        self.assertIn('const HELD_KEY = "aceinput.held";', js)
+        self.assertIn("if (!readHeld()) { return; }", js, "the stock menus own those flags on their pages; only undo what a page of ours left")
+        self.assertIn("writeHeld(want);", js)
 
 
 class InstallAppTests(unittest.TestCase):
@@ -539,6 +582,17 @@ class SecondEntryPointTests(unittest.TestCase):
         self.assertIn("ACEUIAppLoader.builtFor", js)
         self.assertIn("ModelUIState", js, "the running version comes from the model the game publishes")
         self.assertIn("warnIfGameMoved();", js, "and the check has to actually be called")
+        # the models are filled in per frame by the stock bundle, so at DOMContentLoaded the
+        # version can still be missing: a check made once there would say nothing
+        self.assertIn("watchGameVersion(Date.now() + GAME_VERSION_WAIT_MS);", js, "start() waits for the version rather than reading it once")
+        # the game publishes "0.9.1", the stamp is "0.9.1+release.6": the first launch of the
+        # notice fired on a matching build because the two were compared whole
+        self.assertIn("releaseOf(running) !== releaseOf(built)", js, "compared on the release, which is all the game publishes")
+        self.assertIn('const VERSION_BUILD_SEPARATOR = "+";', js)
+        # a stale package's stock files can leave the HUD blank; a log line nobody reads
+        # is not a warning, a strip across the HUD is
+        self.assertIn("if (ACEUIAppLoader.page === HUD_PAGE && document.body) { showMoved(built, running); }", js)
+        self.assertIn("delete ACEUIAppLoader.kspkg from Saved Games", js, "and it says what to do")
 
     def test_the_bootstrap_carries_the_library_behind_a_guard(self):
         self.assertIn("if (window.ACEUIAppLoader) { return; }", self.boot)
@@ -556,6 +610,24 @@ class SecondEntryPointTests(unittest.TestCase):
         shutil.copyfile(os.path.join(self.build, *build_loader.BOOT_PATH.split("/")),
                         os.path.join(self.tmp, "loader.js"))
         headless.check_harness(self, harness, 6)
+
+    def test_the_shipped_host_survives_a_game_like_timeline(self):
+        """The assembled cohtml.js -- stock file plus library -- on a page called hud.html,
+        with Coherent's own engine implementation (mock mode) and a scripted game: bindings
+        ready after DOMContentLoaded, the stock UI wiping every handler for the preset answer
+        while ours is pending, the game version filled in late and different from the
+        build's, a stock pause menu taking the input flags, the HUD store arriving late.
+        tests/lib/timeline/hud.html says what must hold at the end; above all that no error
+        escaped."""
+        import headless
+        stage = os.path.join(self.tmp, "timeline")
+        os.makedirs(stage)
+        shutil.copyfile(os.path.join(self.build, *build_loader.HOST_PATH.split("/")), os.path.join(stage, "cohtml.js"))
+        shutil.copyfile(os.path.join(ROOT, "tests", "lib", "timeline", "hud.html"), os.path.join(stage, "hud.html"))
+        shutil.copyfile(os.path.join(ROOT, "tests", "lib", "doubles.js"), os.path.join(stage, "doubles.js"))
+        for fixture in ("ACEUIAppLoader", "ACEUIAppLoaderBuiltIn"):
+            shutil.copytree(os.path.join(ROOT, "tests", "lib", fixture), os.path.join(stage, fixture))
+        headless.check_harness(self, os.path.join(stage, "hud.html"), 9)
 
     def test_the_console_buffer_survives_the_page_reload(self):
         """Escape and resume reload the HUD page, which throws away the JS context -- and

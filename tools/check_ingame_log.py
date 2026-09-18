@@ -38,7 +38,8 @@ def first_match(pattern, lines):
     return None
 
 
-PROBLEM_KEYS = (" FAILED", "failed to load", "invalid JSON", "skipped", "could not wrap")
+PROBLEM_KEYS = (" FAILED", "failed to load", "invalid JSON", "skipped", "could not wrap", "\" ignored: ", "asking again",
+                "(attempt ", "but running on")
 # What the game actually writes when its handler catches something: a "[crash] [error]"
 # block starting with this, then a stack. The two strings this looked for before --
 # "CRASH DETECTED" and "Exception thrown:" -- appear in no log this game has ever written,
