@@ -38,7 +38,8 @@ added alongside each other instead of fighting over the same file.
 <table>
 <tr><td width="40" align="center"><h3>1</h3></td><td>
 
-Download **`ACEUIAppLoader.kspkg`** from the [latest release](../../releases/latest).
+Download the **`ACEUIAppLoader-….zip`** from the [latest release](../../releases/latest) and open it.
+Inside is one folder, `mods`.
 
 </td></tr>
 <tr><td align="center"><h3>2</h3></td><td>
@@ -46,17 +47,20 @@ Download **`ACEUIAppLoader.kspkg`** from the [latest release](../../releases/lat
 Press <kbd>Win</kbd> + <kbd>R</kbd>, paste this in, press <kbd>Enter</kbd>:
 
 ```
-%USERPROFILE%\Saved Games\ACE\mods
+%USERPROFILE%\Saved Games\ACE
 ```
-
-No `mods` folder yet? Create one with exactly that name.
 
 </td></tr>
 <tr><td align="center"><h3>3</h3></td><td>
 
-Drop the file in. No unzipping, no installer, nothing to run.
+Drag the `mods` folder out of the zip into that window. If Windows asks, choose to
+**merge** with the `mods` folder already there. No installer, nothing to run.
 
 ![The file in the mods folder](docs/images/mods-folder.png)
+
+You end up with `mods\ACEUIAppLoader.kspkg` and an empty `mods\uiresources\ACEUIAppLoader`
+folder, which is where apps will go. Every app is installed the same way: extract its zip
+into `Saved Games\ACE`, merge.
 
 </td></tr>
 </table>
@@ -120,8 +124,10 @@ misbehaves right after an update, removing this file is the first thing to try.
 <summary><b>The drawer doesn't appear</b></summary><br>
 
 1. **The game updated.** By far the most common cause. See above.
-2. **The file is in the wrong place.** Straight into `mods`, not a subfolder, and it keeps
-   the name `ACEUIAppLoader.kspkg`.
+2. **The file is in the wrong place.** It must be exactly `Saved Games\ACE\mods\ACEUIAppLoader.kspkg`,
+   with that name. The usual way this goes wrong is Windows' *Extract All*, which puts
+   everything in a folder named after the zip (`ACE\ACEUIAppLoader-0.24.0-…\mods\…`); drag the
+   `mods` folder itself into `Saved Games\ACE` instead.
 3. **Two copies.** Exactly one `ACEUIAppLoader…kspkg` in `mods` — an older copy left beside
    the new one (`ACEUIAppLoader (1).kspkg`, say) can win instead of it.
 4. **Another mod that installs a `.kspkg` file.** Two of those can occasionally clash.

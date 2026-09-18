@@ -31,13 +31,17 @@ python tools/repad.py                                # after installing or remov
 ## Releasing
 
 ```
-python tools/release.py                # tests, a --release build, dist/ACEUIAppLoader-<version>-<game build>.kspkg
+python tools/release.py                # tests, a --release build, dist/ACEUIAppLoader-<version>-<game build>.zip
 ```
 
 It refuses a dirty tree, runs every suite, builds for a stock install with the recorded
-duplicate count, verifies the package, and names the artifact after the loader version and
-the game build it was made for, so a download can never be mistaken for another version's.
-Before uploading: install that same file here, launch once, `check_ingame_log.py` clean, and
+duplicate count, verifies the package, and wraps it as the download: a zip laid out as the
+contents of `Saved Games\ACE` -- `mods\ACEUIAppLoader.kspkg` plus an empty
+`mods\uiresources\ACEUIAppLoader\` holding a `PUT APPS HERE.txt` -- named after the loader
+version and the game build it was made for. The version goes on the zip, never on the
+package: the padding was planned under the exact name `ACEUIAppLoader.kspkg` and the scan
+order depends on it. App zips share the same root, so every download installs the same way.
+Before uploading: extract that same zip into `Saved Games\ACE` here, launch once, `check_ingame_log.py` clean, and
 `grep -c "Text transformation" <log>` and `grep -c "alignItems" <log>` both zero -- those two
 warnings are how a stylesheet that the engine only pretends to accept shows up.
 

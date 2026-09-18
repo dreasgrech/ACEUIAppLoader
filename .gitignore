@@ -1,5 +1,7 @@
 # build output: 69 MB per package (64 MB of that is the fixed-size file table)
 dist/*.kspkg
+# the release download tools/release.py wraps it in
+dist/*.zip
 
 __pycache__/
 *.pyc

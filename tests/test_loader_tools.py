@@ -802,6 +802,46 @@ class RepadTests(unittest.TestCase):
         self.assertTrue(repad.rebuild("a.kspkg", entry, dry_run=False))
 
 
+class ReleaseZipTests(unittest.TestCase):
+    """The download is a zip laid out as Saved Games\\ACE, with the package under its exact name."""
+
+    def test_the_zip_holds_the_package_under_its_exact_name_and_the_apps_folder_note(self):
+        import zipfile
+        import release
+        tmp = tempfile.mkdtemp()
+        try:
+            fake = os.path.join(tmp, "ACEUIAppLoader.kspkg")
+            with open(fake, "wb") as f:
+                f.write(b"\0" * 4096)
+            dest = release.zip_release(fake, os.path.join(tmp, release.release_name("1.2.3", "0.9.1+release.6")))
+            self.assertEqual(os.path.basename(dest), "ACEUIAppLoader-1.2.3-0.9.1+release.6.zip", "the version is on the zip")
+            with zipfile.ZipFile(dest) as z:
+                names = sorted(z.namelist())
+                self.assertEqual(names, ["mods/ACEUIAppLoader.kspkg", "mods/uiresources/ACEUIAppLoader/PUT APPS HERE.txt"],
+                                 "exactly the package, under its own name, and the note in the empty apps folder")
+                self.assertEqual(z.read("mods/ACEUIAppLoader.kspkg"), b"\0" * 4096)
+                note = z.read("mods/uiresources/ACEUIAppLoader/PUT APPS HERE.txt").decode("utf-8")
+            self.assertIn("Video", note, "the note says an app needs its marker too")
+            self.assertIn("extract into Saved Games\\ACE", note)
+            self.assertNotIn("\n", note.replace("\r\n", ""), "Notepad-friendly line endings")
+            # the folder the loader reads is exactly the one the installer writes to
+            self.assertEqual(release.ZIP_APPS_DIR, "mods/uiresources/ACEUIAppLoader")
+            self.assertEqual(release.ZIP_PACKAGE, "mods/" + os.path.basename(build_loader.OUT))
+            # a published checksum must be checkable by someone rebuilding from source, so
+            # the zip's bytes depend on its contents alone, not on when it was written
+            again = release.zip_release(fake, os.path.join(tmp, "again.zip"))
+            with open(dest, "rb") as a, open(again, "rb") as b:
+                self.assertEqual(a.read(), b.read(), "the same package zips to the same bytes")
+        finally:
+            shutil.rmtree(tmp, ignore_errors=True)
+
+    def test_the_readme_installs_the_zip_the_way_the_zip_is_built(self):
+        readme = read(os.path.join(ROOT, "README.md"))
+        self.assertIn("Drag the `mods` folder out of the zip", readme)
+        self.assertIn("%USERPROFILE%\\Saved Games\\ACE\n```", readme, "the target is Saved Games\\ACE, where the zip's mods folder merges in")
+        self.assertIn("mods\\uiresources\\ACEUIAppLoader", readme, "and it says where apps go")
+
+
 class ReadmeTests(unittest.TestCase):
     """The README is the front door: for most people it is the only page they will read."""
 

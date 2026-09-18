@@ -1,21 +1,33 @@
 #!/usr/bin/env python3
 """
-release.py - build the package other people will install, and nothing else by mistake.
+release.py - build the download other people will install, and nothing else by mistake.
 
 The package on this machine is tuned for THIS mods folder (build_loader.py without
 --release plans the padding against the packages installed here, and dups.json records a
 different count for it). `dist/ACEUIAppLoader.kspkg` is whatever build ran last, so a
 release taken from there can be the wrong one without anything saying so. This does the
-release build the one right way and names the result so it cannot be mistaken:
+release build the one right way and wraps it the one right way:
 
   1. refuses a dirty working tree (a release is a commit, not a moment);
   2. runs every test suite (tools/run_tests.py);
   3. builds with --release --dups=auto, which plans for a stock install and refuses a
      duplicate-count measurement taken for another file set;
-  4. copies the verified package to dist/ACEUIAppLoader-<version>-<game build>.kspkg and
-     prints its SHA-256.
+  4. writes dist/ACEUIAppLoader-<version>-<game build>.zip, laid out as the contents of
+     `Saved Games\\ACE`, and prints its SHA-256:
 
-Then, before uploading: install that same file here, launch once, and run
+         mods/
+           ACEUIAppLoader.kspkg
+           uiresources/
+             ACEUIAppLoader/
+               PUT APPS HERE.txt
+
+The zip carries the version; the package inside keeps its exact name, because the padding
+was planned under that name and the scan order depends on it. The apps folder is created
+empty so a player sees where apps go, and the note in it says what an app download is.
+Every app zip has the same root, so every download installs the same way: drag `mods`
+(and, for an app, `Video`) into `Saved Games\\ACE`, merge.
+
+Then, before uploading: install the package from that zip here, launch once, and run
 check_ingame_log.py; the log should carry no "Text transformation" and no "alignItems"
 warnings (docs/building.md, Releasing).
 
@@ -24,14 +36,34 @@ Usage:
 """
 import hashlib
 import os
-import shutil
 import subprocess
 import sys
+import zipfile
 
 import _repos
 import build_loader as bl
+import install_app
 
 KNOWN_FLAGS = {"--skip-tests", "--allow-dirty"}
+
+# Inside the zip: the game's mods folder, and the loose apps root the loader reads.
+ZIP_MODS = "mods"
+ZIP_PACKAGE = ZIP_MODS + "/" + os.path.basename(bl.OUT)
+ZIP_APPS_DIR = ZIP_MODS + "/" + install_app.APPS_SUBDIR.replace(os.sep, "/")
+ZIP_NOTE = ZIP_APPS_DIR + "/PUT APPS HERE.txt"
+
+APPS_NOTE = """This folder is where UI apps for the ACE UI App Loader live.
+
+You do not put anything in here by hand. Each app is its own download: a zip laid out
+like this one, which you extract into Saved Games\\ACE the same way. It puts a folder in
+here and a small, completely empty marker file in Saved Games\\ACE\\Video, and the app
+needs BOTH to appear in the drawer. The marker is how the game tells the loader the app
+exists; a folder on its own is not seen.
+
+Apps and the loader: https://github.com/dreasgrech/ACEUIAppLoader#apps
+
+The loader ignores this file.
+"""
 
 
 def dirty_files():
@@ -43,8 +75,31 @@ def dirty_files():
 
 
 def release_name(version, game):
-    """`ACEUIAppLoader-0.24.0-0.9.1+release.6.kspkg`: the loader version and the game build it was made for."""
-    return f"ACEUIAppLoader-{version}-{game or 'unknown-game'}.kspkg"
+    """`ACEUIAppLoader-0.24.0-0.9.1+release.6.zip`: the loader version and the game build it was made for."""
+    return f"ACEUIAppLoader-{version}-{game or 'unknown-game'}.zip"
+
+
+# Every entry carries this timestamp, so the zip's checksum depends on its contents alone:
+# two builds of the same commit give the same bytes, and a published checksum can be
+# checked by anyone rebuilding from source (the package itself is reproducible already).
+ZIP_TIMESTAMP = (1980, 1, 1, 0, 0, 0)
+
+
+def entry(name):
+    info = zipfile.ZipInfo(name, date_time=ZIP_TIMESTAMP)
+    info.compress_type = zipfile.ZIP_DEFLATED
+    return info
+
+
+def zip_release(package, dest):
+    """Write the release zip around a built package; returns dest. The layout is the module's docstring."""
+    os.makedirs(os.path.dirname(os.path.abspath(dest)), exist_ok=True)
+    with open(package, "rb") as f:
+        blob = f.read()
+    with zipfile.ZipFile(dest, "w", compresslevel=9) as z:
+        z.writestr(entry(ZIP_PACKAGE), blob)
+        z.writestr(entry(ZIP_NOTE), APPS_NOTE.replace("\n", "\r\n"))
+    return dest
 
 
 def sha256(path):
@@ -78,13 +133,11 @@ def main(argv):
     if build.returncode != 0:
         raise SystemExit("the release build failed")
 
-    version = bl.read_version()
-    game = bl.game_version()
-    dest = os.path.join(os.path.dirname(bl.OUT), release_name(version, game))
-    shutil.copyfile(bl.OUT, dest)
-    print(f"\nrelease: {dest}")
+    dest = zip_release(bl.OUT, os.path.join(os.path.dirname(bl.OUT), release_name(bl.read_version(), bl.game_version())))
+    print(f"\nrelease: {dest} ({os.path.getsize(dest) // 1024} KB)")
     print(f"sha256:  {sha256(dest)}")
-    print("next: install this same file here, launch once, python tools/check_ingame_log.py")
+    print("inside:  " + ", ".join(zipfile.ZipFile(dest).namelist()))
+    print("next: extract it into Saved Games\\ACE here (merge), launch once, python tools/check_ingame_log.py")
     return 0
 
 
