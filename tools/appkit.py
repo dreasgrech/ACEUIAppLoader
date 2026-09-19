@@ -44,7 +44,9 @@ STOCK_FILES = ("hud.html", "cohtml.js", "components.js")
 LEGACY = ("VERSION", os.path.join("tools", "install.py"))
 LIBRARY_OWNED = ("requestAnimationFrame", "cancelAnimationFrame", "localStorage", "window.HUD", "getBoundingClientRect", "JSON.stringify")
 HOT_FORBIDDEN = ("innerHTML", "appendChild", "createElement", "removeChild", "insertAdjacentHTML")
-# per-frame style writes other than transforms (the stock HUD's own technique) thrash layout in Cohtml
+# per-frame style writes other than transforms (the stock HUD's own technique) thrash layout in Cohtml.
+# clip-path is animated by the stock speedo too, but the engine draws it as a hard stencil with no
+# antialiasing (PedalGraph's polygon bars, 2026-09-19), so it stays out.
 HOT_STYLE_RE = re.compile(r"\.style\.(?!transform\b)[A-Za-z]")
 
 
