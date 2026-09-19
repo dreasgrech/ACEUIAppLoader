@@ -30,6 +30,10 @@ Usage:
   --no-host   leave out the cohtml.js override, so the HUD page is the only way in
   --release   plan the padding for a STOCK install instead of this machine's apps
               folder -- what a package other people will install has to be built for
+  --alternate the second release package: same files, the record count dups.json holds
+              under "alternate" (tune_dups.py --alternate). Implies --release. Packages
+              that differ only in record count lose the game's lookup on disjoint folders,
+              so a player whose folder beats one is handed the other.
   --dups=N    write N table records for each override instead of one, so the game's
               merged vector holds N of ours against the base package's single record.
               `auto` reads the measurement in dups.json. See pack_kspkg.py for why this
@@ -123,6 +127,27 @@ def stamp(version):
     return ("\n\n/* the game build this package was made for; the loader compares it with\n"
             "   ModelUIState.game_version and says so when they differ */\n"
             f'ACEUIAppLoader.builtFor = "{version}";\n')
+
+
+def stamp_records(build_dir, dups, with_host=True):
+    """
+    Append `ACEUIAppLoader.records = N;` to both artefacts, so the loader's boot line says
+    which package a player has -- the primary and the alternate differ in nothing a log
+    could otherwise show. Written after the count is decided, which is after assemble().
+    For the bootstrap it goes inside the guard, before the closing `}());`.
+    """
+    line = f"\n/* how many table records each override carries; the primary and the alternate release differ here */\nACEUIAppLoader.records = {int(dups)};\n"
+    if with_host:
+        with open(os.path.join(build_dir, *HOST_PATH.split("/")), "ab") as f:
+            f.write(line.encode("utf-8"))
+    boot = os.path.join(build_dir, *BOOT_PATH.split("/"))
+    with open(boot, encoding="utf-8") as f:
+        text = f.read()
+    tail = "\n}());\n"
+    if not text.endswith(tail):
+        raise SystemExit(f"{BOOT_PATH} does not end with the guard's closing line")
+    with open(boot, "w", encoding="utf-8", newline="\n") as f:
+        f.write(text[:-len(tail)] + line.rstrip("\n") + tail)
 
 
 def library_sources():
@@ -289,7 +314,7 @@ def release_mods_dir(stack):
     return empty
 
 
-def recorded_dups(build_dir, targets, release=False):
+def recorded_dups(build_dir, targets, release=False, alternate=False):
     """
     The duplicate count tools/tune_dups.py measured for THIS file set.
 
@@ -297,8 +322,8 @@ def recorded_dups(build_dir, targets, release=False):
     depends on the whole hash set -- so a mismatched fingerprint is a build failure
     rather than a silent fallback to an arbitrary number.
     """
-    mode = "release" if release else "machine"
-    retune = f"run python tools/tune_dups.py{' --release' if release else ''} --write"
+    mode = "alternate" if alternate else ("release" if release else "machine")
+    retune = f"run python tools/tune_dups.py{' --alternate' if alternate else (' --release' if release else '')} --write"
     if not os.path.exists(DUPS_FILE):
         raise SystemExit(f"--dups=auto needs {DUPS_FILE}: {retune}")
     with open(DUPS_FILE, encoding="utf-8") as f:
@@ -311,12 +336,12 @@ def recorded_dups(build_dir, targets, release=False):
         raise SystemExit(f"{DUPS_FILE} [{mode}] was measured for a different package "
                          f"({recorded.get('fingerprint')} != {want}); {retune}")
     print(f"duplicates: {recorded['dups']} per override, measured for "
-          f"{'a stock install' if release else 'this machine'} "
+          f"{'a stock install' if release else 'this machine'}{' (the alternate package)' if alternate else ''} "
           f"({recorded.get('unseen', '?')}/{recorded['scenarios']} unseen package sets)")
     return int(recorded["dups"])
 
 
-KNOWN_FLAGS = {"--install", "--no-verify", "--no-apps", "--no-host", "--release"}
+KNOWN_FLAGS = {"--install", "--no-verify", "--no-apps", "--no-host", "--release", "--alternate"}
 VALUED_FLAGS = ("--dups=",)
 
 
@@ -337,15 +362,17 @@ if __name__ == "__main__":
     if asked != "auto" and not asked.isdigit():
         raise SystemExit(f"--dups takes a whole number or 'auto', not {asked!r}")
     with_host = "--no-host" not in flags
-    release = "--release" in flags
+    alternate = "--alternate" in flags
+    release = "--release" in flags or alternate
     temporary = []
     build = assemble(with_apps="--no-apps" not in flags, with_host=with_host)
     os.makedirs(os.path.dirname(OUT), exist_ok=True)
     # The overrides this build actually carries, which is also what a recorded measurement
     # has to have been taken for -- a --no-host build has only the page.
     wanted = list(TARGETS) if with_host else [PAGE_PATH]
-    dups = recorded_dups(build, wanted, release=release) if asked == "auto" else int(asked)
+    dups = recorded_dups(build, wanted, release=release, alternate=alternate) if asked == "auto" else int(asked)
     targets = wanted if dups > 1 else []
+    stamp_records(build, dups, with_host=with_host)
     mods_dir = release_mods_dir(temporary) if release else None
     if release:
         print("release build: padding planned for a stock install, not this machine's mods folder")

@@ -577,6 +577,16 @@ class SecondEntryPointTests(unittest.TestCase):
         self.assertLess(self.boot.index("builtFor"), self.boot.rindex("}());"),
                         "the stamp must be inside the guard, or a second load would reset it")
 
+    def test_the_record_count_is_stamped_into_both_artefacts_and_the_boot_line_says_it(self):
+        build_loader.stamp_records(self.build, 32)
+        host = read(os.path.join(self.build, *build_loader.HOST_PATH.split("/")))
+        boot = read(os.path.join(self.build, *build_loader.BOOT_PATH.split("/")))
+        self.assertTrue(host.rstrip().endswith("ACEUIAppLoader.records = 32;"), "appended to the host")
+        self.assertIn("ACEUIAppLoader.records = 32;\n}());\n", boot, "inside the bootstrap's guard")
+        js = read(os.path.join(SRC, "ACEUIAppLoader.loader.js"))
+        self.assertIn('(ACEUIAppLoader.records ? " (" + ACEUIAppLoader.records + " records)" : "")', js,
+                      "the boot line names it, so a log says which release a player has")
+
     def test_the_loader_compares_the_stamp_with_the_running_game(self):
         js = read(os.path.join(SRC, "ACEUIAppLoader.loader.js"))
         self.assertIn("ACEUIAppLoader.builtFor", js)
@@ -698,6 +708,14 @@ class PostUpdateTests(unittest.TestCase):
         self.assertEqual(post_update.recorded("machine", self.book)["dups"], 32)
         self.assertEqual(post_update.recorded("release", self.book)["dups"], 64)
 
+    def test_counts_that_all_win_every_set_are_told_apart_by_their_single_ties(self):
+        # 16 and 32 records both won all 48 tuning sets; preferring the smaller count shipped
+        # 16, which the 2000-folder measurement then showed loses 0.2% where 32 loses none.
+        # The single ties -- each entry point on its own -- are what the small sets can see.
+        results = [(48, 80, 16, 10, ["a"]), (48, 91, 32, 3, ["b"]), (47, 96, 64, 3, ["c"]), (48, 91, 128, 31, ["d"])]
+        self.assertEqual(tune_dups.choose(results)[2], 32, "most sets, then most single ties, then the smaller count")
+        self.assertEqual(tune_dups.choose([(48, 80, 16, 10, []), (48, 80, 32, 3, [])])[2], 16, "a true tie still goes to the smaller count")
+
     def test_a_measurement_taken_before_the_game_was_recorded_is_not_called_stale(self):
         """`game` is newer than the first measurements. Missing means unknown, and unknown
         is not a reason to spend the minutes -- only a game that is known and different."""
@@ -815,6 +833,8 @@ class ReleaseZipTests(unittest.TestCase):
                 f.write(b"\0" * 4096)
             dest = release.zip_release(fake, os.path.join(tmp, release.release_name("1.2.3", "0.9.1+release.6")))
             self.assertEqual(os.path.basename(dest), "ACEUIAppLoader-1.2.3-0.9.1+release.6.zip", "the version is on the zip")
+            self.assertEqual(release.release_name("1.2.3", "0.9.1+release.6", alternate=True),
+                             "ACEUIAppLoader-1.2.3-0.9.1+release.6-alternate.zip", "the alternate is the same zip under a name that says so")
             with zipfile.ZipFile(dest) as z:
                 names = sorted(z.namelist())
                 self.assertEqual(names, ["mods/ACEUIAppLoader.kspkg", "mods/uiresources/ACEUIAppLoader/PUT APPS HERE.txt"],
@@ -832,6 +852,53 @@ class ReleaseZipTests(unittest.TestCase):
             again = release.zip_release(fake, os.path.join(tmp, "again.zip"))
             with open(dest, "rb") as a, open(again, "rb") as b:
                 self.assertEqual(a.read(), b.read(), "the same package zips to the same bytes")
+        finally:
+            shutil.rmtree(tmp, ignore_errors=True)
+
+    def test_an_app_zip_is_exactly_what_the_installer_puts_on_disk(self):
+        """release_app.py: the listed files under the loose apps root, and the empty marker
+        under Video -- both halves, because an app needs both, and nothing else."""
+        import zipfile
+        import release
+        import release_app
+        tmp = tempfile.mkdtemp()
+        try:
+            repo = os.path.join(tmp, "ACEMyApp")
+            app = os.path.join(repo, "myapp")
+            os.makedirs(app)
+            with open(os.path.join(app, "app.json"), "w", encoding="utf-8") as f:
+                json.dump({"version": "1.2.3", "title": "My App", "scripts": ["myapp.js"], "styles": ["myapp.css"],
+                           "files": ["data.bin"]}, f)
+            for rel, data in (("myapp.js", b"// js"), ("myapp.css", b"/* css */"), ("data.bin", b"\0\1\2"),
+                              ("notes.txt", b"not listed, must not ship")):
+                with open(os.path.join(app, rel), "wb") as f:
+                    f.write(data)
+            dest = os.path.join(repo, "dist", release_app.release_name(repo, "1.2.3"))
+            info, written = release_app.zip_app(app, dest)
+            self.assertEqual(os.path.basename(written), "ACEMyApp-1.2.3.zip", "named after the repo and the version")
+            with zipfile.ZipFile(written) as z:
+                names = z.namelist()
+                self.assertEqual(sorted(names), sorted([
+                    "mods/uiresources/ACEUIAppLoader/myapp/app.json",
+                    "mods/uiresources/ACEUIAppLoader/myapp/myapp.js",
+                    "mods/uiresources/ACEUIAppLoader/myapp/myapp.css",
+                    "mods/uiresources/ACEUIAppLoader/myapp/data.bin",
+                    "Video/ACEUIAppLoader-myapp.settingspreset"]), "listed files and the marker, nothing else")
+                self.assertEqual(z.getinfo("Video/ACEUIAppLoader-myapp.settingspreset").file_size, 0, "the marker must be empty")
+                self.assertEqual(z.read("mods/uiresources/ACEUIAppLoader/myapp/data.bin"), b"\0\1\2")
+                for i in z.infolist():
+                    self.assertEqual(i.date_time, release.ZIP_TIMESTAMP, "pinned timestamps, as the loader's zip")
+            # the same layout install_app.py writes, derived from the same constants
+            self.assertTrue(names[0].startswith("mods/" + install_app.APPS_SUBDIR.replace(os.sep, "/") + "/myapp/"))
+            self.assertEqual(names[-1], install_app.MARKER_DIR + "/" + install_app.MARKER_PREFIX + "myapp" + install_app.MARKER_EXT)
+            again = release_app.zip_app(app, os.path.join(tmp, "again.zip"))[1]
+            with open(written, "rb") as a, open(again, "rb") as b:
+                self.assertEqual(a.read(), b.read(), "reproducible: the same app zips to the same bytes")
+            # an app that would not install does not zip either
+            with open(os.path.join(app, "app.json"), "w", encoding="utf-8") as f:
+                json.dump({"version": "1.2.3", "scripts": ["missing.js"]}, f)
+            with self.assertRaises(SystemExit):
+                release_app.zip_app(app, os.path.join(tmp, "bad.zip"))
         finally:
             shutil.rmtree(tmp, ignore_errors=True)
 

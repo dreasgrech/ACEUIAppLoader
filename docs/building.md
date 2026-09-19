@@ -14,6 +14,8 @@ Needs Python 3.12, the game installed, and [`ACEGameInternals`](https://github.c
 python tools/build_loader.py --dups=auto --install   # build and install for this machine
 python tools/build_loader.py --dups=auto --release   # build for someone else's stock install
 python tools/tune_dups.py --write                    # re-measure after the package gains a file
+python tools/tune_dups.py --release --stream=200 --write     # ... for the release (an hour), and then
+python tools/tune_dups.py --alternate --stream=200 --write   # ... the alternate release package (the other count)
 python tools/install_app.py <repo>/<name>            # install a loose app and write its marker
 python tools/check_ingame_log.py                     # after a launch: what loaded, what failed
 python tools/post_update.py --install                # after the game has been patched
@@ -38,9 +40,19 @@ It refuses a dirty tree, runs every suite, builds for a stock install with the r
 duplicate count, verifies the package, and wraps it as the download: a zip laid out as the
 contents of `Saved Games\ACE` -- `mods\ACEUIAppLoader.kspkg` plus an empty
 `mods\uiresources\ACEUIAppLoader\` holding a `PUT APPS HERE.txt` -- named after the loader
-version and the game build it was made for. The version goes on the zip, never on the
+version and the game build it was made for. Then it does the same for the **alternate**
+package (`--alternate`: the same files with the other measured record count, which loses
+the game's lookup on different folders; see `how-it-works.md`), as `…-alternate.zip`. Both
+go on the release page; the README sends a player to the alternate only when the primary
+lost. The version goes on the zip, never on the
 package: the padding was planned under the exact name `ACEUIAppLoader.kspkg` and the scan
 order depends on it. App zips share the same root, so every download installs the same way.
+**An app's release is `release_app.py`.** `python tools/release_app.py <repo>/<name>` writes
+`<repo>/dist/<repo name>-<version>.zip` holding exactly what `install_app.py` puts on disk:
+the listed files under `mods\uiresources\ACEUIAppLoader\<name>\` and the empty marker under
+`Video\`. Same root as the loader's zip, so every download installs the same way. It refuses
+a dirty tree and runs the app's own suite first.
+
 Before uploading: extract that same zip into `Saved Games\ACE` here, launch once, `check_ingame_log.py` clean, and
 `grep -c "Text transformation" <log>` and `grep -c "alignItems" <log>` both zero -- those two
 warnings are how a stylesheet that the engine only pretends to accept shows up.

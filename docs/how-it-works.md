@@ -47,6 +47,65 @@ The count is **not a dial**. Measured against a population of package sets, 32, 
 
 ## How reliable it actually is
 
+**Two packages, differing only in how many records each override carries, lose on
+different folders.** Measured 2026-09-18 over the first 2,000 folders of the validation's
+seeded stream (`tools/validate_override.py`'s scenarios, 0 to 30 other mods, the four
+published car mods in the population), for the release build's exact files:
+
+| records per override | lost both entry points | `cohtml.js` lost alone | `hud.html` lost alone |
+|---|---|---|---|
+| 16 | 4 of 2,000 (0.20%) | 98 | 60 |
+| 32 | 0 of 2,000 | 33 | 26 |
+| 64 | 0 of 2,000 | 18 | 13 |
+| 128 | 0 of 2,000 | 67 | 8 |
+
+No folder was lost by two of the four, and even the single-tie losses overlap on at most
+3 folders in 2,000. Three other levers were tried on the same folders and rejected: **one
+extra path** in the package changed nothing -- the same folders lost at the same step;
+**a file name that sorts first** (`!ACEUIAppLoader.kspkg`) cut `cohtml.js` losses but lost
+two folders outright where the current name lost none; **a name that sorts last** lost 12%
+of folders, because the base package's record has the lower index and the sort favours it.
+Tracing the losing folders add by add showed the loss is decided by the packages added
+*after* ours -- ours is in front for twenty-five additions and pushed behind by the
+twenty-seventh -- so a folder that wins today can lose after the next car mod.
+
+Hence the release is **two packages**: the primary with the count `tune_dups.py --release
+--stream=200` chooses -- scored against 600 of those same folders rather than the tuner's
+easy built-in sets, which cannot tell these counts apart, and tie-broken by single ties --
+and an alternate (`--alternate`) with the best *other* count. For 0.24.0 that is **64 and
+32**. A player whose folder beats the primary is handed the alternate, one swap, and the
+loader's boot line says which one is installed (`loader 0.24.0 on /hud.html (64 records)`).
+
+**The two shipped 0.24.0 packages, pulled out of their release zips, over all 7,987 folders
+of the stream** (2026-09-19, about five hours):
+
+| | lost both entry points | `cohtml.js` alone | `hud.html` alone |
+|---|---|---|---|
+| primary (64 records) | **1 of 7,987, 0.013%** | 70 | 69 |
+| alternate (32 records) | 2 of 7,987, 0.025% | 135 | 109 |
+| both on the same folder | **0** | | |
+
+| other mods installed | folders | primary lost | alternate lost |
+|---|---|---|---|
+| none | 495 | 0 | 0 |
+| 1-2 | 1,895 | 0 | 0 |
+| 3-5 | 1,867 | 1 | 0 |
+| 6-10 | 1,406 | 0 | 1 |
+| 11-20 | 1,421 | 0 | 0 |
+| 21-30 | 903 | 0 | 1 |
+
+So the primary alone is about eight times more reliable than the package this replaced, and
+a player who loses it and swaps is, on this evidence, never lost twice. The stream is a
+model of other people's mod folders, not a census of them; the numbers say how the packages
+behave against it, and a folder nobody simulated can still lose. Installing both at once is not two
+draws -- both sets of records land in one vector and one sort -- so the README says swap,
+never stack.
+
+The earlier, larger measurement below was taken under the package's **previous name**
+(`ACEUIModLoader.kspkg`, see `override-runs.jsonl.meta.json`); the rename changed the hash
+set and the scan position, so its figures describe a different package. It is kept for what
+it established about the two entry points:
+
 Measured overnight on 2026-09-17 against **7,987 installed-package sets**, scoring the
 built `.kspkg` files themselves rather than a reconstruction of them, with all four
 published car mods in the population and synthetic ones sized to match

@@ -13,7 +13,7 @@
 
 </div>
 
-<img width="2560" height="1440" alt="20CA22~1" src="https://github.com/user-attachments/assets/d1dd4c93-8b13-43eb-b7f7-9790d9adf08d" />
+<img width="2560" height="1440" alt="The game while driving, with the app drawer open on the right and apps on the HUD" src="https://github.com/user-attachments/assets/d1dd4c93-8b13-43eb-b7f7-9790d9adf08d" />
 
 
 
@@ -39,7 +39,8 @@ added alongside each other instead of fighting over the same file.
 <tr><td width="40" align="center"><h3>1</h3></td><td>
 
 Download the **`ACEUIAppLoader-….zip`** from the [latest release](../../releases/latest) and open it.
-Inside is one folder, `mods`.
+Inside is one folder, `mods`. (The release also has an `…-alternate.zip`. Ignore it unless
+the help section below sends you to it.)
 
 </td></tr>
 <tr><td align="center"><h3>2</h3></td><td>
@@ -70,7 +71,7 @@ into `Saved Games\ACE`, merge.
 ## The app drawer
 
 <p align="center">
-<img width="800" height="450" alt="2026-09-1703-42-54online-video-cutter com-ezgif com-video-to-gif-converter" src="https://github.com/user-attachments/assets/738a4162-7706-41bf-9f63-2aa679b32273" />
+<img width="800" height="450" alt="The mouse reaches the right edge, the drawer slides in, and an app is switched on" src="https://github.com/user-attachments/assets/738a4162-7706-41bf-9f63-2aa679b32273" />
 </p>
 
 Move your mouse to the **right edge of the screen** and the drawer slides in. Every ui app you
@@ -123,6 +124,10 @@ misbehaves right after an update, removing this file is the first thing to try.
 <details>
 <summary><b>The drawer doesn't appear</b></summary><br>
 
+First, open the newest file in `%USERPROFILE%\Saved Games\ACE\Logs` and search it for
+`ACEUIAppLoader`. **Lines found** means the loader ran and the problem is with an app: see the
+next section. **No lines at all** means the game never used the file, for one of these reasons:
+
 1. **The game updated.** By far the most common cause. See above.
 2. **The file is in the wrong place.** It must be exactly `Saved Games\ACE\mods\ACEUIAppLoader.kspkg`,
    with that name. The usual way this goes wrong is Windows' *Extract All*, which puts
@@ -130,7 +135,12 @@ misbehaves right after an update, removing this file is the first thing to try.
    `mods` folder itself into `Saved Games\ACE` instead.
 3. **Two copies.** Exactly one `ACEUIAppLoader…kspkg` in `mods` — an older copy left beside
    the new one (`ACEUIAppLoader (1).kspkg`, say) can win instead of it.
-4. **Another mod that installs a `.kspkg` file.** Two of those can occasionally clash.
+4. **Your other mods.** With several other `.kspkg` mods installed, the game very occasionally
+   picks its own file over ours; which folders that happens in is a coin toss we cannot see
+   from outside. That is what the **`…-alternate.zip`** on the release page is for: it is the
+   same loader packed so that the toss lands differently. Delete `ACEUIAppLoader.kspkg` and
+   install the alternate zip the same way. If installing another mod later brings the problem
+   back, swap again.
 
 </details>
 

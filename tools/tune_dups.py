@@ -26,6 +26,22 @@ Usage:
   --candidates  duplicate counts to try (default 1,16,32,64,96,128)
   --write       write dups.json; without it this only reports
   --release     measure for a STOCK install: empty mods folder, no local packages
+  --alternate   the second release package: the best count OTHER than the release's. Measured
+                2026-09-18 over 2000 folders, packages that differ only in record count lose
+                on disjoint folders, so a player whose folder beats one is handed the other.
+  --stream=N    score against the validation's folders instead of this file's own small
+                populations: the first N scenarios of validate_override.py's seeded stream
+                for one selection population, the next N for the other, the N after those
+                held out. Those folders have 0 to 30 other mods (the real car mods among
+                them) where the built-in populations have 1 to 6, and only the hard folders
+                tell the counts apart: with 24 built-in sets, 16, 32 and 128 records all win
+                every set and 90 of 96 single ties; over 2000 stream folders 16 records lost
+                4 folders and 98 single cohtml.js ties, 32 records none and 33. Slow -- about
+                a second per set per candidate -- so a release measurement is minutes to an
+                hour, not seconds, and is what the recorded counts should come from.
+
+Choosing between counts that all win every set: the one whose individual ties are
+strongest; the smaller count only on a true tie.
 """
 import io
 import json
@@ -126,8 +142,22 @@ def candidate_hashes(mod_paths, targets, dups, pad_paths):
     return hashes
 
 
+def stream_populations(count):
+    """
+    Three consecutive slices of the validation's seeded stream, as populations. The stream is
+    deterministic, so a measurement says exactly which folders it was taken on (rows 0..3N-1),
+    and validate_override.py's own runs are over the same folders.
+    """
+    import random
+    import validate_override as vo
+    rng = random.Random(vo.SEED)
+    real = vo.load_real_car_mods()
+    rows = [vo.scenario(rng, real) for _ in range(3 * count)]
+    return rows[:count], rows[count:2 * count], rows[2 * count:]
+
+
 def tune(build_dir, targets, candidates, scenarios, game_dir=None, mods_dir=None, release=False,
-         require="any", package_name=None):
+         require="any", package_name=None, stream=False):
     base_pkg = lookup_sim.find_base_package(game_dir)
     if not base_pkg:
         raise SystemExit("content.kspkg not found; tuning needs the installed game (set ACE_GAME_DIR)")
@@ -150,25 +180,29 @@ def tune(build_dir, targets, candidates, scenarios, game_dir=None, mods_dir=None
                                     in pk.installed_packages(mods_dir, package_name)]
     try:
         return _tune(build_dir, targets, candidates, scenarios, game_dir, mods_dir, release,
-                     base, base_pkg, files, dirs, package_name, installed, require)
+                     base, base_pkg, files, dirs, package_name, installed, require, stream)
     finally:
         if scratch:
             shutil.rmtree(scratch, ignore_errors=True)
 
 
 def _tune(build_dir, targets, candidates, scenarios, game_dir, mods_dir, release,
-          base, base_pkg, files, dirs, package_name, installed, require="any"):
+          base, base_pkg, files, dirs, package_name, installed, require="any", stream=False):
     # Three populations. Selection needs a big enough sample to be stable -- picking the
     # argmax of a single 60-set population chose a count that scored 90% on fresh data when
     # another candidate scored 98% -- so two populations are pooled to choose with, and a
     # third is never looked at until the winner is decided. That last number is the estimate
     # to trust, because nothing was selected on it.
-    select_a = population(installed, scenarios, seed=20260916)
-    select_b = population(installed, scenarios, seed=1618033)
-    holdout = population(installed, scenarios, seed=27182818)
+    if stream:
+        select_a, select_b, holdout = stream_populations(scenarios)
+    else:
+        select_a = population(installed, scenarios, seed=20260916)
+        select_b = population(installed, scenarios, seed=1618033)
+        holdout = population(installed, scenarios, seed=27182818)
     print(f"base {os.path.basename(base_pkg)} ({len(base)} entries), "
           f"{len(files)} files, {len(targets)} override target(s), "
-          f"{scenarios} package set(s) per population, {len(installed)} installed alongside")
+          f"{scenarios} package set(s) per population{' from the validation stream' if stream else ''}, "
+          f"{len(installed)} installed alongside")
 
     target_hashes = [pk.path_hash(t) for t in targets]
     results = []
@@ -179,15 +213,15 @@ def _tune(build_dir, targets, candidates, scenarios, game_dir, mods_dir, release
                                        dups=dups, dup_targets=targets)
         paths = [rel for rel, _ in files] + list(dirs) + extra_dirs
         hashes = candidate_hashes(paths, targets, dups, pad_paths)
-        a, per = score(base, hashes, target_hashes, select_a, package_name, require)
-        b, _ = score(base, hashes, target_hashes, select_b, package_name, require)
-        results.append((a + b, dups, len(pad_paths), hashes))
-        print("  %4d record(s): %3d/%-3d selection sets %6.1f%%   padding %-3d  (%.0fs)"
+        a, per_a = score(base, hashes, target_hashes, select_a, package_name, require)
+        b, per_b = score(base, hashes, target_hashes, select_b, package_name, require)
+        ties = sum(per_a) + sum(per_b)
+        results.append((a + b, ties, dups, len(pad_paths), hashes))
+        print("  %4d record(s): %3d/%-3d selection sets %6.1f%%   single ties won %3d/%-3d   padding %-3d  (%.0fs)"
               % (dups, a + b, 2 * scenarios, 100.0 * (a + b) / (2 * scenarios),
-                 len(pad_paths), time.time() - started))
+                 ties, 2 * scenarios * len(targets), len(pad_paths), time.time() - started))
 
-    results.sort(key=lambda r: (-r[0], r[1]))
-    chosen, dups, pads, hashes = results[0]
+    chosen, ties, dups, pads, hashes = choose(results)
     held, _ = score(base, hashes, target_hashes, holdout, package_name, require)
     print(f"\nchosen on {2 * scenarios} selection sets: {dups} record(s) per override "
           f"-> {held}/{scenarios} ({100.0 * held / scenarios:.1f}%) on the held-out population")
@@ -195,10 +229,25 @@ def _tune(build_dir, targets, candidates, scenarios, game_dir, mods_dir, release
         print("  (no duplicate count beat a plain build here)")
     confirm_against_a_real_build(build_dir, targets, dups, hashes, game_dir, mods_dir)
     return {"dups": dups, "targets": targets, "scenarios": scenarios, "release": release,
-            "require": require,
+            "require": require, "population": f"validation stream rows 0-{3 * scenarios - 1}" if stream else "built-in",
+            "single_ties": ties,
             "selection": chosen, "selection_sets": 2 * scenarios, "unseen": held,
             "game": build_loader.game_version(game_dir),
             "fingerprint": pk.paths_fingerprint([rel for rel, _ in files] + list(dirs), targets)}
+
+
+def choose(results):
+    """
+    The winner among (sets won, single ties won, dups, pads, hashes): most sets, then most
+    single ties, then the smaller count.
+
+    The second key is what the 2000-folder measurement of 2026-09-18 taught: every candidate
+    that matters wins every one of the 48 tuning sets, so sets alone cannot tell them apart,
+    and preferring the smaller count picked 16 records -- which loses 0.2% of folders where
+    32 records loses none. What the tuning sets CAN see is how often each entry point wins
+    on its own, and that predicts the whole-package figure.
+    """
+    return sorted(results, key=lambda r: (-r[0], -r[1], r[2]))[0]
 
 
 def record(chosen, mode, out_file=None):
@@ -231,10 +280,23 @@ if __name__ == "__main__":
                          DEFAULT_SCENARIOS))
     raw = next((a.split("=", 1)[1] for a in flags if a.startswith("--candidates=")), None)
     candidates = tuple(int(x) for x in raw.split(",")) if raw else DEFAULT_CANDIDATES
+    stream = next((int(a.split("=", 1)[1]) for a in flags if a.startswith("--stream=")), 0)
+    if stream:
+        scenarios = stream
     build = build_loader.assemble()
+    alternate = "--alternate" in flags
+    if alternate:
+        # the count the release uses is the one this must NOT pick: the point of the second
+        # package is to lose on different folders, and the same count is the same package
+        with open(OUT_FILE, encoding="utf-8") as f:
+            release_dups = json.load(f).get("release", {}).get("dups")
+        if release_dups is None:
+            raise SystemExit("--alternate needs the release measurement first: tune_dups.py --release --write")
+        candidates = tuple(c for c in candidates if c != release_dups and c > 1)
+        print(f"alternate: the release uses {release_dups} records, choosing among {candidates}")
     chosen = tune(build, list(build_loader.TARGETS), candidates, scenarios,
-                  release="--release" in flags)
-    mode = "release" if "--release" in flags else "machine"
+                  release="--release" in flags or alternate, stream=bool(stream))
+    mode = "alternate" if alternate else ("release" if "--release" in flags else "machine")
     if "--write" in flags:
         print(f"wrote {record(chosen, mode)} [{mode}]")
     else:

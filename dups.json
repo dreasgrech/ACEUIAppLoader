@@ -1,4 +1,21 @@
 {
+  "alternate": {
+    "dups": 32,
+    "fingerprint": "28e7fa8d2ba60f85",
+    "game": "0.9.1+release.6",
+    "population": "validation stream rows 0-599",
+    "release": true,
+    "require": "any",
+    "scenarios": 200,
+    "selection": 400,
+    "selection_sets": 400,
+    "single_ties": 791,
+    "targets": [
+      "uiresources\\js\\cohtml.js",
+      "uiresources\\hud.html"
+    ],
+    "unseen": 200
+  },
   "machine": {
     "dups": 32,
     "fingerprint": "28e7fa8d2ba60f85",
@@ -15,18 +32,20 @@
     "unseen": 60
   },
   "release": {
-    "dups": 16,
+    "dups": 64,
     "fingerprint": "28e7fa8d2ba60f85",
     "game": "0.9.1+release.6",
+    "population": "validation stream rows 0-599",
     "release": true,
     "require": "any",
-    "scenarios": 60,
-    "selection": 120,
-    "selection_sets": 120,
+    "scenarios": 200,
+    "selection": 400,
+    "selection_sets": 400,
+    "single_ties": 792,
     "targets": [
       "uiresources\\js\\cohtml.js",
       "uiresources\\hud.html"
     ],
-    "unseen": 60
+    "unseen": 200
   }
 }

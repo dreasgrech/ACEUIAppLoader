@@ -13,7 +13,9 @@ release build the one right way and wraps it the one right way:
   3. builds with --release --dups=auto, which plans for a stock install and refuses a
      duplicate-count measurement taken for another file set;
   4. writes dist/ACEUIAppLoader-<version>-<game build>.zip, laid out as the contents of
-     `Saved Games\\ACE`, and prints its SHA-256:
+     `Saved Games\\ACE`, and prints its SHA-256; then the same again for the ALTERNATE
+     package (--alternate: the same files with the other measured record count, which loses
+     the game's lookup on different folders), as ...-alternate.zip:
 
          mods/
            ACEUIAppLoader.kspkg
@@ -74,9 +76,9 @@ def dirty_files():
     return [line for line in out.stdout.splitlines() if line.strip()]
 
 
-def release_name(version, game):
-    """`ACEUIAppLoader-0.24.0-0.9.1+release.6.zip`: the loader version and the game build it was made for."""
-    return f"ACEUIAppLoader-{version}-{game or 'unknown-game'}.zip"
+def release_name(version, game, alternate=False):
+    """`ACEUIAppLoader-0.24.0-0.9.1+release.6.zip`, or `...-alternate.zip`: the loader version and the game build it was made for."""
+    return f"ACEUIAppLoader-{version}-{game or 'unknown-game'}{'-alternate' if alternate else ''}.zip"
 
 
 # Every entry carries this timestamp, so the zip's checksum depends on its contents alone:
@@ -91,15 +93,20 @@ def entry(name):
     return info
 
 
+def write_zip(dest, items):
+    """Write `items` = [(published path, bytes)] as a reproducible zip; returns dest. release_app.py uses it too."""
+    os.makedirs(os.path.dirname(os.path.abspath(dest)), exist_ok=True)
+    with zipfile.ZipFile(dest, "w", compresslevel=9) as z:
+        for path, blob in items:
+            z.writestr(entry(path), blob)
+    return dest
+
+
 def zip_release(package, dest):
     """Write the release zip around a built package; returns dest. The layout is the module's docstring."""
-    os.makedirs(os.path.dirname(os.path.abspath(dest)), exist_ok=True)
     with open(package, "rb") as f:
         blob = f.read()
-    with zipfile.ZipFile(dest, "w", compresslevel=9) as z:
-        z.writestr(entry(ZIP_PACKAGE), blob)
-        z.writestr(entry(ZIP_NOTE), APPS_NOTE.replace("\n", "\r\n"))
-    return dest
+    return write_zip(dest, [(ZIP_PACKAGE, blob), (ZIP_NOTE, APPS_NOTE.replace("\n", "\r\n"))])
 
 
 def sha256(path):
@@ -127,17 +134,19 @@ def main(argv):
         if tests.returncode != 0:
             raise SystemExit("tests failed; not building a release from this tree")
 
-    print("\nbuilding for a stock install...", flush=True)
-    build = subprocess.run([sys.executable, os.path.join(_repos.REPO, "tools", "build_loader.py"),
-                            "--release", "--dups=auto"], cwd=_repos.REPO)
-    if build.returncode != 0:
-        raise SystemExit("the release build failed")
-
-    dest = zip_release(bl.OUT, os.path.join(os.path.dirname(bl.OUT), release_name(bl.read_version(), bl.game_version())))
-    print(f"\nrelease: {dest} ({os.path.getsize(dest) // 1024} KB)")
-    print(f"sha256:  {sha256(dest)}")
-    print("inside:  " + ", ".join(zipfile.ZipFile(dest).namelist()))
-    print("next: extract it into Saved Games\\ACE here (merge), launch once, python tools/check_ingame_log.py")
+    for alternate in (False, True):
+        print(f"\nbuilding the {'alternate' if alternate else 'primary'} package for a stock install...", flush=True)
+        build = subprocess.run([sys.executable, os.path.join(_repos.REPO, "tools", "build_loader.py"),
+                                "--alternate" if alternate else "--release", "--dups=auto"], cwd=_repos.REPO)
+        if build.returncode != 0:
+            raise SystemExit("the release build failed")
+        dest = zip_release(bl.OUT, os.path.join(os.path.dirname(bl.OUT),
+                                                release_name(bl.read_version(), bl.game_version(), alternate)))
+        print(f"\nrelease: {dest} ({os.path.getsize(dest) // 1024} KB)")
+        print(f"sha256:  {sha256(dest)}")
+        print("inside:  " + ", ".join(zipfile.ZipFile(dest).namelist()))
+    print("\nnote: dist/ACEUIAppLoader.kspkg is now the ALTERNATE build; the zips hold each package under its own name")
+    print("next: extract the primary zip into Saved Games\\ACE here (merge), launch once, python tools/check_ingame_log.py")
     return 0
 
 

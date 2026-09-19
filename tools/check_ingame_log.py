@@ -152,9 +152,11 @@ def main(argv):
     crashes, driver_crashes = classify_crashes(lines)
     loader = [l for l in lines if LOADER in l]
     version = first_match(r"loader ([\d.]+) on /", loader)
+    records = first_match(r"loader [\d.]+ on /\S+ \((\d+) records\)", loader)
     pages = scan(loader)
 
-    print(f"loader: {'v' + version.group(1) if version else 'never ran'} on {len(pages)} page(s)")
+    print(f"loader: {'v' + version.group(1) if version else 'never ran'} on {len(pages)} page(s)"
+          + (f", {records.group(1)} records per override" if records else ""))
     failed = report(pages)
 
     # any bracketed prefix that is not the loader's: an app's own logger uses its title,

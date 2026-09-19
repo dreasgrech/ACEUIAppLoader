@@ -1028,7 +1028,10 @@ ACEUIAppLoader.loader = (function () {
     };
 
     const start = function () {
-        log("loader " + ACEUIAppLoader.VERSION + " on /" + ACEUIAppLoader.page);
+        // the build stamps how many table records each override carries: the primary and
+        // the alternate release differ in nothing else a log could show
+        log("loader " + ACEUIAppLoader.VERSION + " on /" + ACEUIAppLoader.page
+            + (ACEUIAppLoader.records ? " (" + ACEUIAppLoader.records + " records)" : ""));
         watchGameVersion(Date.now() + GAME_VERSION_WAIT_MS);
         state.filtering = hideMarkersFromStock();
 
