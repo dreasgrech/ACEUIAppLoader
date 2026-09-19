@@ -9,8 +9,6 @@
 [![Downloads](https://img.shields.io/github/downloads/dreasgrech/ACEUIAppLoader/total?style=flat-square&color=555)](../../releases)
 [![Issues](https://img.shields.io/github/issues/dreasgrech/ACEUIAppLoader?style=flat-square&color=555)](../../issues)
 
-[Install](#install) · [The app drawer](#the-app-drawer) · [Apps](#apps) · [Help](#if-something-isnt-right) · [Safety](#is-it-safe) · [Developers](#for-developers)
-
 </div>
 
 <img width="2560" height="1440" alt="The game while driving, with the app drawer open on the right and apps on the HUD" src="https://github.com/user-attachments/assets/d1dd4c93-8b13-43eb-b7f7-9790d9adf08d" />
