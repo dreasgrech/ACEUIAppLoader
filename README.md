@@ -50,6 +50,9 @@ Press <kbd>Win</kbd> + <kbd>R</kbd>, paste this in, press <kbd>Enter</kbd>:
 ```
 %USERPROFILE%\Saved Games\ACE
 ```
+<p align="center">
+<img width="399" height="206" alt="image" src="https://github.com/user-attachments/assets/3ded7537-4eb9-4c01-8fd2-ed1339e90814" />
+</p>
 
 </td></tr>
 <tr><td align="center"><h3>3</h3></td><td>
@@ -57,11 +60,11 @@ Press <kbd>Win</kbd> + <kbd>R</kbd>, paste this in, press <kbd>Enter</kbd>:
 Drag the `mods` folder out of the zip into that window. If Windows asks, choose to
 **merge** with the `mods` folder already there. No installer, nothing to run.
 
-![The file in the mods folder](docs/images/mods-folder.png)
-
 You end up with `mods\ACEUIAppLoader.kspkg` and an empty `mods\uiresources\ACEUIAppLoader`
 folder, which is where apps will go. Every app is installed the same way: extract its zip
 into `Saved Games\ACE`, merge.
+
+<img width="1041" height="458" alt="image" src="https://github.com/user-attachments/assets/9d9efbc3-9731-4a40-bd18-7df5fa1dab4a" />
 
 </td></tr>
 </table>
