@@ -919,22 +919,21 @@ class ReadmeTests(unittest.TestCase):
         markdown = re.findall(r"!\[[^\]]*\]\(([^)]+)\)", self.readme)
         html = re.findall(r"<img[^>]+src=\"([^\"]+)\"", self.readme)
 
-        return [r for r in markdown + html if not r.startswith("http")]
+        return [r for r in markdown + html if "img.shields.io" not in r]
 
     def test_every_picture_it_promises_is_actually_there(self):
         """A broken image on a public repo says "abandoned" before anyone reads a word.
 
-        Missing them ALL is the state before the screenshots have been taken, which is not
-        a failure -- it skips, and names what is still to shoot. Missing SOME is the real
-        hazard: a half-finished set that nobody notices until it is public. The shot list
-        is docs/images/README.md.
+        Screenshots are uploaded to GitHub's asset host (user-attachments) rather than
+        committed, so most references are URLs, which only GitHub can check. Any picture
+        committed under docs/ and referenced must exist; badges do not count as pictures.
+        The shot list is docs/images/README.md.
         """
         referenced = self.referenced_images()
         self.assertTrue(referenced, "the README should show what the app looks like")
-        missing = [r for r in referenced if not os.path.isfile(os.path.join(ROOT, *r.split("/")))]
-        if len(missing) == len(referenced):
-            raise unittest.SkipTest("no screenshots taken yet: " + ", ".join(missing))
-        self.assertEqual(missing, [], "some pictures were taken and these were not")
+        local = [r for r in referenced if not r.startswith("http")]
+        missing = [r for r in local if not os.path.isfile(os.path.join(ROOT, *r.split("/")))]
+        self.assertEqual(missing, [], "these committed pictures are referenced and not there")
 
     def test_every_page_it_links_to_is_actually_there(self):
         pages = [r for r in re.findall(r"\]\((docs/[^)#]+)\)", self.readme)

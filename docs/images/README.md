@@ -1,9 +1,11 @@
 # Images for the README
 
 The README is the first thing a player sees, and most of them will decide whether to
-bother from the pictures alone. This is the shot list. Every file here is referenced by
-`README.md`, and a test fails if one is missing, so the repo cannot go public with broken
-images in it.
+bother from the pictures alone. This is the shot list. The pictures themselves are
+uploaded to GitHub's asset host (drag them into the README editor; they become
+`user-attachments` URLs) rather than committed, so clones stay small; anything committed
+here instead must be referenced by `README.md`, and a test fails if a referenced file is
+missing.
 
 Capture at **1920x1080** and keep each file under the size given. PNG for stills, GIF for
 motion -- GitHub does not play a committed `.mp4` inline, it renders it as a download

@@ -39,7 +39,7 @@ This UI App Loader is that one mod. It does the replacing once and then loads **
 
 Download the **`ACEUIAppLoader-….zip`** from the [latest release](../../releases/latest) and open it.
 
-Inside is one folder, `mods`. (The release also has an `…-alternate.zip`. Ignore it unless the help section below sends you to it.)
+Inside is one folder, `mods`. Take the zip **without** `-alternate` in its name; [the other one](#why-there-are-two-zips) is a fallback.
 
 </td></tr>
 <tr><td align="center"><h3>2</h3></td><td>
@@ -67,6 +67,34 @@ into `Saved Games\ACE`, merge.
 
 </td></tr>
 </table>
+
+### Why there are two zips
+
+Every release has `ACEUIAppLoader-….zip` and `ACEUIAppLoader-…-alternate.zip`. **Almost
+everyone wants the first.** Here is what the second is for, in plain terms.
+
+The loader works by giving the game a replacement for two of its own HUD files. When the game
+starts it gathers the files of every mod in `mods` into one list, and where two mods offer the
+same file, the order of that list decides which one is used. With only the loader installed,
+ours always comes first. With several other mods installed, once in a few thousand
+combinations the game's own file lands ahead of ours instead, and the loader silently does
+nothing: no drawer, no apps, and no `ACEUIAppLoader` lines in the game's log. Which
+combinations do this cannot be told from outside; it depends on the exact set of mod files
+on your machine.
+
+The alternate zip contains the **same loader**, packed a different way, so that it sorts
+differently in that list. In testing over eight thousand mod folders, the two zips never both
+lost in the same folder. So the rule is simple:
+
+1. Install the normal zip.
+2. If the drawer never appears **and** the newest log in `Saved Games\ACE\Logs` has no
+   `ACEUIAppLoader` lines, delete `mods\ACEUIAppLoader.kspkg` and install the alternate zip the
+   same way.
+3. If the drawer disappears again after you install another mod, swap back.
+
+The loader's first log line tells you which one you have: `loader 0.24.0 on /hud.html (64
+records)` is the normal zip, `(32 records)` the alternate. Nothing else differs; apps, settings
+and everything on this page work the same with either.
 
 ---
 
@@ -132,11 +160,9 @@ next section. **No lines at all** means the game never used the file, for one of
 3. **Two copies.** Exactly one `ACEUIAppLoader…kspkg` in `mods` — an older copy left beside
    the new one (`ACEUIAppLoader (1).kspkg`, say) can win instead of it.
 4. **Your other mods.** With several other `.kspkg` mods installed, the game very occasionally
-   picks its own file over ours; which folders that happens in is a coin toss we cannot see
-   from outside. That is what the **`…-alternate.zip`** on the release page is for: it is the
-   same loader packed so that the toss lands differently. Delete `ACEUIAppLoader.kspkg` and
-   install the alternate zip the same way. If installing another mod later brings the problem
-   back, swap again.
+   uses its own file instead of ours. That is what the **`…-alternate.zip`** is for: delete
+   `ACEUIAppLoader.kspkg`, install the alternate zip the same way, and read
+   [why there are two zips](#why-there-are-two-zips) if you want to know what is going on.
 
 </details>
 
