@@ -122,6 +122,23 @@ away, flick it off and it's gone.
 
 ---
 
+## Inuilt Apps
+
+### Profiler
+
+<table>
+<tr>
+<td width="300" valign="top"><img width="534" height="424" alt="profiler_cmp_D_50fps_6s_96" src="https://github.com/user-attachments/assets/dcac9bed-6c51-4f1e-89f9-4045464cae2f" /></td>
+<td valign="top">
+   The UI Profiler is a tool for helping app authors measure their performance of the app in game and how it does compared to other apps.
+</td>
+</tr>
+</table>
+
+---
+
+
+
 ## If something isn't right
 
 > [!IMPORTANT]
