@@ -4,9 +4,6 @@
 
 **Support for custom UI Apps in Assetto Corsa EVO.**<br>
 
-[![Latest release](https://img.shields.io/github/v/release/dreasgrech/ACEUIAppLoader?style=flat-square&label=download&color=0a7)](../../releases/latest)
-[![Built for](https://img.shields.io/badge/Assetto_Corsa_EVO-0.9.1%2Brelease.6-informational?style=flat-square)](#if-something-isnt-right)
-
 </div>
 
 <img width="2560" height="1440" alt="The game while driving, with the app drawer open on the right and apps on the HUD" src="https://github.com/user-attachments/assets/d1dd4c93-8b13-43eb-b7f7-9790d9adf08d" />
