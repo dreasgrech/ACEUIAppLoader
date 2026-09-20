@@ -14,8 +14,8 @@ that started with the HUD would be measuring every session whether asked or not.
 - **TREE** is the stack-trace view: every app with what it called inside it, indented and
   merged across the window. Wrapping alone only reaches as deep as an app's frame callback,
   so the apps name their own parts with `ACEUIAppLoader.section(...)` -- PedalGraph's
-  `read model` / `render`, Telemetry's `draw map` / `draw trace`, DOOM's `doom tic` /
-  `present frame` -- and those appear here as children of the app that ran them.
+  `read model` / `render`, DOOM's `doom tic` / `present frame` -- and those appear here
+  as children of the app that ran them.
 - **WINDOW / TREE / WORST** are one picker, because they are one choice of what the table
   is showing.
 - **Any column header** sorts the table; the same header again turns it round. Total finds

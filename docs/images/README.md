@@ -17,12 +17,11 @@ link, so anything that needs to move has to be a GIF.
 | `drawer.gif` | 3 MB | Mouse moves to the right edge, the drawer slides in, one app is switched on and appears. About 5 seconds. This answers "how do I use it" better than any paragraph. |
 | `mods-folder.png` | 250 KB | Explorer at `Saved Games\ACE\mods` with `ACEUIAppLoader.kspkg` in it, address bar visible so the path can be read. Crop to the window. |
 | `apps-pedalgraph.png` | 300 KB | The pedal graph widget on the HUD, mid-corner so the traces are interesting. |
-| `apps-telemetry.png` | 300 KB | The telemetry app with a lap time and delta showing. |
 | `apps-doom.png` | 400 KB | DOOM running on the HUD. The showpiece -- pick a frame with an enemy in it. |
 | `settings.png` | 300 KB | An app's settings page, showing that apps are configurable without editing files. |
 
-> **The three app shots sit side by side in one row**, each a third of the page wide.
-> Crop all three to the **same aspect ratio and the same pixel size** -- 16:9 at
+> **The two app shots sit side by side in one row**, each half the page wide.
+> Crop both to the **same aspect ratio and the same pixel size** -- 16:9 at
 > 640x360 works -- or the row comes out ragged and the whole page looks careless.
 > They are the most-looked-at images here: they are what a passer-by judges the
 > project on.
