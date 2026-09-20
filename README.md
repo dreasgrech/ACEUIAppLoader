@@ -124,7 +124,7 @@ away, flick it off and it's gone.
 
 ## Inuilt Apps
 
-### Profiler
+### UI Profiler
 
 <table>
 <tr>
@@ -135,7 +135,17 @@ away, flick it off and it's gone.
 </tr>
 </table>
 
+### Dev Console
+<table>
+<tr>
+<td width="585" valign="top"><img width="985" height="480" alt="image" src="https://github.com/user-attachments/assets/7b74e3bd-d816-45e8-bae2-c8802d1a6394" /></td>
+<td valign="top">
+   The Dev Console is a tool for app authors which exposes an output stream for the log files and a way interacting directly with the JavaScript objects.
+</td>
+</tr>
+</table>
 ---
+
 
 
 
