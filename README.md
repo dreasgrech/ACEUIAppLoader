@@ -122,7 +122,7 @@ away, flick it off and it's gone.
 
 ---
 
-## Inuilt Apps
+## Inbuilt Apps
 
 ### UI Profiler
 
@@ -144,10 +144,8 @@ away, flick it off and it's gone.
 </td>
 </tr>
 </table>
+
 ---
-
-
-
 
 ## If something isn't right
 
