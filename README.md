@@ -36,6 +36,24 @@ Download the **`ACEUIAppLoader-….zip`** from the [latest release](../../releas
 
 Inside is one folder, `mods`. Take the zip **without** `-alternate` in its name; [the other one](#why-there-are-two-zips) is a fallback.
 
+<details>
+<summary>Why there are two available zips for download? (normal and alternate)</summary>
+   
+Every release has `ACEUIAppLoader-….zip` and `ACEUIAppLoader-…-alternate.zip`. **Almost
+everyone wants the first.** Here is what the second is for, in plain terms.
+
+The loader works by giving the game a replacement for two of its own HUD files. When the game starts it gathers the files of every mod in `mods` into one list, and where two mods offer the same file, the order of that list decides which one is used. With only the loader installed, ours always comes first. 
+With several other mods installed, once in a few thousand combinations the game's own file lands ahead of ours instead, and the loader silently does nothing: no drawer, no apps, and no `ACEUIAppLoader` lines in the game's log. Which combinations do this cannot be told from outside; it depends on the exact set of mod files on your machine.
+
+The alternate zip contains the **same loader**, packed a different way, so that it sorts differently in that list. In testing over eight thousand mod folders, the two zips never both lost in the same folder. So the rule is simple: 
+
+1. Install the normal zip.
+2. If the drawer never appears **and** the newest log in `Saved Games\ACE\Logs` has no `ACEUIAppLoader` lines, delete `mods\ACEUIAppLoader.kspkg` and install the alternate zip the same way.
+3. If the drawer disappears again after you install another mod, swap back.
+
+The loader's first log line tells you which one you have: `loader 0.24.0 on /hud.html (64 records)` is the normal zip, `(32 records)` the alternate. Nothing else differs; apps, settings and everything on this page work the same with either.
+</details>
+
 </td></tr>
 <tr><td align="center"><h3>2</h3></td><td>
 
@@ -63,35 +81,7 @@ into `Saved Games\ACE`, merge.
 </td></tr>
 </table>
 
----
 
-### Why there are two zips (normal and alternate)
-
-Every release has `ACEUIAppLoader-….zip` and `ACEUIAppLoader-…-alternate.zip`. **Almost
-everyone wants the first.** Here is what the second is for, in plain terms.
-
-The loader works by giving the game a replacement for two of its own HUD files. When the game
-starts it gathers the files of every mod in `mods` into one list, and where two mods offer the
-same file, the order of that list decides which one is used. With only the loader installed,
-ours always comes first. With several other mods installed, once in a few thousand
-combinations the game's own file lands ahead of ours instead, and the loader silently does
-nothing: no drawer, no apps, and no `ACEUIAppLoader` lines in the game's log. Which
-combinations do this cannot be told from outside; it depends on the exact set of mod files
-on your machine.
-
-The alternate zip contains the **same loader**, packed a different way, so that it sorts
-differently in that list. In testing over eight thousand mod folders, the two zips never both
-lost in the same folder. So the rule is simple:
-
-1. Install the normal zip.
-2. If the drawer never appears **and** the newest log in `Saved Games\ACE\Logs` has no
-   `ACEUIAppLoader` lines, delete `mods\ACEUIAppLoader.kspkg` and install the alternate zip the
-   same way.
-3. If the drawer disappears again after you install another mod, swap back.
-
-The loader's first log line tells you which one you have: `loader 0.24.0 on /hud.html (64
-records)` is the normal zip, `(32 records)` the alternate. Nothing else differs; apps, settings
-and everything on this page work the same with either.
 
 ---
 
@@ -243,34 +233,3 @@ me.toggle(function () { return options.toggleKey; });  // a hotkey that respects
 ```
 
 Start with **[`docs/writing-an-app.md`](docs/writing-an-app.md)**.
-
-<details>
-<summary><b>All documentation</b></summary><br>
-
-| | |
-|---|---|
-| [`docs/writing-an-app.md`](docs/writing-an-app.md) | the app lifecycle and `app.json` |
-| [`docs/library.md`](docs/library.md) | `ACEUIAppLoader.*`: storage, hotkeys, the frame loop |
-| [`docs/ui.md`](docs/ui.md) | the drawer, windows, and settings pages |
-| [`docs/building.md`](docs/building.md) | building the package, the tools, the tests |
-| [`docs/how-it-works.md`](docs/how-it-works.md) | how one file overrides a game file, and why that is hard |
-| [`docs/testing.md`](docs/testing.md) | the test kit and the browser harnesses |
-| [`docs/style.md`](docs/style.md) | the JavaScript rules and why each one is there |
-| [`docs/design.md`](docs/design.md) | the investigation behind the loader |
-| [`docs/developer-apps.md`](docs/developer-apps.md) | why the developer tools ship inside the package |
-| [`docs/naming.md`](docs/naming.md) | mod or app: which word means what, and why |
-| [`docs/roadmap.md`](docs/roadmap.md) | what is missing |
-
-Three developer apps ship inside the package — a capabilities probe, a console and a
-profiler — behind a **developer apps** switch at the bottom of the drawer, off by default.
-
-The game mechanics all of this rests on are documented in
-[ACEGameInternals](https://github.com/dreasgrech/ACEGameInternals).
-
-</details>
-
----
-
-<div align="center">
-<sub>Loader 0.24.0 · built for Assetto Corsa EVO <b>0.9.1+release.6</b></sub>
-</div>
