@@ -26,6 +26,10 @@ AC EVO currently has no mod support for its UI, so the only way in is to replace
 
 This UI App Loader is that one mod. It does the replacing once and then loads **apps** on top, so apps are added alongside each other instead of fighting over the same file.
 
+<p align="center">
+<img width="880" height="495" alt="full_cmp_E_880_10s_96" src="https://github.com/user-attachments/assets/a51b3b68-ee30-4ed8-9086-906aacecba7a" />
+</p>
+
 ---
 
 ## Installing the mod
@@ -82,7 +86,9 @@ away, flick it off and it's gone.
 
 <table>
 <tr>
-<td width="50%" align="center"><a href="https://github.com/dreasgrech/ACEPedalGraph"><img src="docs/images/apps-pedalgraph.png" alt="Pedal graph"></a></td>
+<td width="50%" align="center"><a href="https://github.com/dreasgrech/ACEPedalGraph"><img width="400" height="171" alt="pedalgraph_cmp_R_96_50fps_400px" src="https://github.com/user-attachments/assets/bdc6917a-0502-408a-9693-ea495d12f618" /></a></td>
+
+
 <td width="50%" align="center"><a href="https://github.com/dreasgrech/ACEDOOM"><img src="docs/images/apps-doom.png" alt="DOOM"></a></td>
 </tr>
 <tr>
@@ -176,6 +182,7 @@ put them) inside the game's own UI settings file, which the game ignores.
 | **Nothing runs** | No executable, no installer, nothing in the background. It's a data file the game reads. |
 | **Your game folder is untouched** | Everything lives in `Saved Games`, where your settings and setups already are. |
 | **It doesn't go online** | No account, no telemetry, no update check. |
+| **Works in multiplayer** | Everything is done client-side so nothing is related to the server. |
 | **Not anti-cheat evasion** | It changes the interface you look at — nothing about how the car drives. |
 | **You can read all of it** | Every line is in this repository. |
 
