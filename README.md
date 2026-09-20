@@ -32,7 +32,7 @@ This UI App Loader is that one mod. It does the replacing once and then loads **
 
 ---
 
-## Installing the mod
+## Installing ACE UI App Loader
 
 <table>
 <tr><td width="40" align="center"><h3>1</h3></td><td>
