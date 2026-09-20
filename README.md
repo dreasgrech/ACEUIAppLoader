@@ -82,24 +82,18 @@ away, flick it off and it's gone.
 
 ---
 
-## Apps
+## Apps using the ACE UI App Loader
 
 <table>
 <tr>
 <td width="50%" align="center"><a href="https://github.com/dreasgrech/ACEPedalGraph"><img width="400" height="171" alt="pedalgraph_cmp_R_96_50fps_400px" src="https://github.com/user-attachments/assets/bdc6917a-0502-408a-9693-ea495d12f618" /></a></td>
-
-
-<td width="50%" align="center"><a href="https://github.com/dreasgrech/ACEDOOM"><img src="docs/images/apps-doom.png" alt="DOOM"></a></td>
+<td width="50%" align="center"><a href="https://github.com/dreasgrech/ACEDOOM"><img width="486" height="322" alt="doom_cmp_Q_486_8s_96" src="https://github.com/user-attachments/assets/d723ea88-3f27-420a-bd88-3ebad1ed0351" /></a></td>
 </tr>
 <tr>
-<td align="center"><a href="https://github.com/dreasgrech/ACEPedalGraph"><b>Pedal Graph</b></a><br><sub>throttle, brake and clutch as you drive</sub></td>
-<td align="center"><a href="https://github.com/dreasgrech/ACEDOOM"><b>DOOM</b></a><br><sub>yes, really — playable on your HUD</sub></td>
+<td align="center"><a href="https://github.com/dreasgrech/ACEPedalGraph"><b>Pedal Graph</b></a><br><sub>Inputs represented as a graph</sub></td>
+<td align="center"><a href="https://github.com/dreasgrech/ACEDOOM"><b>DOOM</b></a><br><sub>DOOM running natively inside EVO's HUD</sub></td>
 </tr>
 </table>
-
-Each is a separate download with its own instructions.
-
-<p align="center"><img src="docs/images/settings.png" width="70%" alt="An app's settings page"></p>
 
 ---
 
