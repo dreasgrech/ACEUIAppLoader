@@ -6,8 +6,6 @@
 
 [![Latest release](https://img.shields.io/github/v/release/dreasgrech/ACEUIAppLoader?style=flat-square&label=download&color=0a7)](../../releases/latest)
 [![Built for](https://img.shields.io/badge/Assetto_Corsa_EVO-0.9.1%2Brelease.6-informational?style=flat-square)](#if-something-isnt-right)
-[![Downloads](https://img.shields.io/github/downloads/dreasgrech/ACEUIAppLoader/total?style=flat-square&color=555)](../../releases)
-[![Issues](https://img.shields.io/github/issues/dreasgrech/ACEUIAppLoader?style=flat-square&color=555)](../../issues)
 
 </div>
 
@@ -68,7 +66,9 @@ into `Saved Games\ACE`, merge.
 </td></tr>
 </table>
 
-### Why there are two zips
+---
+
+### Why there are two zips (normal and alternate)
 
 Every release has `ACEUIAppLoader-….zip` and `ACEUIAppLoader-…-alternate.zip`. **Almost
 everyone wants the first.** Here is what the second is for, in plain terms.
