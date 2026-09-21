@@ -115,7 +115,6 @@ away, flick it off and it's gone.
 ## Inbuilt Apps
 
 ### UI Profiler
-
 <table>
 <tr>
 <td width="300" valign="top"><img width="534" height="424" alt="profiler_cmp_D_50fps_6s_96" src="https://github.com/user-attachments/assets/dcac9bed-6c51-4f1e-89f9-4045464cae2f" /></td>
@@ -134,6 +133,19 @@ away, flick it off and it's gone.
 </td>
 </tr>
 </table>
+
+### UI Capabilities Probe
+<table>
+<tr>
+<td width="585" valign="top"><img width="566" height="735" alt="image" src="https://github.com/user-attachments/assets/1324479f-a5ae-416f-ab19-fadb0a6249b8" /></td>
+<td valign="top">
+   The UI Capabilities probe is also a tool for app authors which shows what is actually supported by the V8 JavaScript engine that's exposed by EVO's shipped Coherent Labs Gameface Cohtml engine.  
+   <br/><br/>
+   This helps app authors understand what specific capabilities are available for use in their apps.  For example, with the UI Capabilities Probe app, an app author can quickly see that WebAssembly is not supported or that not all canvas functions are available, and so on.
+</td>
+</tr>
+</table>
+
 
 ---
 
