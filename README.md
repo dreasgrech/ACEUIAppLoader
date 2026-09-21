@@ -6,8 +6,9 @@
 
 </div>
 
-<img width="2560" height="1440" alt="The game while driving, with the app drawer open on the right and apps on the HUD" src="https://github.com/user-attachments/assets/d1dd4c93-8b13-43eb-b7f7-9790d9adf08d" />
-
+<p align="center">
+<img width="2560" height="1440" alt="20260921200214_1" src="https://github.com/user-attachments/assets/7ac32bf7-a893-4e6d-a980-38b0a1de07ab" />
+</p>
 
 
 Assetto Corsa EVO builds its interface out of web pages. The ACE UI App Loader lets custom ui apps live in there alongside the game's own screens, and gives you one place to switch them on and off.
