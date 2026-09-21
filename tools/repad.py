@@ -13,7 +13,7 @@ to rebuild each one. That is the registry, a JSON file beside the mods folder:
 
     {
       "ACEUIAppLoader-doom.kspkg": {
-        "repo": "C:/Users/User/Documents/GitHub/ACEDOOM",
+        "repo": "C:/path/to/ACEDOOM",
         "command": ["python", "tools/build_audio.py", "--install"]
       }
     }

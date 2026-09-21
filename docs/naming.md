@@ -17,8 +17,8 @@ folder. So is a car mod. So is ACEDOOM's audio package, which replaces two files
 `content.kspkg` and has nothing to do with the HUD.
 
 An app lives in `uiresources\ACEUIAppLoader\<name>\` and is loaded onto the HUD page by the
-loader, which is the only thing that ever looks there. The pedal graph, the telemetry
-readout, DOOM, the dev console, the profiler and the capabilities probe are all apps. The
+loader, which is the only thing that ever looks there. The pedal graph, DOOM, the dev
+console, the profiler and the capabilities probe are all apps. The
 **app drawer** lists apps. `app.json` describes one.
 
 The loader is a mod that loads apps. Both words are right about it, about different halves
