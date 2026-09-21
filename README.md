@@ -17,7 +17,7 @@ Assetto Corsa EVO builds its interface out of web pages. The ACE UI App Loader l
 
 ## Why this exists
 
-AC EVO currently has no mod support for its UI, so the only way in is to replace one of its files — and **only one mod can hold a file**. Two mods that both want the HUD overwrite each other, and installing the second one silently breaks the first.
+AC EVO currently has no mod support for its UI, so the only way in is to replace one of its html files that's used the HUD — and **only one mod can hold a file**. Two mods that both want the HUD overwrite each other, and installing the second one silently breaks the first.
 
 This UI App Loader is that one mod. It does the replacing once and then loads **apps** on top, so apps are added alongside each other instead of fighting over the same file.
 
