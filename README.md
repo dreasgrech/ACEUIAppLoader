@@ -99,14 +99,25 @@ away, flick it off and it's gone.
 
 ## Apps using the ACE UI App Loader
 
+Each is a separate download with its own instructions.
+
+### [Pedal Graph](https://github.com/dreasgrech/ACEPedalGraph)
 <table>
 <tr>
-<td width="50%" align="center"><a href="https://github.com/dreasgrech/ACEPedalGraph"><img width="400" height="171" alt="pedalgraph_cmp_R_96_50fps_400px" src="https://github.com/user-attachments/assets/bdc6917a-0502-408a-9693-ea495d12f618" /></a></td>
-<td width="50%" align="center"><a href="https://github.com/dreasgrech/ACEDOOM"><img width="486" height="322" alt="doom_cmp_Q_486_8s_96" src="https://github.com/user-attachments/assets/d723ea88-3f27-420a-bd88-3ebad1ed0351" /></a></td>
+<td width="400" valign="top"><a href="https://github.com/dreasgrech/ACEPedalGraph"><img width="400" height="171" alt="The pedal graph scrolling on the HUD" src="https://github.com/user-attachments/assets/bdc6917a-0502-408a-9693-ea495d12f618" /></a></td>
+<td valign="top">
+   Throttle, brake, clutch and handbrake as a scrolling graph on the HUD, with live level bars beside it. Steering and the ABS, TC and ESC marks can be switched on too.
+</td>
 </tr>
+</table>
+
+### [DOOM](https://github.com/dreasgrech/ACEDOOM)
+<table>
 <tr>
-<td align="center"><a href="https://github.com/dreasgrech/ACEPedalGraph"><b>Pedal Graph</b></a><br><sub>Inputs represented as a graph</sub></td>
-<td align="center"><a href="https://github.com/dreasgrech/ACEDOOM"><b>DOOM</b></a><br><sub>DOOM running natively inside EVO's HUD</sub></td>
+<td width="400" valign="top"><a href="https://github.com/dreasgrech/ACEDOOM"><img width="400" alt="DOOM running on the HUD" src="https://github.com/user-attachments/assets/d723ea88-3f27-420a-bd88-3ebad1ed0351" /></a></td>
+<td valign="top">
+   DOOM (1993) running natively inside EVO's HUD: a real game engine rendered through the game's own UI, in a panel you can drag, scale and hide. Saved games survive quitting the sim.
+</td>
 </tr>
 </table>
 
