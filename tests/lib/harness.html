@@ -1041,6 +1041,58 @@ document.addEventListener("DOMContentLoaded", function () {
         pane.remove();
     });
 
+    t("settings: a spec with `when` is on the page only while it applies, judged again on every change", function () {
+        const S = ACEUIAppLoader.settings;
+        const pane = document.createElement("div");
+        const isFull = function (app) { return S.get(app, "mode") === "full"; };
+        const isCompact = function (app) { return S.get(app, "mode") === "compact"; };
+        document.getElementById("center").appendChild(pane);
+
+        S.define("modal", [
+            { key: "mode", type: "choice", label: "Mode", value: "full", options: ["full", "compact"], segmented: true },
+            { key: "cells", type: "toggle", label: "Cells", value: true, when: isFull, hint: "full only" },
+            { key: "follow", type: "toggle", label: "Follow", value: true, when: isCompact },
+            { key: "broken", type: "toggle", label: "Broken", value: true, when: function () { throw new Error("oops"); } },
+            { key: "show", type: "section", label: "Show", flow: "chips" },
+            { key: "trace", type: "toggle", label: "Trace", value: false, when: isFull },
+            { key: "tag", type: "toggle", label: "Tag", value: false, when: isCompact },
+            { key: "extras", type: "section", label: "Extras", when: isCompact },
+            { key: "x", type: "toggle", label: "X", value: false }
+        ]);
+        S.render("modal", pane);
+
+        const rowOf = function (label) {
+            return Array.prototype.slice.call(pane.querySelectorAll("div, span")).filter(function (el) {
+                return el.children.length && el.children[0].textContent === label && (el.tagName === "DIV" || el.style.borderRadius === "0.9rem");
+            })[0];
+        };
+        const cells = rowOf("Cells"), follow = rowOf("Follow"), broken = rowOf("Broken");
+        const chips = pane.querySelectorAll("span");
+        const trace = Array.prototype.filter.call(chips, function (el) { return el.textContent === "Trace" && el.style.borderRadius === "0.9rem"; })[0];
+        const tag = Array.prototype.filter.call(chips, function (el) { return el.textContent === "Tag" && el.style.borderRadius === "0.9rem"; })[0];
+        const extras = Array.prototype.slice.call(pane.children).filter(function (el) { return /^EXTRAS/.test(el.textContent); })[0];
+
+        eq(cells.style.display, "flex", "a row that applies is drawn"); eq(follow.style.display, "none", "one that does not is not");
+        eq(cells.nextSibling.style.display, "block", "its inline hint shows with it");
+        eq(broken.style.display, "flex", "a when that throws counts as applying");
+        eq(trace.style.display, "inline-flex", "chips too"); eq(tag.style.display, "none");
+        eq(extras.style.display, "none", "a whole section can hang on a when"); eq(extras.nextSibling.style.display, "none", "body too");
+
+        S.set("modal", "mode", "compact");
+        eq(cells.style.display, "none", "changing the mode swaps the rows at once"); eq(follow.style.display, "flex");
+        eq(cells.nextSibling.style.display, "none", "and the hint goes with its row");
+        eq(trace.style.display, "none"); eq(tag.style.display, "inline-flex");
+        eq(extras.style.display, "flex", "the section appears"); eq(extras.nextSibling.style.display, "block", "with its body");
+        S.setCollapsed("modal", "extras", true);
+        eq(extras.style.display, "flex", "folding keeps the header"); eq(extras.nextSibling.style.display, "none", "and hides the body");
+        S.set("modal", "mode", "full");
+        eq(extras.style.display, "none", "gone again when it stops applying, folded or not");
+        eq(S.get("modal", "follow"), true, "a hidden option keeps its value");
+
+        S.reset("modal");
+        pane.remove();
+    });
+
     t("settings: an order control is a permutation of its items, dragged into shape with the mouse", function () {
         const S = ACEUIAppLoader.settings;
         const pane = document.createElement("div");

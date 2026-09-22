@@ -188,8 +188,14 @@ ACEUIAppLoader.settings.define("betterdeltabar", [
   label inside the pill, lit green when on. Anything in the section that is not a toggle
   is drawn as an ordinary row.
 
-The Better Delta Bar's pane is the reference: five sections, two controls to a row, a row
-of nine chips, and no hint text until you point at something.
+- Any spec, sections included, can carry **`when: function (app) { ... }`**: it is drawn
+  only while that returns true, judged again on every change. An option that means nothing
+  in the current mode is not on the page, and changing the mode swaps the rows at once. A
+  hidden option keeps its value.
+
+The Better Delta Bar's pane is the reference: four sections, two controls to a row, a row
+of chips that changes with the layout (the cell switches in the full layout, the
+follow-the-fill switch in the compact one), and no hint text until you point at something.
 
 **`order`** is a list the player reorders by dragging a row. Its value is the array of
 item keys, top first, stored and reset like any other value; a stored list is made whole

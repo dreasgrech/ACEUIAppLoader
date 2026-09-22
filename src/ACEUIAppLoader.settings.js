@@ -51,6 +51,11 @@
  * the value gets a capital); and a section with `flow: "chips"` draws its toggles as chips
  * in a wrapping row, label inside, lit when on.
  *
+ * Any spec, sections included, can carry `when: function (app) { ... }`: it is drawn only
+ * while that returns true, judged again on every change, so an option that means nothing
+ * in the current mode (a cell row in a layout that has no cells) is not on the page, and
+ * changing the mode swaps the rows at once.
+ *
  * `order` is a list the player reorders by dragging; its value is the array of item keys,
  * top first. Mouse events, not HTML5 drag-and-drop, which this engine is not known to
  * support: the panel drag proves mousedown/mousemove/mouseup are enough.
@@ -782,7 +787,7 @@ ACEUIAppLoader.settings = (function () {
      * A section: a header row that folds and unfolds the rows after it. Returns the body
      * the following rows go into. A body with columns, or of chips, wraps its rows.
      */
-    const sectionControl = function (app, spec, repaint, container) {
+    const sectionControl = function (app, spec, repaint, container, applies) {
         const header = make("div", {
             display: "flex",
             flexDirection: "row",
@@ -812,8 +817,10 @@ ACEUIAppLoader.settings = (function () {
 
         repaint.push(function () {
             const folded = isCollapsed(app, spec.key);
+            const shown = applies(spec);
 
-            body.style.display = folded ? "none" : (across ? "flex" : "block");
+            header.style.display = shown ? "flex" : "none";
+            body.style.display = folded || !shown ? "none" : (across ? "flex" : "block");
             glyph.textContent = folded ? FOLDED_GLYPH : OPEN_GLYPH;
         });
 
@@ -982,6 +989,26 @@ ACEUIAppLoader.settings = (function () {
 
         teardown(app);
 
+        /**
+         * A spec with `when` (a function of the app name) is drawn only while it says so:
+         * an option that means nothing in the current mode is not on the page. Judged on
+         * every repaint, so a change to the option it depends on swaps the rows at once.
+         * A `when` that throws counts as applying, so a bug hides nothing.
+         */
+        const applies = function (spec) {
+            if (typeof spec.when !== "function") { return true; }
+
+            try {
+                return Boolean(spec.when(app));
+            } catch (e) {
+                return true;
+            }
+        };
+        const watchWhen = function (node, spec, shownDisplay) {
+            if (typeof spec.when !== "function") { return; }
+
+            held.repaint.push(function () { node.style.display = applies(spec) ? shownDisplay : "none"; });
+        };
         const footerHints = held.layout.hints === HINTS_FOOTER;
         // with hints in the footer, the line shows the hint of whatever the pointer is over
         const footer = footerHints ? make("span", { color: THEME.inkDim, fontSize: "0.6rem", flex: "1 1 auto", minHeight: "0.8rem", paddingRight: "0.6rem" }, HINT_IDLE_TEXT) : null;
@@ -999,7 +1026,7 @@ ACEUIAppLoader.settings = (function () {
 
         held.specs.forEach(function (spec) {
             if (spec.type === "section") {
-                target.body = sectionControl(app, spec, held.repaint, container);
+                target.body = sectionControl(app, spec, held.repaint, container, applies);
                 target.columns = columnsOf(spec);
                 target.chips = spec.flow === FLOW_CHIPS;
 
@@ -1012,12 +1039,15 @@ ACEUIAppLoader.settings = (function () {
                 const chip = chipControl(app, spec, held.repaint);
 
                 hintOnHover(chip, spec);
+                watchWhen(chip, spec, "inline-flex");
                 target.body.appendChild(chip);
 
                 return;
             }
 
             const row = make("div", rowStyle);
+
+            watchWhen(row, spec, rowStyle.display);
 
             if (target.columns > 1) {
                 css(row, { width: (100 / target.columns).toFixed(COLUMN_DECIMALS) + "%", boxSizing: "border-box", paddingRight: "0.6rem" });
@@ -1036,7 +1066,10 @@ ACEUIAppLoader.settings = (function () {
             if (control && BLOCK_TYPES.indexOf(spec.type) >= 0) { target.body.appendChild(control(app, spec, held.repaint)); }
 
             if (spec.hint && !footerHints) {
-                target.body.appendChild(make("div", { color: THEME.inkDim, fontSize: "0.6rem", paddingBottom: "0.2rem", width: "100%" }, spec.hint));
+                const hint = make("div", { color: THEME.inkDim, fontSize: "0.6rem", paddingBottom: "0.2rem", width: "100%" }, spec.hint);
+
+                watchWhen(hint, spec, "block");
+                target.body.appendChild(hint);
             }
         });
 
