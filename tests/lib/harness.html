@@ -1075,13 +1075,13 @@ document.addEventListener("DOMContentLoaded", function () {
         eq(cells.style.display, "flex", "a row that applies is drawn"); eq(follow.style.display, "none", "one that does not is not");
         eq(cells.nextSibling.style.display, "block", "its inline hint shows with it");
         eq(broken.style.display, "flex", "a when that throws counts as applying");
-        eq(trace.style.display, "inline-flex", "chips too"); eq(tag.style.display, "none");
+        eq(trace.style.display, "flex", "chips too"); eq(tag.style.display, "none");
         eq(extras.style.display, "none", "a whole section can hang on a when"); eq(extras.nextSibling.style.display, "none", "body too");
 
         S.set("modal", "mode", "compact");
         eq(cells.style.display, "none", "changing the mode swaps the rows at once"); eq(follow.style.display, "flex");
         eq(cells.nextSibling.style.display, "none", "and the hint goes with its row");
-        eq(trace.style.display, "none"); eq(tag.style.display, "inline-flex");
+        eq(trace.style.display, "none"); eq(tag.style.display, "flex");
         eq(extras.style.display, "flex", "the section appears"); eq(extras.nextSibling.style.display, "block", "with its body");
         S.setCollapsed("modal", "extras", true);
         eq(extras.style.display, "flex", "folding keeps the header"); eq(extras.nextSibling.style.display, "none", "and hides the body");

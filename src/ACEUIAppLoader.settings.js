@@ -566,7 +566,7 @@ ACEUIAppLoader.settings = (function () {
     const segmentedControl = function (app, spec, repaint) {
         const options = spec.options || [];
         const wrap = make("span", {
-            display: "inline-flex",
+            display: "flex",
             flexDirection: "row",
             alignItems: "stretch",
             marginLeft: "0.25rem",
@@ -628,7 +628,7 @@ ACEUIAppLoader.settings = (function () {
      */
     const chipControl = function (app, spec, repaint) {
         const chip = make("span", {
-            display: "inline-flex",
+            display: "flex",
             flexDirection: "row",
             alignItems: "center",
             padding: "0.15rem 0.55rem",
@@ -1039,7 +1039,7 @@ ACEUIAppLoader.settings = (function () {
                 const chip = chipControl(app, spec, held.repaint);
 
                 hintOnHover(chip, spec);
-                watchWhen(chip, spec, "inline-flex");
+                watchWhen(chip, spec, "flex");
                 target.body.appendChild(chip);
 
                 return;

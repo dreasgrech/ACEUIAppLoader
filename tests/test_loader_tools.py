@@ -233,6 +233,8 @@ class LibrarySourceTests(unittest.TestCase):
         for name, js in self.files.items():
             self.assertNotIn("textTransform", js, f"{name}: upper-case the string instead")
             self.assertNotIn('"baseline"', js, f"{name}: align-items: baseline is not supported")
+            # `Trying to set display property to invalid value!`, 163 times in one session from the settings pane's pills and chips (log 2026-09-22)
+            self.assertNotIn("inline-flex", js, f"{name}: display: inline-flex is not supported; flex lays a flex item out the same")
 
     def test_an_app_cannot_be_handed_a_stock_element_as_its_root(self):
         js = self.files["ACEUIAppLoader.loader.js"]
