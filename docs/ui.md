@@ -150,7 +150,7 @@ A page with more than a handful of rows is a wall. **`section`** breaks it up: a
 that every spec after it belongs to, until the next section. Clicking the header folds
 the rows under it and the loader remembers which sections are folded, per app, in the
 same two stores as the values (only the HUD layout store survives a game restart). A section
-with `columns: 2` lays its rows out at half width, which halves a run of toggles;
+with `columns: 2` (or `3`) lays its rows out side by side, which halves a run of toggles;
 `collapsed: true` starts it folded until the player opens it.
 
 ```js
@@ -159,6 +159,37 @@ with `columns: 2` lays its rows out at half width, which halves a run of toggles
 ...
 { key: "demo", type: "section", label: "Demo", collapsed: true },
 ```
+
+**A pane that reads as a form, not a wall.** The default pane is one control per row in a
+narrow window with a hint under every row, which is right for a handful of settings and
+wrong for twenty. Three things, all opt-in so an app drawn the old way is unchanged, turn it
+horizontal:
+
+```js
+ACEUIAppLoader.settings.define("betterdeltabar", [
+    { key: "shape", type: "section", label: "Layout", columns: 2 },
+    { key: "layout", type: "choice", label: "Layout", value: "full", options: ["full", "compact"],
+      segmented: true, hint: "full: the figure on the bar; compact: a thin bar" },
+    ...
+    { key: "show", type: "section", label: "Show", flow: "chips" },
+    { key: "showArrows", type: "toggle", label: "Trend chevrons", value: true },
+    ...
+], { width: "36rem", hints: "footer" });
+```
+
+- `define`'s third argument sets the pane's **width** (the window opens at it) and puts the
+  **hints in a footer**: one line at the foot of the pane showing the hint of whatever row
+  the pointer is over, with the reset button beside it, instead of a line under every row.
+- A choice with **`segmented: true`** shows every option at once as a row of joined pills,
+  the current one lit, so the alternatives are visible without cycling. Options are shown
+  with a capital (`full` reads `Full`); `labels: { full: "Full layout" }` names them
+  otherwise. Keep it for a handful of short options; a long list still wants the cycle.
+- A section with **`flow: "chips"`** draws its toggles as chips in a wrapping row, the
+  label inside the pill, lit green when on. Anything in the section that is not a toggle
+  is drawn as an ordinary row.
+
+The Better Delta Bar's pane is the reference: five sections, two controls to a row, a row
+of nine chips, and no hint text until you point at something.
 
 **`order`** is a list the player reorders by dragging a row. Its value is the array of
 item keys, top first, stored and reset like any other value; a stored list is made whole

@@ -52,7 +52,7 @@ The alternate zip contains the **same loader**, packed a different way, so that 
 2. If the drawer never appears **and** the newest log in `Saved Games\ACE\Logs` has no `ACEUIAppLoader` lines, delete `mods\ACEUIAppLoader.kspkg` and install the alternate zip the same way.
 3. If the drawer disappears again after you install another mod, swap back.
 
-The loader's first log line tells you which one you have: `loader 0.24.0 on /hud.html (64 records)` is the normal zip, `(32 records)` the alternate. Nothing else differs; apps, settings and everything on this page work the same with either.
+The loader's first log line tells you which one you have: `loader 0.25.0 on /hud.html (64 records)` is the normal zip, `(32 records)` the alternate. Nothing else differs; apps, settings and everything on this page work the same with either.
 </details>
 
 </td></tr>
@@ -191,7 +191,7 @@ next section. **No lines at all** means the game never used the file, for one of
 1. **The game updated.** By far the most common cause. See above.
 2. **The file is in the wrong place.** It must be exactly `Saved Games\ACE\mods\ACEUIAppLoader.kspkg`,
    with that name. The usual way this goes wrong is Windows' *Extract All*, which puts
-   everything in a folder named after the zip (`ACE\ACEUIAppLoader-0.24.0-…\mods\…`); drag the
+   everything in a folder named after the zip (`ACE\ACEUIAppLoader-0.25.0-…\mods\…`); drag the
    `mods` folder itself into `Saved Games\ACE` instead.
 3. **Two copies.** Exactly one `ACEUIAppLoader…kspkg` in `mods` — an older copy left beside
    the new one (`ACEUIAppLoader (1).kspkg`, say) can win instead of it.

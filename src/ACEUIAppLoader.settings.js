@@ -39,9 +39,17 @@
  * A page with more than a handful of rows is a wall; `section` breaks it up. A section
  * spec is a header that every spec after it belongs to, until the next one. Clicking
  * the header folds the section and the loader remembers which are folded, per app. A
- * section can lay its rows out in two columns, which halves a run of toggles:
+ * section can lay its rows out in two or three columns, which halves a run of toggles:
  *
  *     { key: "inputs", type: "section", label: "Inputs", columns: 2, collapsed: false },
+ *
+ * A pane that reads as a form rather than a wall wants three more things, all opt-in so
+ * an app drawn the old way is unchanged: `define(app, specs, { width: "36rem", hints:
+ * "footer" })` widens the window and moves every hint into one line at the foot (shown for
+ * the row under the pointer); a choice with `segmented: true` shows all its options as a
+ * row of pills with the current one lit (`labels: { full: "Full" }` names them; without it
+ * the value gets a capital); and a section with `flow: "chips"` draws its toggles as chips
+ * in a wrapping row, label inside, lit when on.
  *
  * `order` is a list the player reorders by dragging; its value is the array of item keys,
  * top first. Mouse events, not HTML5 drag-and-drop, which this engine is not known to
@@ -86,15 +94,25 @@ ACEUIAppLoader.settings = (function () {
 
     /** The order control: how a row looks while it is being dragged. */
     const DRAG_BG = "rgba(255, 255, 255, 0.22)";
+    /** A chip that is on: a wash of the on-green behind it; off: a quieter border than a button's. */
+    const CHIP_ON_BG = "rgba(68, 234, 120, 0.16)";
+    const CHIP_OFF_BORDER = "rgba(255, 255, 255, 0.14)";
 
     /** Sections: the glyph on a header for open and folded, the widest layout, and where the folds are kept. */
     const OPEN_GLYPH = "\u2212";
     const FOLDED_GLYPH = "+";
-    const COLUMNS_MAX = 2;
+    const COLUMNS_MAX = 3;
     const SECTIONS_SUFFIX = ".sections";
     const FOLDS_HUD_SUFFIX = "_folds";
+    /** A section whose toggles are drawn as chips in a wrapping row rather than as label-and-box rows. */
+    const FLOW_CHIPS = "chips";
+    /** define(app, specs, { hints: "footer" }): hints go in one line at the foot of the pane, shown for the row under the pointer. */
+    const HINTS_FOOTER = "footer";
+    const HINT_IDLE_TEXT = "";
+    /** Decimals of a column width in percent; three columns are 33.333%. */
+    const COLUMN_DECIMALS = 3;
 
-    /** The settings window is an ACEUIAppLoader.window; this is its id and width. */
+    /** The settings window is an ACEUIAppLoader.window; this is its id and default width (define's `width` overrides). */
     const WINDOW_ID_SUFFIX = ".settings";
     const WINDOW_WIDTH = "17rem";
 
@@ -102,7 +120,7 @@ ACEUIAppLoader.settings = (function () {
 
     const persist = ACEUIAppLoader.persist;
 
-    /** name -> { specs, values, listeners, collapsed, touched, touchedFolds, repaint, undo } */
+    /** name -> { specs, values, layout, listeners, collapsed, touched, touchedFolds, repaint, undo } */
     const declared = {};
 
     const css = ACEUIAppLoader.dom.css;
@@ -526,8 +544,66 @@ ACEUIAppLoader.settings = (function () {
         return wrap;
     };
 
+    /** What a choice's option is called on screen: the spec's `labels` map, else the value with a capital. */
+    const optionText = function (spec, value) {
+        const text = String(value);
+
+        if (spec.labels && spec.labels[value]) { return String(spec.labels[value]); }
+
+        return text.charAt(0).toUpperCase() + text.slice(1);
+    };
+
+    /**
+     * A choice with `segmented: true`: every option on show at once as a row of joined
+     * pills, the current one lit, so the player sees what the alternatives are without
+     * cycling through them. For a handful of short options; a long list wants the cycle.
+     */
+    const segmentedControl = function (app, spec, repaint) {
+        const options = spec.options || [];
+        const wrap = make("span", {
+            display: "inline-flex",
+            flexDirection: "row",
+            alignItems: "stretch",
+            marginLeft: "0.25rem",
+            border: THEME.controlBorder,
+            borderRadius: "0.2rem",
+            overflow: "hidden",
+            userSelect: "none"
+        });
+        const pills = options.map(function (option, at) {
+            const pill = make("span", {
+                padding: "0.1rem 0.5rem",
+                borderLeft: at === 0 ? "none" : THEME.controlBorder,
+                color: THEME.inkDim,
+                cursor: "pointer",
+                whiteSpace: "nowrap"
+            }, optionText(spec, option));
+
+            pill.addEventListener("click", function () { set(app, spec.key, option); });
+            wrap.appendChild(pill);
+
+            return pill;
+        });
+
+        repaint.push(function () {
+            const current = get(app, spec.key);
+
+            pills.forEach(function (pill, at) {
+                const on = options[at] === current;
+
+                pill.style.background = on ? THEME.controlBg : "transparent";
+                pill.style.color = on ? THEME.white : THEME.inkDim;
+                pill.style.fontWeight = on ? "700" : "400";
+            });
+        });
+
+        return wrap;
+    };
+
     /** Clicking cycles the options: <select> is unproven here, a cycle button is not. */
     const choiceControl = function (app, spec, repaint) {
+        if (spec.segmented) { return segmentedControl(app, spec, repaint); }
+
         const options = spec.options || [];
         const node = button("", function () {
             const at = options.indexOf(get(app, spec.key));
@@ -538,6 +614,43 @@ ACEUIAppLoader.settings = (function () {
         repaint.push(function () { node.textContent = String(get(app, spec.key)); });
 
         return node;
+    };
+
+    /**
+     * A toggle drawn as a chip: its own label inside a pill that lights up when it is on.
+     * A section of switches becomes one wrapping row of them instead of a column of
+     * label-and-box rows, which is how a `flow: "chips"` section lays its toggles out.
+     */
+    const chipControl = function (app, spec, repaint) {
+        const chip = make("span", {
+            display: "inline-flex",
+            flexDirection: "row",
+            alignItems: "center",
+            padding: "0.15rem 0.55rem",
+            margin: "0 0.3rem 0.3rem 0",
+            border: THEME.controlBorder,
+            borderRadius: "0.9rem",
+            color: THEME.inkDim,
+            cursor: "pointer",
+            userSelect: "none",
+            whiteSpace: "nowrap"
+        });
+
+        if (spec.swatch) { chip.appendChild(swatch(spec.swatch)); }
+
+        chip.appendChild(make("span", {}, spec.label || spec.key));
+
+        repaint.push(function () {
+            const on = Boolean(get(app, spec.key));
+
+            chip.style.background = on ? CHIP_ON_BG : "transparent";
+            chip.style.borderColor = on ? THEME.on : CHIP_OFF_BORDER;
+            chip.style.color = on ? THEME.white : THEME.inkDim;
+        });
+
+        chip.addEventListener("click", function () { set(app, spec.key, !get(app, spec.key)); });
+
+        return chip;
     };
 
     const textControl = function (app, spec, repaint) {
@@ -653,9 +766,21 @@ ACEUIAppLoader.settings = (function () {
         return node;
     };
 
+    /** How many columns a section asked for, held to 1..COLUMNS_MAX. */
+    const columnsOf = function (spec) {
+        const asked = Math.floor(Number(spec.columns)) || 1;
+
+        return Math.min(COLUMNS_MAX, Math.max(1, asked));
+    };
+
+    /** A body whose rows sit side by side: more than one column, or chips. */
+    const flowsAcross = function (spec) {
+        return columnsOf(spec) > 1 || spec.flow === FLOW_CHIPS;
+    };
+
     /**
      * A section: a header row that folds and unfolds the rows after it. Returns the body
-     * the following rows go into. Two-column bodies wrap their rows at half width.
+     * the following rows go into. A body with columns, or of chips, wraps its rows.
      */
     const sectionControl = function (app, spec, repaint, container) {
         const header = make("div", {
@@ -674,8 +799,9 @@ ACEUIAppLoader.settings = (function () {
             userSelect: "none"
         });
         const glyph = make("span", { color: THEME.inkOff, fontSize: "0.68rem", marginLeft: "0.5rem" });
-        const body = make("div", spec.columns === COLUMNS_MAX
-            ? { display: "flex", flexDirection: "row", flexWrap: "wrap" }
+        const across = flowsAcross(spec);
+        const body = make("div", across
+            ? { display: "flex", flexDirection: "row", flexWrap: "wrap", alignItems: "center", paddingTop: spec.flow === FLOW_CHIPS ? "0.3rem" : "0" }
             : {});
 
         // upper-cased here, not by the stylesheet: this engine ignores text-transform and
@@ -687,7 +813,7 @@ ACEUIAppLoader.settings = (function () {
         repaint.push(function () {
             const folded = isCollapsed(app, spec.key);
 
-            body.style.display = folded ? "none" : (spec.columns === COLUMNS_MAX ? "flex" : "block");
+            body.style.display = folded ? "none" : (across ? "flex" : "block");
             glyph.textContent = folded ? FOLDED_GLYPH : OPEN_GLYPH;
         });
 
@@ -856,23 +982,45 @@ ACEUIAppLoader.settings = (function () {
 
         teardown(app);
 
+        const footerHints = held.layout.hints === HINTS_FOOTER;
+        // with hints in the footer, the line shows the hint of whatever the pointer is over
+        const footer = footerHints ? make("span", { color: THEME.inkDim, fontSize: "0.6rem", flex: "1 1 auto", minHeight: "0.8rem", paddingRight: "0.6rem" }, HINT_IDLE_TEXT) : null;
+        const hintOnHover = function (node, spec) {
+            if (!footer || !spec.hint) { return; }
+
+            node.addEventListener("mouseover", function () { footer.textContent = spec.hint; });
+            node.addEventListener("mouseout", function () { footer.textContent = HINT_IDLE_TEXT; });
+        };
+
         // rows go into the current section's body, or straight into the container before
-        // the first section; a two-column section lays them out at half width
-        const target = { body: container, columns: 1 };
+        // the first section; a section with columns lays them out side by side, a chips
+        // section draws its toggles as chips
+        const target = { body: container, columns: 1, chips: false };
 
         held.specs.forEach(function (spec) {
             if (spec.type === "section") {
                 target.body = sectionControl(app, spec, held.repaint, container);
-                target.columns = spec.columns === COLUMNS_MAX ? COLUMNS_MAX : 1;
+                target.columns = columnsOf(spec);
+                target.chips = spec.flow === FLOW_CHIPS;
+
+                return;
+            }
+
+            const control = CONTROLS[spec.type];
+
+            if (target.chips && spec.type === "toggle") {
+                const chip = chipControl(app, spec, held.repaint);
+
+                hintOnHover(chip, spec);
+                target.body.appendChild(chip);
 
                 return;
             }
 
             const row = make("div", rowStyle);
-            const control = CONTROLS[spec.type];
 
-            if (target.columns === COLUMNS_MAX) {
-                css(row, { width: "50%", boxSizing: "border-box", paddingRight: "0.6rem" });
+            if (target.columns > 1) {
+                css(row, { width: (100 / target.columns).toFixed(COLUMN_DECIMALS) + "%", boxSizing: "border-box", paddingRight: "0.6rem" });
             }
 
             if (spec.swatch) { row.appendChild(swatch(spec.swatch)); }
@@ -881,17 +1029,28 @@ ACEUIAppLoader.settings = (function () {
 
             if (control && BLOCK_TYPES.indexOf(spec.type) < 0) { row.appendChild(control(app, spec, held.repaint)); }
 
+            hintOnHover(row, spec);
             target.body.appendChild(row);
 
             // a block control (a list) goes under its label, the full width of the pane
             if (control && BLOCK_TYPES.indexOf(spec.type) >= 0) { target.body.appendChild(control(app, spec, held.repaint)); }
 
-            if (spec.hint) {
+            if (spec.hint && !footerHints) {
                 target.body.appendChild(make("div", { color: THEME.inkDim, fontSize: "0.6rem", paddingBottom: "0.2rem", width: "100%" }, spec.hint));
             }
         });
 
-        container.appendChild(css(button(CLEAR_TEXT, function () { reset(app); }), { marginTop: "0.6rem", marginLeft: "0" }));
+        if (footer) {
+            // one line at the foot: the hint on the left, the reset on the right
+            const foot = make("div", { display: "flex", flexDirection: "row", alignItems: "center", justifyContent: "space-between", marginTop: "0.6rem" });
+
+            foot.appendChild(footer);
+            foot.appendChild(css(button(CLEAR_TEXT, function () { reset(app); }), { marginLeft: "0", flexShrink: "0" }));
+            container.appendChild(foot);
+        } else {
+            container.appendChild(css(button(CLEAR_TEXT, function () { reset(app); }), { marginTop: "0.6rem", marginLeft: "0" }));
+        }
+
         held.repaint.forEach(function (fn) { fn(); });
 
         return container;
@@ -924,7 +1083,7 @@ ACEUIAppLoader.settings = (function () {
 
         const win = ACEUIAppLoader.window.open(windowId(app), {
             title: titleFor(app) + " settings",
-            width: WINDOW_WIDTH,
+            width: held.layout.width || WINDOW_WIDTH,
             onClose: function () { teardown(app); }
         });
 
@@ -949,8 +1108,13 @@ ACEUIAppLoader.settings = (function () {
     /**
      * Declare an app's settings. Returns the live values object: stored values are already
      * merged in, so an app can read it immediately. Calling again replaces the schema.
+     *
+     * `layout`, optional, is how the pane is drawn: `{ width: "36rem" }` for a wider window
+     * (sections with `columns: 2` or `3` and segmented choices want the room) and
+     * `{ hints: "footer" }` to show hints in one line at the foot, for the row under the
+     * pointer, instead of a line under every row. Left out, a redefine keeps the last one.
      */
-    const define = function (app, specs) {
+    const define = function (app, specs, layout) {
         // a mistyped `type` used to drop the control with nothing said, which reads in
         // game as "my setting did not appear" with no way to tell why
         const list = (specs || []).filter(function (spec) {
@@ -975,6 +1139,7 @@ ACEUIAppLoader.settings = (function () {
         declared[app] = {
             specs: list,
             values: values,
+            layout: layout || (declared[app] && declared[app].layout) || {},
             listeners: (declared[app] && declared[app].listeners) || [],
             collapsed: storedFolds(app),
             touched: false,     // set() or reset() ran this session: newer than the disk

@@ -979,6 +979,68 @@ document.addEventListener("DOMContentLoaded", function () {
         pane.remove();
     });
 
+    t("settings: a wide pane: segmented choices, chips, three columns, hints in a footer, the window at the asked width", function () {
+        const S = ACEUIAppLoader.settings;
+        const pane = document.createElement("div");
+        document.getElementById("center").appendChild(pane);
+
+        S.define("wide", [
+            { key: "shape", type: "section", label: "Shape", columns: 3 },
+            { key: "layout", type: "choice", label: "Layout", value: "full", options: ["full", "compact"], segmented: true, labels: { full: "Full" }, hint: "how it is laid out" },
+            { key: "range", type: "choice", label: "Range", value: "1 s", options: ["0.5 s", "1 s"], segmented: true },
+            { key: "plain", type: "choice", label: "Plain", value: "a", options: ["a", "b"] },
+            { key: "show", type: "section", label: "Show", flow: "chips" },
+            { key: "arrows", type: "toggle", label: "Chevrons", value: true, hint: "the chevrons" },
+            { key: "trace", type: "toggle", label: "Trace", value: false, swatch: "#44ea78" },
+            { key: "band", type: "choice", label: "Band", value: "x", options: ["x", "y"], segmented: true }
+        ], { width: "36rem", hints: "footer" });
+        S.render("wide", pane);
+
+        const headers = Array.prototype.slice.call(pane.children).filter(function (el) { return /^(SHAPE|SHOW)/.test(el.textContent); });
+        const shape = headers[0].nextSibling, show = headers[1].nextSibling;
+        eq(shape.children.length, 3, "three rows in Shape"); eq(shape.children[0].style.width, "33.333%", "a third each");
+        eq(getComputedStyle(shape).display, "flex", "side by side");
+
+        const segmented = shape.children[0].lastChild;
+        eq(segmented.children.length, 2, "one pill per option"); eq(segmented.children[0].textContent, "Full", "named by labels");
+        eq(segmented.children[1].textContent, "Compact", "or by the value with a capital");
+        eq(segmented.children[0].style.fontWeight, "700", "the current one lit"); eq(segmented.children[1].style.fontWeight, "400");
+        segmented.children[1].dispatchEvent(new MouseEvent("click", { bubbles: true }));
+        eq(S.get("wide", "layout"), "compact", "clicking a pill sets that option"); eq(segmented.children[1].style.fontWeight, "700", "and it lights up");
+        eq(shape.children[1].lastChild.children[1].textContent, "1 s", "a value that starts with a digit is left alone");
+        eq(shape.children[2].lastChild.textContent, "a", "a choice without segmented still cycles: one button");
+
+        ok(pane.textContent.indexOf("how it is laid out") < 0, "footer hints: nothing under the rows");
+        const foot = pane.lastChild;
+        eq(foot.children.length, 2, "the foot holds the hint line and the reset"); eq(foot.children[0].textContent, "", "idle: empty");
+        ok(foot.children[1].textContent.indexOf("Reset") === 0, "reset on the right");
+        shape.children[0].dispatchEvent(new MouseEvent("mouseover", { bubbles: true }));
+        eq(foot.children[0].textContent, "how it is laid out", "the hovered row's hint shows in the foot");
+        shape.children[0].dispatchEvent(new MouseEvent("mouseout", { bubbles: true }));
+        eq(foot.children[0].textContent, "", "and goes when the pointer leaves");
+
+        eq(show.children.length, 3, "two chips and a row in Show");
+        const arrows = show.children[0], trace = show.children[1];
+        eq(arrows.tagName, "SPAN", "a chip is one span"); eq(arrows.textContent, "Chevrons", "label inside");
+        eq(arrows.style.borderColor, "rgb(68, 234, 120)", "lit when on"); eq(trace.style.background, "transparent", "dark when off");
+        eq(trace.children[0].style.background, "rgb(68, 234, 120)", "a chip can carry a swatch");
+        trace.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+        eq(S.get("wide", "trace"), true, "clicking a chip flips it"); eq(trace.style.borderColor, "rgb(68, 234, 120)", "and lights it");
+        arrows.dispatchEvent(new MouseEvent("mouseover", { bubbles: true })); eq(foot.children[0].textContent, "the chevrons", "chips hint too");
+        arrows.dispatchEvent(new MouseEvent("mouseout", { bubbles: true }));
+        eq(show.children[2].tagName, "DIV", "a non-toggle in a chips section is an ordinary row");
+        ok(show.children[2].textContent.indexOf("Band") === 0, "with its label");
+
+        const win = S.open("wide");
+        eq(win.root.style.width, "36rem", "the window takes the asked width");
+        S.close("wide");
+        S.define("wide", S.specs("wide"));
+        eq(S.open("wide").root.style.width, "36rem", "a redefine without a layout keeps the last one");
+        S.close("wide");
+        S.reset("wide");
+        pane.remove();
+    });
+
     t("settings: an order control is a permutation of its items, dragged into shape with the mouse", function () {
         const S = ACEUIAppLoader.settings;
         const pane = document.createElement("div");
