@@ -85,9 +85,23 @@ ACEUIAppLoader.window.ids();
 | | |
 |---|---|
 | `open(id, options)` | opens it and returns the handle; opening one already open returns the same handle rather than stacking a copy |
-| `close(id)` / `closeAll()` | `close` returns false if it was not open |
+| `close(id)` / `closeAll()` | `close` returns false if it was not open. Shutting a window this way, or with its [X], is remembered: it will not come back |
+| `reopen(id, fn)` | how to open `id` again after the HUD page reloads (Escape and resume) or the game restarts: the owner calls this every time its script runs, and if the loader remembers that window as open, `fn(id)` runs on the next frame (or when the HUD store arrives). A frame later, not at once, because owners register from inside the call that declares the content, before their own module state exists. Returns true when it is due to come back |
+| `discard(id)` / `discardAll()` | shut without forgetting, as a page going away does; the tests use it to play a reload |
 | `toggle(id, options)` | returns true when it ended up open |
 | `isOpen(id)` / `get(id)` / `ids()` | |
+
+**Open windows survive the reload.** Which windows are open is kept in both stores, like
+the drawer's switches, so a settings window left open through Escape and resume is there
+when the HUD comes back, and one open when the game was quit is there next launch. It is
+kept **per page**: a window opened over the HUD comes back over the HUD, not over a menu
+page that an app living on every page also loads on. The loader cannot rebuild a window's
+content, so an app that opens windows of its own registers a `reopen` for each id it uses;
+the settings module does this for every app's settings window, so those come back with no
+work by the app. An id nobody registers for again (an app since uninstalled) is simply kept
+in the list and opens nothing. A window's page, position and open state are three separate
+memories: a window closed by the player forgets only that it was open, and comes back where
+it was when opened again.
 
 The handle is `{ id, root, header, body, close(), setTitle(text), isOpen() }` — put your
 content in `body`.

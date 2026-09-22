@@ -1,0 +1,51 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<title>windows across the HUD reload (same game session)</title>
+<style> body { margin: 0; background: #222; color: #ddd; font: 12px monospace; } #results { white-space: pre; } </style>
+<!-- the library loading on a fresh page, the way it does after Escape and resume: localStorage
+     already holds what the last page wrote, the HUD store is not there yet -->
+<script src="doubles.js"></script>
+<script>
+localStorage.setItem("acewindows.open", JSON.stringify({ open: { "reload-session.html": ["memo.session"], "other.html": ["memo.other"] } }));
+</script>
+<script src="lib.js"></script>
+</head>
+<body>
+<pre id="results"></pre>
+<div id="done" hidden></div>
+<script>
+(function () {
+    const H = window.__harness, t = H.t, eq = H.eq, ok = H.ok;
+    const W = ACEUIAppLoader.window, clock = window.__clock;
+    const opened = [];
+    const opener = function (id) { opened.push(id); W.open(id, { title: id }); };
+    const record = function () { return JSON.parse(localStorage.getItem(W.OPEN_STORE_KEY)).open; };
+
+    t("a page loading with a session list in localStorage brings back its own windows once their owners register, a frame later, and not another page's", function () {
+        eq(ACEUIAppLoader.page, "reload-session.html", "this page's name is the key");
+        eq(W.reopen("memo.other", opener), false, "another page's window is not due here");
+        eq(W.reopen("memo.session", opener), true, "this page's is due");
+        eq(opened.length, 0, "but not inside the owner's own call");
+        clock.step(1000);
+        eq(opened.join(","), "memo.session", "a frame later it is back"); ok(W.isOpen("memo.session"));
+        eq((record()["other.html"] || []).join(","), "memo.other", "the other page's list is kept untouched");
+        eq((record()["reload-session.html"] || []).join(","), "memo.session", "and this page's still says open");
+    });
+
+    t("the HUD store arriving after this page already changed something takes this page's list, not the other way round", function () {
+        W.close("memo.session");
+        window.HUD = { currentLayout: "default", StoredData: { lastLayout: "default", layouts: { default: { elements: {
+            hud_acewindows: { open: { "reload-session.html": ["memo.session"] } } } } } } };
+        window.HUD.elementModified = function (id, props) { window.HUD.StoredData.layouts.default.elements[id] = props; };
+        eq(W.adopt().length, 0, "nothing adopted: this page is newer than the disk");
+        eq((window.HUD.StoredData.layouts.default.elements.hud_acewindows.open["reload-session.html"] || []).length, 0, "and the disk now says closed too");
+        eq((window.HUD.StoredData.layouts.default.elements.hud_acewindows.open["other.html"] || []).join(","), "memo.other", "the other page's list went to disk with it");
+    });
+
+    H.finish(window.__warn.map(function (w) { return "WARN " + w; }));
+}());
+</script>
+</body>
+</html>

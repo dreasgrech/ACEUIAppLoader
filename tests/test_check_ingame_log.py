@@ -78,6 +78,26 @@ class CheckIngameLogTests(unittest.TestCase):
         self.assertEqual(code, 0, out)
         self.assertIn("/driverlabels.html", out)
 
+    def test_a_retry_that_then_succeeds_is_a_note_not_a_failure(self):
+        """The first preset-list request going unanswered is what the retry is for (the stock
+        UI clears the handler under us on some pages); the apps loaded, so the run is fine.
+        The give-up line on the HUD is the failure."""
+        code, out = run(log(
+            HUD,
+            "no preset list answer in 1500 ms; asking again",
+            "presets: 3 app(s)",
+            "bundled: 3 app(s)",
+            "app doom 0.5.4: loading 4 script(s), 1 stylesheet(s)",
+            "app doom loaded",
+        ))
+        self.assertEqual(code, 0, out)
+        self.assertIn("note: ", out)
+        self.assertIn("asking again", out)
+        code, out = run(log(HUD, "no preset list answer in 3000 ms; no installed apps", "bundled: 3 app(s)",
+                            "app doom 0.5.4: loading 4 script(s), 1 stylesheet(s)", "app doom loaded"))
+        self.assertEqual(code, 2, out)
+        self.assertIn("no installed apps", out)
+
     def test_nothing_on_the_hud_is_a_failure(self):
         code, out = run(log(HUD, "no preset list answer in 1500 ms; no installed apps", "nothing to load"))
         self.assertEqual(code, 2, out)

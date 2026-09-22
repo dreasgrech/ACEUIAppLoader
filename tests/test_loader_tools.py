@@ -235,6 +235,7 @@ class LibrarySourceTests(unittest.TestCase):
             self.assertNotIn('"baseline"', js, f"{name}: align-items: baseline is not supported")
             # `Trying to set display property to invalid value!`, 163 times in one session from the settings pane's pills and chips (log 2026-09-22)
             self.assertNotIn("inline-flex", js, f"{name}: display: inline-flex is not supported; flex lays a flex item out the same")
+            self.assertNotIn("inline-block", js, f"{name}: display: inline-block is not supported either (one warning per settings toggle box, log 2026-09-22 17:24)")
 
     def test_an_app_cannot_be_handed_a_stock_element_as_its_root(self):
         js = self.files["ACEUIAppLoader.loader.js"]

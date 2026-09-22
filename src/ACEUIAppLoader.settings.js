@@ -454,7 +454,7 @@ ACEUIAppLoader.settings = (function () {
      * "square, name, square" makes the colour chip look like a second switch.
      */
     const swatchStyle = {
-        display: "inline-block",
+        display: "block",
         flexShrink: "0",
         width: "0.2rem",
         height: "0.8rem",
@@ -487,7 +487,7 @@ ACEUIAppLoader.settings = (function () {
      */
     const grip = function () {
         return make("span", {
-            display: "inline-block",
+            display: "block",
             flexShrink: "0",
             width: "0.5rem",
             height: "0.22rem",
@@ -507,7 +507,7 @@ ACEUIAppLoader.settings = (function () {
 
     const toggleControl = function (app, spec, repaint) {
         const box = make("span", {
-            display: "inline-block",
+            display: "block",
             width: "0.6rem",
             height: "0.6rem",
             border: "1px solid " + THEME.inkOff,
@@ -1185,6 +1185,12 @@ ACEUIAppLoader.settings = (function () {
         // it opens this app's own window rather than unfolding a pane inside the drawer
         if (ACEUIAppLoader.drawer && typeof ACEUIAppLoader.drawer.registerOpener === "function") {
             ACEUIAppLoader.drawer.registerOpener(app, function () { toggle(app); });
+        }
+
+        // a settings window open when the HUD reloaded (Escape and resume) comes back: the
+        // window module remembers it was open, and this is how it is opened again
+        if (ACEUIAppLoader.window && typeof ACEUIAppLoader.window.reopen === "function") {
+            ACEUIAppLoader.window.reopen(windowId(app), function () { open(app); });
         }
 
         return values;

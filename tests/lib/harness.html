@@ -785,6 +785,61 @@ document.addEventListener("DOMContentLoaded", function () {
         eq(W.open(""), null, "an empty id opens nothing");
     });
 
+    t("window: what is open is remembered, and comes back when its owner registers how to reopen it after the page went away", function () {
+        const W = ACEUIAppLoader.window;
+        // per page: the record is keyed by the page the window was opened on (this harness is its own page)
+        const record = function () { return JSON.parse(localStorage.getItem(W.OPEN_STORE_KEY) || "{}").open || {}; };
+        const stored = function () { return (record()[ACEUIAppLoader.page] || []).join(","); };
+        let reopened = 0;
+        const opener = function (id) { reopened += 1; W.open(id, { title: "A" }); };
+
+        eq(W.reopen("memo.a", opener), false, "nothing remembered: registering opens nothing"); eq(reopened, 0);
+        W.open("memo.a", { title: "A" });
+        ok(stored().split(",").indexOf("memo.a") >= 0, "open: remembered in localStorage");
+        W.discardAll();                                   // the page goes away (Escape and resume)
+        eq(W.isOpen("memo.a"), false, "gone"); ok(stored().split(",").indexOf("memo.a") >= 0, "but still remembered");
+        eq(W.reopen("memo.a", opener), true, "the new page's owner registers: due to come back"); eq(reopened, 0, "not yet: the owner's script may still be running");
+        clock.step(5000); eq(reopened, 1, "a frame later it is back"); ok(W.isOpen("memo.a"));
+        ok(window.__log.some(function (l) { return l.indexOf("[window] memo.a reopened") >= 0; }), "and the log says so");
+        eq(W.reopen("memo.a", opener), false, "registering again while it is open does nothing more"); clock.step(5016); eq(reopened, 1);
+        W.close("memo.a");
+        ok(stored().split(",").indexOf("memo.a") < 0, "closed on purpose: forgotten");
+        W.discardAll(); eq(W.reopen("memo.a", opener), false, "and not reopened next time"); clock.step(5032); eq(reopened, 1);
+        // the HUD store arriving after this page already opened or closed something: the page's state goes to disk
+        W.open("memo.b", { title: "B" });
+        window.HUD = makeHud({}); W.adopt();
+        const inHud = function () { return window.HUD.StoredData.layouts.default.elements[W.OPEN_HUD_ID].open; };
+        ok(inHud()[ACEUIAppLoader.page].indexOf("memo.b") >= 0, "the HUD store now holds this session's list for this page");
+        eq(Object.keys(record()).join(","), ACEUIAppLoader.page, "and the record is keyed by page, this one only");
+        W.close("memo.b"); eq((inHud()[ACEUIAppLoader.page] || []).indexOf("memo.b"), -1, "and follows a close");
+        eq(W.reopen("", opener), false); eq(W.reopen("memo.c", null), false, "a bad registration is refused");
+        window.HUD = null;
+    });
+
+    t("settings: a settings window open when the HUD reloads comes back, drawn, with the next define; one closed by hand does not", function () {
+        const S = ACEUIAppLoader.settings, W = ACEUIAppLoader.window;
+        const specs = [{ key: "a", type: "toggle", label: "Alpha switch", value: true }];
+
+        S.define("persist", specs); S.open("persist"); ok(S.isOpen("persist"), "open");
+        W.discardAll();                                   // Escape and resume: the page is rebuilt
+        eq(S.isOpen("persist"), false, "gone with the page");
+        // the app's script runs again on the new page: a `when` on a row reads the values define is about to return,
+        // which is exactly why the reopen waits a frame
+        let opts = null;
+        const late = [{ key: "mode", type: "choice", label: "Mode", value: "a", options: ["a", "b"] },
+                      { key: "onlyB", type: "toggle", label: "Only in B", value: true, when: function () { return opts.mode === "b"; } }];
+        opts = S.define("persist", late);
+        eq(S.isOpen("persist"), false, "not yet open inside the owner's own call");
+        clock.step(6000);
+        ok(S.isOpen("persist"), "back a frame later"); const body = W.get(S.windowId("persist")).body;
+        ok(body.textContent.indexOf("Mode") >= 0, "and drawn");
+        const row = Array.prototype.filter.call(body.querySelectorAll("div"), function (d) { return d.textContent.indexOf("Only in B") === 0; })[0];
+        eq(row.style.display, "none", "the row whose when reads the app's own state is judged with that state in place");
+        S.set("persist", "mode", "b"); eq(row.style.display, "flex", "and follows it");
+        S.close("persist"); W.discardAll(); S.define("persist", specs); clock.step(6016);
+        eq(S.isOpen("persist"), false, "closed by hand: it stays shut");
+    });
+
     t("settings: define returns live values, merging what was stored over the defaults", function () {
         window.HUD = makeHud({});
         const S = ACEUIAppLoader.settings;

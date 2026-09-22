@@ -39,7 +39,11 @@ def first_match(pattern, lines):
 
 
 PROBLEM_KEYS = (" FAILED", "failed to load", "invalid JSON", "skipped", "could not wrap", "\" ignored: ", "asking again",
-                "(attempt ", "but running on")
+                "(attempt ", "but running on", "; no installed apps")
+# Worth showing, not worth failing over: the first preset-list request going unanswered is
+# what the retry exists for (the stock UI clears the handler under us on some pages), and the
+# retry then succeeds; only the give-up line ("; no installed apps") is a failure.
+NOTE_KEYS = ("asking again",)
 # What the game actually writes when its handler catches something: a "[crash] [error]"
 # block starting with this, then a stack. The two strings this looked for before --
 # "CRASH DETECTED" and "Exception thrown:" -- appear in no log this game has ever written,
@@ -117,13 +121,18 @@ def report(pages):
         if page["bundled"]:
             counts.append(f"{page['bundled']} bundled")
         missing = [m for m in page["attempted"] if m not in page["loaded"]]
-        state = ", ".join(page["loaded"]) if page["loaded"] else "nothing for this page"
+        # each HUD load appends the same names again; say each once, in first-seen order
+        loaded = list(dict.fromkeys(page["loaded"]))
+        state = ", ".join(loaded) if loaded else "nothing for this page"
         print(f"  {name}: {' + '.join(counts) if counts else 'no sources'} -> {state}")
         if page["overridden"]:
             print(f"      installed copies replaced the bundled: {', '.join(page['overridden'])}")
         for line in page["problems"]:
-            print("      " + line[:180])
-        bad += page["problems"]
+            # the give-up line is normal on a page with no apps (driverlabels.html never gets an answer); on the HUD it is the failure
+            note = any(k in line for k in NOTE_KEYS) or ("; no installed apps" in line and name != "/hud.html")
+            print("      " + ("note: " if note else "") + line[:180])
+            if not note:
+                bad.append(line)
         if missing:
             print(f"      started loading but never finished: {', '.join(missing)}")
             bad.append(f"{name}: {', '.join(missing)} never finished loading")
@@ -186,8 +195,9 @@ def main(argv):
         print("RESULT: loader ran but something failed (see above)")
         return 2
     hud = pages["/hud.html"]
+    hud_loaded = list(dict.fromkeys(hud["loaded"]))
     print(f"RESULT: OK - loader on {len(pages)} page(s), on the HUD: "
-          f"{', '.join(hud['loaded']) if hud['loaded'] else 'nothing'}, "
+          f"{', '.join(hud_loaded) if hud_loaded else 'nothing'}, "
           f"no crashes beyond the usual {len(driver_crashes)} driver exception(s)"
           if driver_crashes else
           f"RESULT: OK - loader on {len(pages)} page(s), on the HUD: "

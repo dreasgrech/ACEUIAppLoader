@@ -172,6 +172,7 @@ class AppTests(unittest.TestCase):
             self.assertIsNone(re.search(r"align-items\s*:\s*baseline", rules), f"{name}: align-items: baseline is not supported (use center or flex-end)")
             # `Trying to set display property to invalid value!` once per element that asks (log 2026-09-22); the stock CSS never uses it
             self.assertNotIn("inline-flex", rules, f"{name}: display: inline-flex is not supported (use flex; a flex item is laid out the same)")
+            self.assertNotIn("inline-block", rules, f"{name}: display: inline-block is not supported either (use block; the stock never uses either)")
         for name, js in self.scripts.items():
             low = js.lower()
             self.assertNotIn("<svg", low, f"{name}: no SVG built by script (per-frame geometry crashed the game)")
@@ -182,6 +183,7 @@ class AppTests(unittest.TestCase):
             self.assertNotIn("textTransform", js, f"{name}: text-transform is ignored and floods the game log")
             self.assertNotIn('alignItems: "baseline"', js, f"{name}: align-items: baseline is not supported")
             self.assertNotIn("inline-flex", js, f"{name}: display: inline-flex is not supported (use flex)")
+            self.assertNotIn("inline-block", js, f"{name}: display: inline-block is not supported (use block)")
 
     def test_identity_comes_from_the_loader(self):
         joined = "\n".join(self.scripts.values())

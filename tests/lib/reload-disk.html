@@ -1,0 +1,48 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<title>windows across a game restart (the HUD store)</title>
+<style> body { margin: 0; background: #222; color: #ddd; font: 12px monospace; } #results { white-space: pre; } </style>
+<!-- the library loading on the first page of a new game session: localStorage is empty (it
+     died with the last game), the HUD store arrives a little later with what was open when
+     the game was quit -->
+<script src="doubles.js"></script>
+<script src="lib.js"></script>
+</head>
+<body>
+<pre id="results"></pre>
+<div id="done" hidden></div>
+<script>
+(function () {
+    const H = window.__harness, t = H.t, eq = H.eq, ok = H.ok;
+    const W = ACEUIAppLoader.window, clock = window.__clock;
+    const opened = [];
+    const opener = function (id) { opened.push(id); W.open(id, { title: id }); };
+
+    t("a fresh game session: nothing in localStorage, so nothing is due until the HUD store arrives; then the windows whose owners registered come back a frame later, and an owner registering later gets its window then", function () {
+        eq(localStorage.getItem(W.OPEN_STORE_KEY), null, "nothing from a last session in localStorage");
+        eq(W.reopen("memo.disk", opener), false, "nothing due yet");
+        window.HUD = { currentLayout: "default", StoredData: { lastLayout: "default", layouts: { default: { elements: {
+            hud_acewindows: { open: { "reload-disk.html": ["memo.disk", "memo.later"], "other.html": ["memo.other"] } } } } } } };
+        window.HUD.elementModified = function (id, props) { window.HUD.StoredData.layouts.default.elements[id] = props; };
+        eq(W.adopt().join(","), "memo.disk", "the store arrives: the window with an owner is due, the one without waits");
+        eq(opened.length, 0, "not at once"); clock.step(1000);
+        eq(opened.join(","), "memo.disk", "a frame later it is back"); ok(W.isOpen("memo.disk"));
+        eq(JSON.parse(localStorage.getItem(W.OPEN_STORE_KEY)).open["reload-disk.html"].join(","), "memo.disk,memo.later", "localStorage caught up with the disk, for the next reload this session");
+        eq(W.reopen("memo.later", opener), true, "its owner registers now: due"); clock.step(1016); ok(W.isOpen("memo.later"), "and back");
+        eq(W.reopen("memo.other", opener), false, "another page's window stays where it belongs");
+        eq(W.adopt().length, 0, "the store arriving again (or asked again) has nothing more to do: both are open");
+    });
+
+    t("closing one of them by hand on this page is what the disk then says", function () {
+        W.close("memo.disk");
+        eq(window.HUD.StoredData.layouts.default.elements.hud_acewindows.open["reload-disk.html"].join(","), "memo.later", "the disk follows the close");
+        eq(W.adopt().length, 0, "and the page's own state is what stands from here (it has been touched)");
+    });
+
+    H.finish(window.__warn.map(function (w) { return "WARN " + w; }));
+}());
+</script>
+</body>
+</html>
