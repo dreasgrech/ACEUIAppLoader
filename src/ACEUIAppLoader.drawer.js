@@ -273,8 +273,8 @@ ACEUIAppLoader.drawer = (function () {
             hint: "how long the pointer can be away from the drawer before it closes" },
         { key: KEY.toggleKey, type: "key", label: "Toggle key", value: "",
             hint: "a key that opens and closes it from anywhere; click, then press the key. Delete while waiting unbinds it" },
-        { key: KEY.pinned, type: "toggle", label: "Keep open", value: false,
-            hint: "stays open until you close it with PIN, the key or a click outside" },
+        { key: KEY.pinned, type: "toggle", label: "Always open", value: false,
+            hint: "on the screen at once and after every reload; PIN in the header or the key puts it away" },
         { key: KEY.hint, type: "choice", label: "Edge hint", value: HINT_NEAR, options: [HINT_OFF, HINT_NEAR, HINT_ALWAYS], segmented: true,
             labels: { off: "Off", near: "When near", always: "Always" },
             hint: "a thin line on the edge: as the pointer nears it (the cursor is often hidden by then), always, or never" },
@@ -1092,7 +1092,10 @@ ACEUIAppLoader.drawer = (function () {
     const onSettingChange = function (key) {
         applyLook();
 
-        if (key === KEY.pinned && !isPinned() && state.open) { closeSoon(); }
+        // pinned means on the screen, now and after every reload, not "stays once you open it"
+        if (key === KEY.pinned) {
+            if (isPinned()) { open(); } else if (state.open) { closeSoon(); }
+        }
     };
 
     /**
@@ -1395,6 +1398,9 @@ ACEUIAppLoader.drawer = (function () {
         applyLook();
         refreshRows();
         scheduleSync();
+
+        // a pinned drawer is on the screen from the start, not from the first time the pointer finds it
+        if (isPinned()) { open(); }
 
         // the intro: the edge line at full strength for a moment, so the drawer can be found
         if (state.introTimer) { window.clearTimeout(state.introTimer); }

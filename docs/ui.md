@@ -42,7 +42,7 @@ opened by OPTIONS in the header and applied live without rebuilding a row:
 | | `dwell` | 0 ms | how long the pointer must stay in the zone; 0 because a flick to the edge has no dwell to give |
 | | `closeDelay` | 350 ms | |
 | | `toggleKey` | unbound | Delete while the control waits unbinds it |
-| | `pinned` | off | stays open; the header's PIN flips it |
+| | `pinned` | off | always open: on the screen at once and after every reload; the header's PIN flips it |
 | | `hint` | near | off / when near / always |
 | Panel | `side` | right | right / left |
 | | `triple` | off | the edge a third of the way in, where the centre screen of a spanned triple ends |
