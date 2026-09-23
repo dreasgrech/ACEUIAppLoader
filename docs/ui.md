@@ -6,14 +6,67 @@ rather than draws.
 
 ## The app drawer
 
-Every app shows up in an **app drawer** -- installed or bundled with the loader -- that lives off the right edge of the
-screen and slides in when the pointer reaches that edge, in the spirit of Content
+Every app shows up in an **app drawer** -- installed or bundled with the loader -- that lives off one edge of the
+screen and slides in when the pointer comes near that edge, in the spirit of Content
 Manager's app bar. Each row is a switch that shows or hides that app, and the choice
 persists across the HUD reload on Escape/resume. An app that failed to load still gets a
 row, saying why, rather than vanishing silently.
 
 The drawer is part of the loader rather than an app, because the loader is the only thing
 that knows what is installed.
+
+**How it opens.** There is no element in the zone that opens it: one `mousemove` listener on
+the window opens the drawer when the pointer is within `zone` rem of the chosen edge (from
+`innerWidth`, so a windowed resize costs nothing), and closes it after a delay once the
+pointer has been outside both the zone and the panel's box. Both are worked out from the
+settings and the viewport, never measured, so the mouse handlers read no layout. The first
+release had a 10px `<div>` the pointer had to enter; a player with a second monitor reported
+flying past it (2026-09-23). An element as wide as a player might now choose would swallow
+every click on the HUD under it, which is why it is a threshold. The zone is in rem because
+the stock UI sets `1rem = min(width / 120, height / 67.5) px`, so 2rem (the default, and the
+HUD's own margin) is the same slice of any 16:9 screen: 32px at 1080p, 43px at 1440p, 64px at
+4K. A thin hint line (`pointer-events: none`, under the panel) fades in as the pointer nears
+the edge, because the stock HUD hides the cursor three seconds after the last move and shows
+it again only after a 100px move, so the approach is usually blind; for four seconds after
+every build it shows at full strength so the drawer can be found at all.
+
+**Its own settings**, declared through `ACEUIAppLoader.settings` under the name `acedrawer`
+at build time (the settings module loads after the drawer, but `build()` runs on `ready()`),
+opened by OPTIONS in the header and applied live without rebuilding a row:
+
+| section | key | default | what |
+|---|---|---|---|
+| Opening | `zone` | 2rem (1–10) | how near the edge the pointer must come |
+| | `extent` | full | full / upper / middle / lower third of the edge |
+| | `trigger` | hover | hover / click at edge / hotkey only (with no key bound, hover applies) |
+| | `dwell` | 0 ms | how long the pointer must stay in the zone; 0 because a flick to the edge has no dwell to give |
+| | `closeDelay` | 350 ms | |
+| | `toggleKey` | unbound | Delete while the control waits unbinds it |
+| | `pinned` | off | stays open; the header's PIN flips it |
+| | `hint` | near | off / when near / always |
+| Panel | `side` | right | right / left |
+| | `triple` | off | the edge a third of the way in, where the centre screen of a spanned triple ends |
+| | `offset` | 0rem | further in from that edge; the edge line is clamped to the near 45% of the screen |
+| | `width` | 15rem (10–30) | |
+| | `top`, `bottom` | 4rem | insets, clamped to leave 10rem of panel |
+| | `scale` | 1 | one font-size on the panel; everything inside is in em |
+| | `opacity` | 0.92 | |
+| | `motion` | slide | slide / fade (moves nothing, for a machine where the slide stutters) / none |
+
+While the pane is open the zone itself is drawn on the screen as a red box, so changing the
+zone, the extent, the side or the offset shows the area that opens the drawer rather than a
+number. A pointer sample that jumps more than a quarter of the screen from the previous one,
+or repeats it, never opens the drawer: with the drawer on the left edge and a second monitor
+on the right, the pointer leaving the game window opened it in game (2026-09-23), so the
+engine evidently reports a position such as 0,0 as the pointer goes. The first few jumps are
+logged (`[drawer] pointer jumped from ... to ...`).
+
+Every value is clamped again when applied, so no stored value can put the drawer where it
+cannot be reached. `ACEUIAppLoader.drawer.resetSettings()` is the escape hatch from the dev
+console. A hidden HUD closes the drawer and keeps it closed; a held mouse button (a panel being
+dragged to the edge) does not open it; a press outside the panel closes it. Once at build the
+log says what it did: `[drawer] built: right, zone 2rem (43px), 1rem = 21.33px, viewport
+2560x1440, trigger hover`.
 
 At the foot of the panel is a **DEVELOPER APPS** switch, off by default. An app whose
 `app.json` says `"developer": true` -- the profiler, the dev console and the capabilities
@@ -55,7 +108,8 @@ Declaring settings does this for you, so most apps never call it. If the opener 
 the failure is logged and the rest of the drawer keeps working.
 
 API: `open()`, `close()`, `toggle()`, `isVisible(name)`, `setVisible(name, on)`,
-`toggleApp(name)`, `registerOpener(name, open)`, `build(apps)`.
+`toggleApp(name)`, `registerOpener(name, open)`, `build(apps)`, `setPinned(on)`, `isPinned()`,
+`resetSettings()`, and for tests `metrics()`, `inZone(x, y)`, `inPanel(x, y)`, `applyLook()`.
 
 The drawer is styled with inline styles rather than a stylesheet: the loader reaches the
 page by overriding a game file, and every file the package adds changes which layouts win
@@ -194,6 +248,11 @@ ACEUIAppLoader.settings.define("betterdeltabar", [
 - `define`'s third argument sets the pane's **width** (the window opens at it) and puts the
   **hints in a footer**: one line at the foot of the pane showing the hint of whatever row
   the pointer is over, with the reset button beside it, instead of a line under every row.
+  Its **`title`** names the window for a surface that is not an app row (the drawer's own
+  pane reads "App drawer settings").
+- A `range` with **`unit`** shows it after the number ("2 rem", "350 ms"). A `key` with the
+  value `""` is **unbound**: the control says so (or the spec's own `empty` word), the hotkey
+  never fires, and pressing Delete while the control waits for a key stores `""`.
 - A choice with **`segmented: true`** shows every option at once as a row of joined pills,
   the current one lit, so the alternatives are visible without cycling. Options are shown
   with a capital (`full` reads `Full`); `labels: { full: "Full layout" }` names them

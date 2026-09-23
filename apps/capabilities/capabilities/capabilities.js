@@ -85,7 +85,9 @@ const CapabilitiesProbe = (function () {
         statusYes: "cp-yes",
         statusNo: "cp-no",
         statusPartial: "cp-partial",
-        statusWarn: "cp-warn"
+        statusWarn: "cp-warn",
+        peProbe: "cp-pe-probe",
+        peStrip: "cp-pe-strip"
     };
 
     const STATUS_CLASS = {};
@@ -152,6 +154,239 @@ const CapabilitiesProbe = (function () {
     /** An active check row: a synchronous placeholder, then `probe(setResult)` settles it. */
     const active = function (name, note, probe) {
         return { name: name, run: function () { return { status: WARN, detail: note }; }, probe: probe };
+    };
+
+    // ---- pointer & screen ------------------------------------------------------------
+
+    /**
+     * What the engine tells a page about the pointer and the screen, for surfaces that
+     * open from a screen edge (the app drawer, 2026-09-23). Two questions cannot be
+     * answered from the stock bundle or offline: does any event fire when the pointer
+     * leaves the game window (a second monitor), and is the cursor confined to the game in
+     * fullscreen. So these rows are counters that window listeners fill from the moment the
+     * probe attaches, read on Re-run: push the pointer off the edge, alt-tab, come back and
+     * re-run. A pointer that keeps reporting x = width - 1 while you push further is confined;
+     * one that goes quiet with no leave/blur event left the window unannounced.
+     */
+    const pointer = {
+        moves: 0,
+        lastX: -1,
+        lastY: -1,
+        maxX: -1,
+        lastMoveAt: 0,
+        edgeHits: 0,        // mousemove with x at the last column
+        blurs: 0,
+        focuses: 0,
+        docLeaves: 0,       // mouseleave on document
+        docOuts: 0,         // mouseout on document with no relatedTarget: the pointer left the page
+        downs: 0,
+        lastButtons: null,  // e.buttons on the last press, or null when the engine has no such field
+        jumps: 0,           // samples more than JUMP_FRACTION of the screen from the previous one
+        lastJump: "",
+        fixture: null       // the pointer-events fixture, see buildPointerFixture
+    };
+    /** Where the pointer-events fixture is hit-tested: inside its 4px boxes at the corner. */
+    const PE_POINT_PX = 2;
+    /**
+     * A jump between two samples this large is not a hand movement (85px is a very fast
+     * flick at 58.5 fps). The app drawer opened when the pointer left the game window with
+     * the drawer on the far edge (2026-09-23), which points to the engine reporting a
+     * position such as 0,0 as the pointer leaves; this row is where that is confirmed.
+     */
+    const JUMP_FRACTION = 0.25;
+    /** The stock HUD's class for a cursor it has hidden (BaseHud.mouseToggler). */
+    const HUD_HIDE_MOUSE_CLASS = "hide-mouse";
+    const FALLBACK_PX_PER_REM = 16;
+    const PX_DECIMALS = 2;
+
+    const resetPointer = function () {
+        pointer.moves = 0;
+        pointer.lastX = -1;
+        pointer.lastY = -1;
+        pointer.maxX = -1;
+        pointer.lastMoveAt = 0;
+        pointer.edgeHits = 0;
+        pointer.blurs = 0;
+        pointer.focuses = 0;
+        pointer.docLeaves = 0;
+        pointer.docOuts = 0;
+        pointer.downs = 0;
+        pointer.lastButtons = null;
+        pointer.jumps = 0;
+        pointer.lastJump = "";
+    };
+
+    const onPointerMove = function (e) {
+        if (pointer.lastX >= 0 && Math.max(Math.abs(e.clientX - pointer.lastX), Math.abs(e.clientY - pointer.lastY)) > window.innerWidth * JUMP_FRACTION) {
+            pointer.jumps += 1;
+            pointer.lastJump = pointer.lastX + "," + pointer.lastY + " to " + e.clientX + "," + e.clientY;
+        }
+
+        pointer.moves += 1;
+        pointer.lastX = e.clientX;
+        pointer.lastY = e.clientY;
+        pointer.maxX = Math.max(pointer.maxX, e.clientX);
+        pointer.lastMoveAt = Date.now();
+
+        if (e.clientX >= window.innerWidth - 1) { pointer.edgeHits += 1; }
+    };
+
+    const onPointerDown = function (e) {
+        pointer.downs += 1;
+        pointer.lastButtons = typeof e.buttons === "number" ? e.buttons : null;
+    };
+
+    const onDocumentOut = function (e) {
+        if (e.relatedTarget === null || e.relatedTarget === undefined) { pointer.docOuts += 1; }
+    };
+
+    /** The listeners, through the panel's own bag so detach takes them off with the rest. */
+    const watchPointer = function (bag) {
+        bag.on(window, "mousemove", onPointerMove);
+        bag.on(window, "mousedown", onPointerDown, true);
+        bag.on(window, "blur", function () { pointer.blurs += 1; });
+        bag.on(window, "focus", function () { pointer.focuses += 1; });
+        bag.on(document, "mouseleave", function () { pointer.docLeaves += 1; });
+        bag.on(document, "mouseout", onDocumentOut);
+    };
+
+    /**
+     * Two transparent boxes at the screen's top-left corner, the strip over the target with
+     * `pointer-events: none` written inline, the way the drawer writes its edge hint. The
+     * stock stylesheets use the property 300 times, the inline form never; a hit test at
+     * the corner says whether the inline form works too. Placed on the body, not the panel:
+     * a hidden panel (before it is positioned) is not hit-testable.
+     */
+    const buildPointerFixture = function () {
+        const target = document.createElement("div");
+        const strip = document.createElement("div");
+
+        target.className = CLASS.peProbe;
+        strip.className = CLASS.peStrip;
+        strip.style.pointerEvents = "none";
+        document.body.appendChild(target);
+        document.body.appendChild(strip);
+        pointer.fixture = { target: target, strip: strip };
+    };
+
+    const removePointerFixture = function () {
+        if (!pointer.fixture) { return; }
+
+        [pointer.fixture.target, pointer.fixture.strip].forEach(function (node) {
+            if (node.parentNode) { node.parentNode.removeChild(node); }
+        });
+        pointer.fixture = null;
+    };
+
+    const viewportCheck = function () {
+        return { status: YES, detail: window.innerWidth + "x" + window.innerHeight + " css px (window.innerWidth/innerHeight)" };
+    };
+
+    /** 1rem in px: the stock resize() publishes window.FontSize and writes it inline on <html>. */
+    const remCheck = function () {
+        const root = document.documentElement;
+        const published = typeof window.FontSize === "number" ? window.FontSize : 0;
+        const inline = root ? parseFloat(root.style.fontSize) : 0;
+        const computed = root ? parseFloat(getComputedStyle(root).fontSize) : 0;
+        const px = published || inline || computed || FALLBACK_PX_PER_REM;
+        const from = published ? "window.FontSize" : (inline ? "inline on <html>" : (computed ? "computed style only" : "fallback"));
+
+        return {
+            status: published || inline ? YES : PARTIAL,
+            detail: px.toFixed(PX_DECIMALS) + " px per rem (" + from + "); a 16:9 screen is 120rem wide"
+        };
+    };
+
+    const screenCheck = function () {
+        const s = window.screen;
+
+        if (!s) { return { status: NO, detail: "window.screen absent" }; }
+
+        return { status: YES, detail: s.width + "x" + s.height + ", devicePixelRatio " + window.devicePixelRatio };
+    };
+
+    const cursorHiddenCheck = function () {
+        const hidden = Boolean(document.body) && document.body.classList.contains(HUD_HIDE_MOUSE_CLASS);
+
+        return hidden
+            ? { status: YES, detail: "hidden now (body." + HUD_HIDE_MOUSE_CLASS + "): the HUD hides it 3 s after the last move and shows it after a 100px move" }
+            : { status: NO, detail: "shown now (no body." + HUD_HIDE_MOUSE_CLASS + ")" };
+    };
+
+    const moveCheck = function () {
+        if (!pointer.moves) { return { status: WARN, detail: "no mousemove yet: move the mouse, then re-run" }; }
+
+        return {
+            status: YES,
+            detail: pointer.moves + " moves, last " + pointer.lastX + "," + pointer.lastY + ", max x " + pointer.maxX
+                + ", " + (Date.now() - pointer.lastMoveAt) + " ms ago"
+        };
+    };
+
+    const edgeCheck = function () {
+        const last = window.innerWidth - 1;
+
+        if (pointer.maxX < last) {
+            return { status: WARN, detail: "the pointer has not reached the right edge (max x " + pointer.maxX + " of " + last + "): push it off the edge, then re-run" };
+        }
+
+        return {
+            status: YES,
+            detail: "x = " + last + " reported " + pointer.edgeHits + " time(s); if it kept counting while you pushed further, the cursor is confined to the game"
+        };
+    };
+
+    const jumpCheck = function () {
+        if (!pointer.moves) { return { status: WARN, detail: "no mousemove yet" }; }
+
+        if (!pointer.jumps) { return { status: YES, detail: "positions are continuous: no sample more than a quarter of the screen from the previous one" }; }
+
+        return {
+            status: WARN,
+            detail: pointer.jumps + " jump(s), the last from " + pointer.lastJump
+                + ": the engine reports a position that is not a movement (the pointer leaving the window?); a surface must treat such a sample as a leave"
+        };
+    };
+
+    const focusCheck = function () {
+        if (!pointer.blurs && !pointer.focuses) {
+            return { status: WARN, detail: "no window blur/focus yet: alt-tab or click another monitor, then re-run" };
+        }
+
+        return { status: YES, detail: pointer.blurs + " blur, " + pointer.focuses + " focus" };
+    };
+
+    const leaveCheck = function () {
+        if (!pointer.docLeaves && !pointer.docOuts) {
+            return { status: WARN, detail: "no mouseleave or mouseout(relatedTarget null) on document yet: push the pointer off the screen, then re-run" };
+        }
+
+        return { status: YES, detail: pointer.docLeaves + " mouseleave, " + pointer.docOuts + " mouseout with no relatedTarget" };
+    };
+
+    const buttonsCheck = function () {
+        if (!pointer.downs) { return { status: WARN, detail: "no mousedown yet: click, then re-run" }; }
+
+        if (pointer.lastButtons === null) { return { status: NO, detail: "e.buttons undefined on mousedown: track held buttons yourself" }; }
+
+        return { status: YES, detail: "e.buttons = " + pointer.lastButtons + " on the last press" };
+    };
+
+    const pointerEventsCheck = function () {
+        const fixture = pointer.fixture;
+        let hit;
+
+        if (!fixture) { return { status: WARN, detail: "fixture not built" }; }
+
+        if (typeof document.elementFromPoint !== "function") { return { status: WARN, detail: "elementFromPoint absent: cannot hit-test" }; }
+
+        hit = document.elementFromPoint(PE_POINT_PX, PE_POINT_PX);
+
+        if (hit === fixture.target) { return { status: YES, detail: "a strip with inline pointer-events: none let the hit reach what is under it" }; }
+
+        if (hit === fixture.strip) { return { status: NO, detail: "the strip took the hit: inline pointer-events: none is ignored" }; }
+
+        return { status: WARN, detail: "hit " + (hit ? hit.tagName.toLowerCase() : "nothing") + " instead: not laid out yet? re-run" };
     };
 
     const makeCanvas = function () {
@@ -780,6 +1015,19 @@ const CapabilitiesProbe = (function () {
             p("HUD (layout store)", "HUD"),
             p("ModelCurrentCar", "ModelCurrentCar"),
             f("Model* globals", modelGlobals)
+        ] },
+        { cat: "Pointer & screen", checks: [
+            f("viewport", viewportCheck),
+            f("px per rem", remCheck),
+            f("screen", screenCheck),
+            f("cursor hidden by the HUD", cursorHiddenCheck),
+            f("mousemove", moveCheck),
+            f("pointer at the right edge", edgeCheck),
+            f("pointer jumps", jumpCheck),
+            f("window blur / focus", focusCheck),
+            f("pointer leaving the document", leaveCheck),
+            f("mouse buttons field", buttonsCheck),
+            f("inline pointer-events: none", pointerEventsCheck)
         ] },
         { cat: "Telemetry models (live)", checks: [
             f("ModelCurrentCar", inspectModel("ModelCurrentCar")),
@@ -1835,6 +2083,9 @@ const CapabilitiesProbe = (function () {
         });
 
         state.bag = ACEUIAppLoader.dom.listeners();
+        resetPointer();
+        watchPointer(state.bag);
+        buildPointerFixture();
         state.bag.on(root, "click", function (e) { onClick(state, e); });
         state.bag.on(state.search, "input", function () { onSearchChange(state); });
         state.bag.on(state.search, "keyup", function () { onSearchChange(state); });
@@ -1885,6 +2136,8 @@ const CapabilitiesProbe = (function () {
             state.bag.off();
             state.bag = null;
         }
+
+        removePointerFixture();
     };
 
     return {
@@ -1897,6 +2150,7 @@ const CapabilitiesProbe = (function () {
         attach: attach,
         detach: detach,
         SETTING_RECORD: SETTING_RECORD,
+        pointer: pointer,
         describe: describe,
         recCreate: recCreate,
         recFrame: recFrame

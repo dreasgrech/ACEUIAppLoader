@@ -252,3 +252,17 @@ body.hide-hud .ace-capabilities {
 .ace-capabilities .cp-detail.cp-no { color: rgba(255, 120, 120, 0.85); }
 .ace-capabilities .cp-detail.cp-partial { color: rgba(255, 190, 90, 0.9); }
 .ace-capabilities .cp-detail.cp-warn { color: rgba(140, 200, 255, 0.85); }
+
+/* ---- the pointer-events fixture: two transparent 4px boxes at the screen's corner ------
+   The script puts `pointer-events: none` on the strip inline (the form under test) and
+   hit-tests the corner; the target under it is what a working strip lets the hit reach. */
+
+.cp-pe-probe,
+.cp-pe-strip {
+    position: fixed;
+    left: 0;
+    top: 0;
+    width: 4px;
+    height: 4px;
+    z-index: 9500;
+}

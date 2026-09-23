@@ -113,8 +113,14 @@ ACEUIAppLoader.window = (function () {
         return remembered.pages[page];
     };
 
+    /**
+     * The record carries when it was written. The two stores drift: the HUD store reaches
+     * disk only when the game saves the layout, so after a reload it can hold an older list
+     * than localStorage does -- a settings window closed just before a session restart came
+     * back with it (seen in game 2026-09-23). `adopt` compares the stamps.
+     */
     const saveRemembered = function () {
-        const record = { open: {} };
+        const record = { open: {}, at: Date.now() };
 
         Object.keys(remembered.pages).forEach(function (name) {
             const ids = Object.keys(remembered.pages[name]);
@@ -123,6 +129,15 @@ ACEUIAppLoader.window = (function () {
         });
 
         persist.save(OPEN_HUD_ID, OPEN_STORE_KEY, record);
+    };
+
+    /** Is the HUD store's record older than the one localStorage holds? Unstamped records count as old. */
+    const hudIsStale = function (stored) {
+        const local = persist.readLocal(OPEN_STORE_KEY);
+
+        if (!local || typeof local.at !== "number") { return false; }
+
+        return typeof stored.at !== "number" || stored.at < local.at;
     };
 
     const rememberOpen = function (id, on) {
@@ -200,6 +215,15 @@ ACEUIAppLoader.window = (function () {
         const stored = persist.readHud(OPEN_HUD_ID);
 
         if (!stored || !stored.open || typeof stored.open !== "object") { return []; }
+
+        // the disk lagging behind this game session: localStorage is the truth, and the
+        // store is brought up to date rather than the other way round
+        if (hudIsStale(stored)) {
+            persist.writeHud(OPEN_HUD_ID, persist.readLocal(OPEN_STORE_KEY));
+            ACEUIAppLoader.log("[window] the HUD store's list of open windows was older than this session's; kept ours");
+
+            return [];
+        }
 
         remembered.pages = storedPages(stored);
         persist.writeLocal(OPEN_STORE_KEY, stored);
@@ -397,6 +421,7 @@ ACEUIAppLoader.window = (function () {
         CLOSE_ATTR: CLOSE_ATTR,
         OPEN_HUD_ID: OPEN_HUD_ID,
         OPEN_STORE_KEY: OPEN_STORE_KEY,
+        remembered: remembered,
         open: open,
         close: close,
         closeAll: closeAll,

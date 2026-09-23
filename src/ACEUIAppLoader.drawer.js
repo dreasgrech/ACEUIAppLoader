@@ -1,11 +1,11 @@
 /**
  * ACEUIAppLoader.drawer -- the app drawer: every loaded app in one place.
  *
- * A panel that lives off the right edge of the screen and slides in when the mouse
- * reaches that edge, in the spirit of Assetto Corsa Content Manager's app bar. It lists
- * every app the loader discovered, with a switch that shows or hides it, and opens a
- * app's own options pane if it registered one. Choices persist, so an app you switched
- * off stays off across the HUD reload on Escape/resume.
+ * A panel that lives off one edge of the screen and slides in when the mouse reaches that
+ * edge, in the spirit of Assetto Corsa Content Manager's app bar. It lists every app the
+ * loader discovered, with a switch that shows or hides it, and opens an app's own options
+ * pane if it registered one. Choices persist, so an app you switched off stays off across
+ * the HUD reload on Escape/resume.
  *
  * Why this lives in the loader rather than in an app: the loader is the only thing that
  * knows what is installed, and an app drawer that only listed *some* apps would be
@@ -21,15 +21,40 @@
  * It opens a window rather than unfolding a pane inside the drawer because an inline pane
  * pushes every row below it down the list, which with a dozen apps makes the list unusable.
  *
+ * How it opens (a player's review, 2026-09-23: "the area to open the sidebar is so close to
+ * the side of the screen ... I keep going off to my second monitor"). The first version had
+ * a 10px strip on the right edge, an element the pointer had to enter. The stock UI sizes
+ * everything from the resolution (1rem = min(width / 120, height / 67.5) px, clamped 10-48:
+ * components.js resize()), so 10px was under half a rem at 1440p and a third at 4K; and the
+ * HUD hides the cursor after three seconds and only shows it again after a 100px move
+ * (BaseHud.mouseToggler), so the approach to the edge was a blind one. Now there is no
+ * element at all: one `mousemove` listener on the window opens the drawer when the pointer
+ * is within `zone` rem of the chosen edge, so the zone can be as wide as the player likes
+ * without an element there swallowing clicks on the HUD under it, and it closes when the
+ * pointer has been outside both the zone and the panel for a moment. A click at the edge, a
+ * hotkey and a pin are the other ways in, for players whose pointer leaves the game window
+ * before it reaches the edge. A thin hint line fades in on the edge as the pointer nears it,
+ * so a hidden cursor no longer means aiming blind.
+ *
+ * All of that is the player's to set, in the drawer's own settings pane (OPTIONS in its
+ * header): zone width, which part of the edge, hover or click or hotkey, dwell, close delay,
+ * the hotkey, pinning, the hint, the side, an offset for triple screens, the panel's width,
+ * insets, scale and opacity, and whether it animates. Values are clamped again when they are
+ * applied, so no stored value can put the drawer where it cannot be reached or cover the HUD.
+ *
  * Styling note: everything here is styled with inline styles rather than a stylesheet.
  * The loader ships as a single overriding file inside a package whose layout is delicate
  * (see game-internals.md on the resource lookup), so adding a CSS file to it is a risk
  * not worth taking; and a script-created <style> element is unproven in this Cohtml
  * build. Inline styles need neither, and inline `transition` still animates the slide.
+ * Sizes inside the panel are in em, so one font-size on the panel scales the whole thing
+ * (the `me.scale` technique); the panel's own width and the zone are in rem.
  *
  * Cohtml notes: the panel is built once, and the only per-interaction writes are a
- * transform and an opacity on the panel and colours on a row. Nothing is rebuilt per
- * frame -- there is no frame loop here at all; the drawer reacts to mouse events only.
+ * transform and an opacity on the panel, an opacity on the hint line and colours on a
+ * row. Nothing is rebuilt per frame -- there is no frame loop here at all; the drawer
+ * reacts to mouse events only, and the mouse handlers read no layout: the zone and the
+ * panel's box are worked out from the settings and the viewport, never measured.
  *
  * The slide is shaped by measurement, not taste (dev/snippets/fpsprobe.js, in game
  * 2026-09-15). The HUD page advances at a rock-steady 58.5 frames per second -- half the
@@ -65,24 +90,152 @@ ACEUIAppLoader.drawer = (function () {
     const DEV_STORE_KEY = "acedrawer.developer";
     const DEV_HUD_ID = "hud_acedrawer_dev";
 
-    /** Geometry. The hot zone is a thin strip the pointer has to reach to open the drawer. */
-    const HOT_WIDTH = "10px";
-    const PANEL_WIDTH = "15rem";
-    const PANEL_TOP = "4rem";
-    const PANEL_BOTTOM = "4rem";
+    /**
+     * The drawer's own settings are declared under this name, like an app's, so the
+     * settings module stores, draws and adopts them exactly as it does for apps. It is not
+     * an app row: the pane names itself through define's `title`.
+     */
+    const DRAWER_APP = "acedrawer";
+    const SETTINGS_TITLE = "App drawer";
+    const SETTINGS_WIDTH = "36rem";
+
+    /** Setting keys, and their defaults. Every value is clamped again in metrics(). */
+    const KEY = {
+        zone: "zone", extent: "extent", trigger: "trigger", dwell: "dwell", closeDelay: "closeDelay",
+        toggleKey: "toggleKey", pinned: "pinned", hint: "hint",
+        side: "side", triple: "triple", offset: "offset", width: "width", top: "top", bottom: "bottom",
+        scale: "scale", opacity: "opacity", motion: "motion"
+    };
+
+    const SIDE_RIGHT = "right";
+    const SIDE_LEFT = "left";
+    const EXTENT_FULL = "full";
+    const EXTENT_UPPER = "upper";
+    const EXTENT_MIDDLE = "middle";
+    const EXTENT_LOWER = "lower";
+    const TRIGGER_HOVER = "hover";
+    const TRIGGER_CLICK = "click";
+    const TRIGGER_HOTKEY = "hotkey";
+    const HINT_OFF = "off";
+    const HINT_NEAR = "near";
+    const HINT_ALWAYS = "always";
+
+    /**
+     * Geometry. The zone is the distance from the edge the pointer has to come within, in
+     * rem: 2rem is the HUD's own margin (`.absolutecenter`), so by default the zone never
+     * lies over a stock widget at its default place, and it is about four times the old
+     * strip at 1440p (43px), 32px at 1080p, 64px at 4K. Mouse travel is physical pixels, so
+     * low resolutions want a larger value; the floor of 1rem is 11px at 720p.
+     */
+    const ZONE_REM = 2;
+    const ZONE_MIN_REM = 1;
+    const ZONE_MAX_REM = 10;
+    const ZONE_STEP_REM = 0.5;
+    const PANEL_WIDTH_REM = 15;
+    const WIDTH_MIN_REM = 10;
+    const WIDTH_MAX_REM = 30;
+    const PANEL_TOP_REM = 4;
+    const PANEL_BOTTOM_REM = 4;
+    const INSET_MAX_REM = 30;
+    /** What must be left of the panel when the insets are large. */
+    const MIN_PANEL_HEIGHT_REM = 10;
+    /** An extra distance from the edge, for a drawer that should not sit on the physical edge. */
+    const OFFSET_MAX_REM = 60;
+    /** Whatever the offset and triple settings ask, the edge line stays in the near half of the screen. */
+    const OFFSET_MAX_FRACTION = 0.45;
+    /** The game spans triple screens as one wide viewport; the centre screen ends a third of the way in. */
+    const TRIPLE_SCREENS = 3;
+    /** The extent settings divide the edge into thirds. */
+    const THIRDS = 3;
+    const SIZE_STEP_REM = 0.5;
+
+    const SCALE_DEFAULT = 1;
+    const SCALE_MIN = 0.7;
+    const SCALE_MAX = 1.6;
+    const SCALE_STEP = 0.05;
+    const OPACITY_DEFAULT = 0.92;
+    const OPACITY_MIN = 0.3;
+    const OPACITY_MAX = 1;
+    const OPACITY_STEP = 0.02;
+    /** The panel's colours, as rgb triplets so the opacity setting can complete them. */
+    const PANEL_RGB = "0, 0, 0";
+    const HEADER_RGB = "28, 30, 31";
+
     const SLIDE_MS = 300;
     /** The fade finishes first, so the panel is solid before it stops moving. */
     const FADE_MS = 220;
     const CLOSE_DELAY_MS = 350;
+    const CLOSE_MIN_MS = 100;
+    const CLOSE_MAX_MS = 2000;
+    const DELAY_STEP_MS = 50;
+    /**
+     * Dwell: how long the pointer must stay in the zone before the drawer opens. Off by
+     * default: a flick towards a second monitor has no dwell to give, and the flick is the
+     * case the zone exists for. It is a guard for players whose pointer passes the edge on
+     * the way to something else.
+     */
+    const DWELL_MS = 0;
+    const DWELL_MAX_MS = 1000;
 
-    /** Above the stock HUD, below nothing in particular; the HUD does not use z-index much. */
+    /**
+     * The hint: a thin line on the edge, `pointer-events: none`, under the panel, that
+     * fades in while the pointer is within HINT_REACH zones of the edge -- the cursor is
+     * usually hidden by then (see the header). Thin rather than zone-wide because inline
+     * `pointer-events: none` is unproven in this engine (the stock uses it in stylesheets
+     * only): a line under the panel blocks nothing that matters if it fails. For a few
+     * seconds after every build it shows at full strength whatever the setting, so a
+     * player who never found the old strip sees where the drawer lives.
+     */
+    const HINT_REACH = 2;
+    const HINT_LINE_REM = 0.3;
+    const HINT_FADE_MS = 150;
+    const HINT_INTRO_MS = 4000;
+    const HINT_ALPHA_NEAR = "0.9";
+    const HINT_ALPHA_ALWAYS = "0.35";
+    const HINT_ALPHA_OFF = "0";
+    /** Red, so the line reads against the scene: a white one was not seen in game (2026-09-23). */
+    const HINT_COLOUR = "rgb(255, 40, 40)";
+    /**
+     * The zone drawn as a box while the drawer's settings pane is open, so a player changing
+     * the zone or the extent sees the area that opens the drawer rather than a number.
+     */
+    const ZONE_BOX_BG = "rgba(255, 40, 40, 0.18)";
+    const ZONE_BOX_BORDER = "1px solid rgba(255, 40, 40, 0.6)";
+
+    /**
+     * A pointer sample that jumps more than this fraction of the screen from the previous
+     * one is not a movement. With the drawer on the left edge and a second monitor on the
+     * right, the pointer leaving the game to the right opened the drawer (in game
+     * 2026-09-23): the engine evidently reports a position such as 0,0 as the pointer goes.
+     * A hand at 5000 px/s moves about 85px between two 58.5 fps samples; a quarter of the
+     * screen is far beyond that. Neither a jump nor a repeat of the previous position opens
+     * the drawer, and the first few jumps are logged so the probe's answer can be checked.
+     */
+    const JUMP_FRACTION = 0.25;
+    const JUMP_LOG_MAX = 5;
+
+    /**
+     * How the panel comes and goes. The slide is the stock idiom, but nothing in the stock
+     * UI moves a panel this large and it was seen to hitch in game (2026-09-23); a fade
+     * moves nothing, and "none" is instant.
+     */
+    const MOTION_SLIDE = "slide";
+    const MOTION_FADE = "fade";
+    const MOTION_NONE = "none";
+
+    /** Above the stock HUD, below nothing in particular; the HUD does not use z-index much. The hint sits under the panel. */
     const Z_INDEX = "9000";
+    const HINT_Z_INDEX = "8999";
+
+    /** What 1rem is when nothing says: the browser default, for the harness. */
+    const FALLBACK_PX_PER_REM = 16;
+    const LOG_DECIMALS = 2;
 
     /**
      * Where the drawer belongs: the HUD, and any other page an app actually runs on. The
      * loader is on every page, so ready() fires on every page too; on the menus nothing
-     * loads, and a hot zone there sat over the stock menus' own scrollbars at the right
-     * edge and opened a drawer whose every row said "not-for-this-page".
+     * loads, and a zone there sat over the stock menus' own scrollbars at the right edge
+     * and opened a drawer whose every row said "not-for-this-page".
      */
     const HUD_PAGE = "hud.html";
     const LOADED_STATUS = "loaded";
@@ -92,22 +245,78 @@ ACEUIAppLoader.drawer = (function () {
 
     const TITLE_TEXT = "APPS";
     /**
-     * A word, not a symbol. The main font has no gear glyph -- it rendered as a blank box
+     * Words, not symbols. The main font has no gear glyph -- it rendered as a blank box
      * in game -- and the stock UI's icon font ('icons', /fonts/acevoicons.ttf) addresses
      * its glyphs by bare characters whose meanings are not documented anywhere we can
      * check, so guessing one risks showing the wrong picture rather than none.
      */
     const OPTIONS_GLYPH = "OPTIONS";
+    const PIN_TEXT = "PIN";
+    const PINNED_TEXT = "PINNED";
     const EMPTY_TEXT = "no apps loaded on this page";
     const DEV_TEXT = "DEVELOPER APPS";
+
+    /** The drawer's settings, in the order the pane draws them. */
+    const SPECS = [
+        { key: "opening", type: "section", label: "Opening", columns: 2 },
+        { key: KEY.zone, type: "range", label: "Edge zone", value: ZONE_REM, min: ZONE_MIN_REM, max: ZONE_MAX_REM, step: ZONE_STEP_REM, unit: "rem", digits: 1,
+            hint: "how close to the edge the pointer must come; 2 is the HUD's own margin. Mouse travel is in pixels, so a low resolution wants more" },
+        { key: KEY.extent, type: "choice", label: "Along the edge", value: EXTENT_FULL, options: [EXTENT_FULL, EXTENT_UPPER, EXTENT_MIDDLE, EXTENT_LOWER], segmented: true,
+            hint: "which part of the edge opens it: the whole height or one third of it" },
+        { key: KEY.trigger, type: "choice", label: "Open with", value: TRIGGER_HOVER, options: [TRIGGER_HOVER, TRIGGER_CLICK, TRIGGER_HOTKEY], segmented: true,
+            labels: { hover: "Hover", click: "Click at edge", hotkey: "Hotkey only" },
+            hint: "hover: reaching the zone opens it; click: a press in the zone; hotkey only: the key below (with no key bound, hover applies)" },
+        { key: KEY.dwell, type: "range", label: "Dwell", value: DWELL_MS, min: 0, max: DWELL_MAX_MS, step: DELAY_STEP_MS, unit: "ms", digits: 0,
+            when: function (app) { return ACEUIAppLoader.settings.get(app, KEY.trigger) === TRIGGER_HOVER; },
+            hint: "how long the pointer must stay in the zone before it opens; 0 opens at once, which is what a flick to the edge needs" },
+        { key: KEY.closeDelay, type: "range", label: "Close after", value: CLOSE_DELAY_MS, min: CLOSE_MIN_MS, max: CLOSE_MAX_MS, step: DELAY_STEP_MS, unit: "ms", digits: 0,
+            hint: "how long the pointer can be away from the drawer before it closes" },
+        { key: KEY.toggleKey, type: "key", label: "Toggle key", value: "",
+            hint: "a key that opens and closes it from anywhere; click, then press the key. Delete while waiting unbinds it" },
+        { key: KEY.pinned, type: "toggle", label: "Keep open", value: false,
+            hint: "stays open until you close it with PIN, the key or a click outside" },
+        { key: KEY.hint, type: "choice", label: "Edge hint", value: HINT_NEAR, options: [HINT_OFF, HINT_NEAR, HINT_ALWAYS], segmented: true,
+            labels: { off: "Off", near: "When near", always: "Always" },
+            hint: "a thin line on the edge: as the pointer nears it (the cursor is often hidden by then), always, or never" },
+        { key: "panel", type: "section", label: "Panel", columns: 2 },
+        { key: KEY.side, type: "choice", label: "Side", value: SIDE_RIGHT, options: [SIDE_LEFT, SIDE_RIGHT], segmented: true,
+            hint: "the edge it lives on. With a second monitor to the right, the left edge is the one the pointer cannot leave through" },
+        { key: KEY.triple, type: "toggle", label: "Triple screen", value: false,
+            hint: "puts the edge a third of the way in, where the centre screen ends" },
+        { key: KEY.offset, type: "range", label: "Edge offset", value: 0, min: 0, max: OFFSET_MAX_REM, step: SIZE_STEP_REM, unit: "rem", digits: 1,
+            hint: "moves the edge the drawer uses inwards from the screen edge, on top of the triple-screen third" },
+        { key: KEY.width, type: "range", label: "Width", value: PANEL_WIDTH_REM, min: WIDTH_MIN_REM, max: WIDTH_MAX_REM, step: SIZE_STEP_REM, unit: "rem", digits: 1 },
+        { key: KEY.top, type: "range", label: "Top inset", value: PANEL_TOP_REM, min: 0, max: INSET_MAX_REM, step: SIZE_STEP_REM, unit: "rem", digits: 1 },
+        { key: KEY.bottom, type: "range", label: "Bottom inset", value: PANEL_BOTTOM_REM, min: 0, max: INSET_MAX_REM, step: SIZE_STEP_REM, unit: "rem", digits: 1 },
+        { key: KEY.scale, type: "range", label: "Scale", value: SCALE_DEFAULT, min: SCALE_MIN, max: SCALE_MAX, step: SCALE_STEP, digits: 2,
+            hint: "the size of the rows and text; the width is its own setting" },
+        { key: KEY.opacity, type: "range", label: "Opacity", value: OPACITY_DEFAULT, min: OPACITY_MIN, max: OPACITY_MAX, step: OPACITY_STEP, digits: 2 },
+        { key: KEY.motion, type: "choice", label: "Motion", value: MOTION_SLIDE, options: [MOTION_SLIDE, MOTION_FADE, MOTION_NONE], segmented: true,
+            labels: { slide: "Slide", fade: "Fade", none: "None" },
+            hint: "how it appears: slide in from the edge, fade in place, or at once. Fade moves nothing, if the slide stutters on your machine" }
+    ];
+
+    /** Defaults by key, read from SPECS so there is one copy of each. */
+    const DEFAULTS = {};
+
+    SPECS.forEach(function (spec) {
+        if (spec.type !== "section") { DEFAULTS[spec.key] = spec.value; }
+    });
 
     const state = {
         built: false,
         open: false,
         panel: null,
+        header: null,
         list: null,
         count: null,
-        hot: null,
+        devHolder: null,        // the developer row's box, painted with the header's colour
+        hint: null,             // the edge line
+        zoneBox: null,          // the zone drawn while the settings pane is open
+        track: null,            // the list's scrollbar gutter and thumb
+        thumb: null,
+        scroller: null,         // ACEUIAppLoader.scroll handle for the list
+        pin: null,              // the PIN button in the header
         apps: [],               // { name, title, status, developer, holder, row, box, label, gear }
         visible: {},            // name -> bool, persisted
         dev: {},                // name -> is it a developer tool, from the rows we built
@@ -115,7 +324,20 @@ ACEUIAppLoader.drawer = (function () {
         devRow: null,           // { box, label }, the switch at the foot of the panel
         openers: {},            // name -> what to open when its OPTIONS button is clicked
         touched: false,         // the user flipped a switch: newer than anything on disk
-        closeTimer: 0
+        closeTimer: 0,
+        dwellTimer: 0,
+        introTimer: 0,
+        intro: false,           // the hint is showing at full strength after a build
+        buttonHeld: false,      // a mouse button is down: a drag to the edge is not a request to open
+        opts: null,             // the settings as last read, a plain object (see readOptions)
+        look: null,             // the metrics last applied, for the log and the tests
+        wired: false,           // the window listeners are on (once per page)
+        unsubscribe: null,      // settings.onChange, subscribed once
+        unbindKey: null,        // keys.bind, bound once
+        last: { x: 0, y: 0, known: false },     // the previous pointer sample, for the jump guard
+        jumpsLogged: 0,
+        syncTimer: 0,           // the list's scrollbar is measured after a slide, never during one
+        parkTimer: 0            // fade: the panel is parked off-screen once the fade is over
     };
 
     const persist = ACEUIAppLoader.persist;
@@ -141,12 +363,126 @@ ACEUIAppLoader.drawer = (function () {
 
     const css = ACEUIAppLoader.dom.css;
     const div = ACEUIAppLoader.dom.div;
+    const clamp = ACEUIAppLoader.clamp;
 
     /** Set the text of an element we already have; `dom.make` covers the create-and-fill case. */
     const text = function (node, value) {
         node.textContent = value;
 
         return node;
+    };
+
+    // ---- the drawer's own settings -------------------------------------------------
+
+    /**
+     * The settings as a plain object: the mouse handler reads a dozen of them per event,
+     * and a lookup through the settings module for each would be twelve filters over the
+     * spec list. Refreshed on build and on every change. Without the settings module (a
+     * bare harness) the defaults apply.
+     */
+    const readOptions = function () {
+        const settings = ACEUIAppLoader.settings;
+        const opts = {};
+
+        Object.keys(DEFAULTS).forEach(function (key) {
+            const value = settings ? settings.get(DRAWER_APP, key) : undefined;
+
+            opts[key] = value === undefined ? DEFAULTS[key] : value;
+        });
+
+        state.opts = opts;
+
+        return opts;
+    };
+
+    const options = function () {
+        return state.opts || readOptions();
+    };
+
+    /** The trigger in force: "hotkey only" with no key bound would leave no way in, so hover applies. */
+    const triggerNow = function () {
+        const opts = options();
+
+        return opts.trigger === TRIGGER_HOTKEY && !opts.toggleKey ? TRIGGER_HOVER : opts.trigger;
+    };
+
+    /**
+     * What 1rem is, in px. The stock resize() writes it inline on <html> and publishes it
+     * as window.FontSize; getComputedStyle reports inline values in this engine, so the
+     * three agree in game and the last is what a browser harness has.
+     */
+    const pxPerRem = function () {
+        const root = document.documentElement;
+        const published = typeof window.FontSize === "number" ? window.FontSize : 0;
+        const inline = root ? parseFloat(root.style.fontSize) : 0;
+        const computed = root ? parseFloat(getComputedStyle(root).fontSize) : 0;
+
+        return published || inline || computed || FALLBACK_PX_PER_REM;
+    };
+
+    /**
+     * The geometry in px, from the settings and the viewport alone: no layout reads (the
+     * panel is mid-slide for 300 ms, and layout reads lag in this engine), no calc() (an
+     * inline calc is applied as nothing). Clamped so no stored value can put the drawer
+     * where it cannot be reached or leave nothing of it: the edge line stays in the near
+     * half of the screen and the insets leave MIN_PANEL_HEIGHT_REM.
+     */
+    const metrics = function () {
+        const opts = options();
+        const ppr = pxPerRem();
+        const W = window.innerWidth;
+        const H = window.innerHeight;
+        const minHeight = MIN_PANEL_HEIGHT_REM * ppr;
+        let top = clamp(opts.top, 0, INSET_MAX_REM) * ppr;
+        let bottom = clamp(opts.bottom, 0, INSET_MAX_REM) * ppr;
+
+        if (top + bottom > H - minHeight) {
+            bottom = Math.max(0, H - minHeight - top);
+            top = Math.min(top, Math.max(0, H - minHeight));
+        }
+
+        return {
+            W: W,
+            H: H,
+            pxPerRem: ppr,
+            side: opts.side === SIDE_LEFT ? SIDE_LEFT : SIDE_RIGHT,
+            zonePx: clamp(opts.zone, ZONE_MIN_REM, ZONE_MAX_REM) * ppr,
+            offsetPx: Math.min(clamp(opts.offset, 0, OFFSET_MAX_REM) * ppr + (opts.triple ? W / TRIPLE_SCREENS : 0), W * OFFSET_MAX_FRACTION),
+            widthPx: clamp(opts.width, WIDTH_MIN_REM, WIDTH_MAX_REM) * ppr,
+            topPx: top,
+            bottomPx: bottom,
+            extentTop: opts.extent === EXTENT_MIDDLE ? H / THIRDS : (opts.extent === EXTENT_LOWER ? H * (THIRDS - 1) / THIRDS : 0),
+            extentBottom: opts.extent === EXTENT_UPPER ? H / THIRDS : (opts.extent === EXTENT_MIDDLE ? H * (THIRDS - 1) / THIRDS : H)
+        };
+    };
+
+    /** How far a pointer x is from the edge line the drawer uses; negative beyond it. */
+    const edgeDistance = function (x, m) {
+        return m.side === SIDE_LEFT ? x - m.offsetPx : m.W - m.offsetPx - x;
+    };
+
+    const inExtent = function (y, m) {
+        return y >= m.extentTop && y <= m.extentBottom;
+    };
+
+    const inZone = function (x, y, m) {
+        const mm = m || metrics();
+        const d = edgeDistance(x, mm);
+
+        return d >= 0 && d <= mm.zonePx && inExtent(y, mm);
+    };
+
+    const nearZone = function (x, m) {
+        const d = edgeDistance(x, m);
+
+        return d >= 0 && d <= m.zonePx * HINT_REACH;
+    };
+
+    const inPanel = function (x, y, m) {
+        const mm = m || metrics();
+        const d = edgeDistance(x, mm);
+
+        return d >= 0 && d <= mm.widthPx && y >= mm.topPx && y <= mm.H - mm.bottomPx;
     };
 
     // ---- visibility ----------------------------------------------------------------
@@ -259,6 +595,16 @@ ACEUIAppLoader.drawer = (function () {
         return state.developer;
     };
 
+    /** The list changed height: the scrollbar follows, and hides when everything fits. */
+    const syncList = function () {
+        if (!state.scroller || !state.list) { return; }
+
+        state.scroller.invalidate();
+        state.scroller.sync();
+
+        if (state.track) { state.track.style.visibility = state.list.scrollHeight > state.list.clientHeight ? "" : "hidden"; }
+    };
+
     /**
      * Show or hide the developer tools. This is a master switch, not a filter: an app it
      * hides is stopped as well, because an app drawn over the HUD with no row to reach it
@@ -303,6 +649,8 @@ ACEUIAppLoader.drawer = (function () {
             });
             state.devRow.label.style.color = state.developer ? THEME.ink : THEME.inkOff;
         }
+
+        syncList();
     };
 
     /** Re-apply every switch: after adopting the HUD store, apps may need hiding. */
@@ -393,67 +741,454 @@ ACEUIAppLoader.drawer = (function () {
         state.closeTimer = 0;
     };
 
+    const cancelDwell = function () {
+        if (!state.dwellTimer) { return; }
+
+        window.clearTimeout(state.dwellTimer);
+        state.dwellTimer = 0;
+    };
+
+    /** Where the panel parks when closed: just off its own edge. */
+    const closedTransform = function () {
+        return metrics().side === SIDE_LEFT ? "translateX(-100%)" : "translateX(100%)";
+    };
+
+    const setHint = function (alpha) {
+        if (state.hint && state.hint.style.opacity !== alpha) { state.hint.style.opacity = alpha; }
+    };
+
+    /**
+     * The hint's strength for this moment: nothing while the drawer is open or the HUD is
+     * hidden; full while the pointer is near or for the intro after a build; the quiet
+     * "always" level otherwise, if asked for.
+     */
+    const updateHint = function (near) {
+        const mode = options().hint;
+
+        if (mode === HINT_OFF || state.open || ACEUIAppLoader.hudHidden()) {
+            setHint(HINT_ALPHA_OFF);
+        } else if (near || state.intro) {
+            setHint(HINT_ALPHA_NEAR);
+        } else {
+            setHint(mode === HINT_ALWAYS ? HINT_ALPHA_ALWAYS : HINT_ALPHA_OFF);
+        }
+    };
+
+    const cancelPark = function () {
+        if (!state.parkTimer) { return; }
+
+        window.clearTimeout(state.parkTimer);
+        state.parkTimer = 0;
+    };
+
+    /**
+     * Measure the list for its scrollbar once the panel has stopped moving: a layout read at
+     * the start of a slide is a stall in the slide's first frames, and at build the list
+     * has no layout yet anyway.
+     */
+    const scheduleSync = function () {
+        if (state.syncTimer) { window.clearTimeout(state.syncTimer); }
+
+        state.syncTimer = window.setTimeout(function () {
+            state.syncTimer = 0;
+            syncList();
+        }, SLIDE_MS);
+    };
+
     const open = function () {
         cancelClose();
+        cancelDwell();
+        cancelPark();
 
         if (!state.panel || state.open) { return; }
 
         state.open = true;
+        // with a fade the transition names opacity only, so this move is instant: unparked, then faded in
         state.panel.style.transform = "translateX(0)";
         state.panel.style.opacity = "1";
+        updateHint(false);
+        scheduleSync();
     };
 
     const close = function () {
         cancelClose();
+        cancelDwell();
+        cancelPark();
 
         if (!state.panel || !state.open) { return; }
 
         state.open = false;
-        state.panel.style.transform = "translateX(100%)";
         state.panel.style.opacity = "0";
+
+        // a fading panel is parked off-screen once it is invisible; parked at once, it would vanish rather than fade
+        if (options().motion === MOTION_FADE) {
+            state.parkTimer = window.setTimeout(function () {
+                state.parkTimer = 0;
+
+                if (!state.open && state.panel) { state.panel.style.transform = closedTransform(); }
+            }, FADE_MS);
+        } else {
+            state.panel.style.transform = closedTransform();
+        }
+
+        updateHint(false);
     };
 
     const closeSoon = function () {
         cancelClose();
-        state.closeTimer = window.setTimeout(close, CLOSE_DELAY_MS);
+        state.closeTimer = window.setTimeout(close, clamp(options().closeDelay, CLOSE_MIN_MS, CLOSE_MAX_MS));
     };
 
     const toggle = function () {
         if (state.open) { close(); } else { open(); }
     };
 
+    const isPinned = function () {
+        return Boolean(options().pinned);
+    };
+
+    const paintPin = function () {
+        if (!state.pin) { return; }
+
+        text(state.pin, isPinned() ? PINNED_TEXT : PIN_TEXT);
+        state.pin.style.color = isPinned() ? THEME.on : THEME.inkDim;
+    };
+
+    const setPinned = function (on) {
+        const settings = ACEUIAppLoader.settings;
+
+        if (settings && settings.specs(DRAWER_APP).length) {
+            settings.set(DRAWER_APP, KEY.pinned, Boolean(on));
+        } else {
+            options().pinned = Boolean(on);
+            paintPin();
+        }
+
+        return isPinned();
+    };
+
+    /** Is the drawer's own settings pane open? While it is, the zone is drawn on screen. */
+    const paneOpen = function () {
+        const settings = ACEUIAppLoader.settings;
+
+        return Boolean(settings && settings.specs(DRAWER_APP).length && settings.isOpen(DRAWER_APP));
+    };
+
+    const showZoneBox = function (on) {
+        if (!state.zoneBox) { return; }
+
+        const wanted = on ? "" : "hidden";
+
+        if (state.zoneBox.style.visibility !== wanted) { state.zoneBox.style.visibility = wanted; }
+    };
+
+    const logJump = function (from, x, y) {
+        if (state.jumpsLogged >= JUMP_LOG_MAX) { return; }
+
+        state.jumpsLogged += 1;
+        ACEUIAppLoader.log("[drawer] pointer jumped from " + from.x + "," + from.y + " to " + x + "," + y
+            + ": not a movement, ignored" + (state.jumpsLogged === JUMP_LOG_MAX ? " (the last one logged)" : ""));
+    };
+
+    // ---- the trigger ---------------------------------------------------------------
+
+    /**
+     * The pointer moved. Everything the drawer does with the mouse starts here, and none
+     * of it reads layout: the zone and the panel's box come from metrics(). A hidden HUD
+     * closes the drawer and keeps it closed. A held button is a drag (an app panel on its
+     * way to the edge), not a request to open. Only a real movement from a known position
+     * can open it: not a jump (see JUMP_FRACTION), not a repeat of the last sample, and
+     * not the first sample after a build.
+     */
+    const onMove = function (e) {
+        if (!state.panel) { return; }
+
+        const m = metrics();
+        const x = e.clientX;
+        const y = e.clientY;
+        const last = state.last;
+        const moved = !last.known || x !== last.x || y !== last.y;
+        const jump = last.known && Math.max(Math.abs(x - last.x), Math.abs(y - last.y)) > m.W * JUMP_FRACTION;
+        const arrived = last.known && moved && !jump;
+
+        if (jump) { logJump(last, x, y); }
+
+        last.x = x;
+        last.y = y;
+        last.known = true;
+
+        showZoneBox(paneOpen());
+
+        if (ACEUIAppLoader.hudHidden()) {
+            if (state.open) { close(); }
+
+            cancelDwell();
+            updateHint(false);
+
+            return;
+        }
+
+        const zone = inZone(x, y, m);
+
+        // near the edge anywhere along it, not only within the extent: the line itself shows
+        // which part of the edge opens the drawer. Only a movement lights it: a jump or a
+        // repeated position is the engine talking, not the hand
+        updateHint(arrived && nearZone(x, m));
+
+        if (!state.open) {
+            if (arrived && triggerNow() === TRIGGER_HOVER && zone && !state.buttonHeld) {
+                if (options().dwell > 0) {
+                    if (!state.dwellTimer) { state.dwellTimer = window.setTimeout(open, clamp(options().dwell, 0, DWELL_MAX_MS)); }
+                } else {
+                    open();
+                }
+            } else {
+                cancelDwell();
+            }
+
+            return;
+        }
+
+        if (isPinned()) { return; }
+
+        if (zone || inPanel(x, y, m)) {
+            cancelClose();
+        } else if (!state.closeTimer) {
+            closeSoon();
+        }
+    };
+
+    /**
+     * A press: in the zone it opens the drawer when that is the trigger; outside the panel
+     * it closes an open drawer (pinned or not, a click elsewhere on the HUD is the player
+     * moving on). Tracked either way, so a drag in progress cannot open it.
+     */
+    const onDown = function (e) {
+        state.buttonHeld = true;
+
+        if (!state.panel || ACEUIAppLoader.hudHidden()) { return; }
+
+        const m = metrics();
+
+        if (!state.open) {
+            if (triggerNow() === TRIGGER_CLICK && inZone(e.clientX, e.clientY, m)) { open(); }
+
+            return;
+        }
+
+        if (!inPanel(e.clientX, e.clientY, m) && !isPinned()) { close(); }
+    };
+
+    const onUp = function () {
+        state.buttonHeld = false;
+    };
+
+    /** The window lost focus (if the engine ever says so): the pointer is elsewhere. */
+    const onBlur = function () {
+        state.buttonHeld = false;
+
+        if (state.open && !isPinned()) { closeSoon(); }
+    };
+
+    const onHotkey = function (e) {
+        if (!state.panel || ACEUIAppLoader.hudHidden()) { return; }
+
+        toggle();
+        e.preventDefault();
+    };
+
+    const currentKey = function () {
+        return options().toggleKey || "";
+    };
+
+    /** The window listeners, once per page: build() may run again, the listeners must not. */
+    const wire = function () {
+        const dom = ACEUIAppLoader.dom;
+
+        if (state.wired) { return; }
+
+        state.wired = true;
+        dom.on(window, "mousemove", onMove);
+        dom.on(window, "mousedown", onDown, true);
+        dom.on(window, "mouseup", onUp, true);
+        dom.on(document, "mouseup", onUp, true);
+        dom.on(window, "blur", onBlur);
+        dom.on(window, "resize", function () { applyLook(); });
+
+        if (ACEUIAppLoader.keys) { state.unbindKey = ACEUIAppLoader.keys.bind(currentKey, onHotkey); }
+    };
+
+    // ---- the look ------------------------------------------------------------------
+
+    const rgba = function (rgb, alpha) {
+        return "rgba(" + rgb + ", " + alpha + ")";
+    };
+
+    /**
+     * Put the settings on the panel and the hint. Called on build, on every change and on
+     * a window resize; it writes styles only, never rebuilds rows, so a change is instant.
+     * Offsets and insets are written in px (they are clamped against the viewport), the
+     * width in rem, and the scale is one font-size in rem on the panel, everything inside
+     * being in em.
+     */
+    const applyLook = function () {
+        const opts = readOptions();
+        const m = metrics();
+        const left = m.side === SIDE_LEFT;
+        const alpha = clamp(opts.opacity, OPACITY_MIN, OPACITY_MAX);
+        const fade = "opacity " + FADE_MS + "ms ease-out";
+        const slide = opts.motion === MOTION_SLIDE ? "transform " + SLIDE_MS + "ms ease-out, " + fade : (opts.motion === MOTION_FADE ? fade : "none");
+
+        state.look = m;
+
+        if (!state.panel) { return m; }
+
+        // the zone itself, drawn while the settings pane is open
+        css(state.zoneBox, {
+            left: left ? Math.round(m.offsetPx) + "px" : "auto",
+            right: left ? "auto" : Math.round(m.offsetPx) + "px",
+            top: Math.round(m.extentTop) + "px",
+            bottom: Math.round(m.H - m.extentBottom) + "px",
+            width: Math.round(m.zonePx) + "px"
+        });
+        showZoneBox(paneOpen());
+
+        // whole pixels: an edge at a fraction is antialiased into a hairline (see dom.snapToPixels)
+        css(state.panel, {
+            left: left ? Math.round(m.offsetPx) + "px" : "auto",
+            right: left ? "auto" : Math.round(m.offsetPx) + "px",
+            top: Math.round(m.topPx) + "px",
+            bottom: Math.round(m.bottomPx) + "px",
+            width: (m.widthPx / m.pxPerRem) + "rem",
+            fontSize: clamp(opts.scale, SCALE_MIN, SCALE_MAX) + "rem",
+            background: rgba(PANEL_RGB, alpha),
+            borderLeft: left ? "none" : THEME.border,
+            borderRight: left ? THEME.border : "none",
+            borderRadius: left ? "0 0.25em 0.25em 0" : "0.25em 0 0 0.25em",
+            transition: slide,
+            transform: state.open ? "translateX(0)" : closedTransform()
+        });
+
+        if (state.header) { state.header.style.background = rgba(HEADER_RGB, alpha); }
+
+        if (state.devHolder) { state.devHolder.style.background = rgba(HEADER_RGB, alpha); }
+
+        css(state.hint, {
+            left: left ? Math.round(m.offsetPx) + "px" : "auto",
+            right: left ? "auto" : Math.round(m.offsetPx) + "px",
+            top: Math.round(m.extentTop) + "px",
+            bottom: Math.round(m.H - m.extentBottom) + "px",
+            width: HINT_LINE_REM + "rem",
+            transition: opts.motion === MOTION_NONE ? "none" : "opacity " + HINT_FADE_MS + "ms ease-out"
+        });
+
+        paintPin();
+        updateHint(false);
+        syncList();
+
+        return m;
+    };
+
+    const onSettingChange = function (key) {
+        applyLook();
+
+        if (key === KEY.pinned && !isPinned() && state.open) { closeSoon(); }
+    };
+
+    /**
+     * Declare the drawer's settings. Every build declares them again (a redefine replaces
+     * the schema and keeps the listeners), but the change listener is subscribed once.
+     */
+    const defineSettings = function () {
+        const settings = ACEUIAppLoader.settings;
+
+        if (!settings || typeof settings.define !== "function") { return false; }
+
+        settings.define(DRAWER_APP, SPECS, { width: SETTINGS_WIDTH, hints: "footer", title: SETTINGS_TITLE });
+
+        if (!state.unsubscribe) { state.unsubscribe = settings.onChange(DRAWER_APP, onSettingChange); }
+
+        return true;
+    };
+
+    const openSettings = function () {
+        const settings = ACEUIAppLoader.settings;
+
+        if (settings && settings.specs(DRAWER_APP).length) { settings.toggle(DRAWER_APP); }
+
+        showZoneBox(paneOpen());
+    };
+
+    /** Every drawer setting back to its default: the console escape hatch, documented in the README. */
+    const resetSettings = function () {
+        const settings = ACEUIAppLoader.settings;
+
+        if (settings && settings.specs(DRAWER_APP).length) {
+            settings.reset(DRAWER_APP);
+        } else {
+            state.opts = null;
+        }
+
+        return applyLook();
+    };
+
+    const logBuilt = function (m) {
+        ACEUIAppLoader.log("[drawer] built: " + m.side + ", zone " + options().zone + "rem (" + Math.round(m.zonePx) + "px), 1rem = "
+            + m.pxPerRem.toFixed(LOG_DECIMALS) + "px, viewport " + m.W + "x" + m.H + ", trigger " + triggerNow()
+            + (currentKey() ? ", key " + currentKey() : "") + (isPinned() ? ", pinned" : ""));
+    };
+
     // ---- building ------------------------------------------------------------------
+
+    /** A small text button in the header: OPTIONS, PIN. */
+    const headerButton = function (label, onClick) {
+        const node = css(text(document.createElement("span"), label), {
+            flex: "0 0 auto",
+            marginLeft: "0.5em",
+            padding: "0 0.2em",
+            color: THEME.inkDim,
+            fontSize: "0.65em",
+            cursor: "pointer"
+        });
+
+        node.addEventListener("click", function (e) {
+            onClick();
+            e.stopPropagation();
+        });
+
+        return node;
+    };
 
     const buildRow = function (app, onToggle) {
         const row = div({
             display: "flex",
             flexDirection: "row",
             alignItems: "center",
-            padding: "0.3rem 0.6rem",
+            padding: "0.3em 0.6em",
             cursor: "pointer"
         });
         const box = div({
             flex: "0 0 auto",
-            width: "0.6rem",
-            height: "0.6rem",
-            marginRight: "0.5rem",
+            width: "0.6em",
+            height: "0.6em",
+            marginRight: "0.5em",
             border: "1px solid " + THEME.inkOff,
-            borderRadius: "0.15rem"
+            borderRadius: "0.15em"
         });
         const label = css(text(document.createElement("span"), app.title), {
             flex: "1 1 auto",
             color: THEME.ink,
-            fontSize: "0.75rem",
+            fontSize: "0.75em",
             overflow: "hidden",
             textOverflow: "ellipsis",
             whiteSpace: "nowrap"
         });
         const gear = css(text(document.createElement("span"), OPTIONS_GLYPH), {
             flex: "0 0 auto",
-            marginLeft: "0.4rem",
-            padding: "0 0.2rem",
+            marginLeft: "0.4em",
+            padding: "0 0.2em",
             color: THEME.inkDim,
-            fontSize: "0.8rem",
+            fontSize: "0.8em",
             display: state.openers[app.name] ? "" : "none"
         });
 
@@ -484,9 +1219,9 @@ ACEUIAppLoader.drawer = (function () {
     /** An app that did not load gets a row that says why, rather than vanishing silently. */
     const buildStatus = function (app) {
         return css(text(document.createElement("div"), app.status), {
-            padding: "0 0.6rem 0.3rem 1.7rem",
+            padding: "0 0.6em 0.3em 1.7em",
             color: THEME.inkDim,
-            fontSize: "0.6rem"
+            fontSize: "0.6em"
         });
     };
 
@@ -523,8 +1258,31 @@ ACEUIAppLoader.drawer = (function () {
 
         holder.appendChild(buildRow(app, toggleDeveloper));
         state.devRow = { box: app.box, label: app.label };
+        state.devHolder = holder;
 
         return holder;
+    };
+
+    /**
+     * The list and its scrollbar: Cohtml does not scroll an overflowing box, so the list is
+     * a clipped box that ACEUIAppLoader.scroll drives from the wheel, with a thumb beside
+     * it. With few apps the gutter is hidden; large scales and insets are what make it show.
+     */
+    const buildList = function () {
+        const wrap = div({ flex: "1 1 auto", display: "flex", flexDirection: "row", minHeight: "0" });
+        const list = div({ flex: "1 1 auto", overflow: "hidden" });
+        const track = div({ flex: "0 0 auto", position: "relative", width: "0.3em", visibility: "hidden" });
+        const thumb = div({ position: "absolute", top: "0", left: "0", width: "100%", background: THEME.inkOff, borderRadius: "0.15em" });
+
+        track.appendChild(thumb);
+        wrap.appendChild(list);
+        wrap.appendChild(track);
+
+        state.list = list;
+        state.track = track;
+        state.thumb = thumb;
+
+        return wrap;
     };
 
     const build = function (apps) {
@@ -534,21 +1292,12 @@ ACEUIAppLoader.drawer = (function () {
         const storedDev = persist.readHud(DEV_HUD_ID) || persist.readLocal(DEV_STORE_KEY);
         const panel = div({
             position: "fixed",
-            top: PANEL_TOP,
-            bottom: PANEL_BOTTOM,
-            right: "0",
-            width: PANEL_WIDTH,
             display: "flex",
             flexDirection: "column",
-            background: THEME.panelBg,
-            borderLeft: THEME.border,
-            borderRadius: "0.25rem 0 0 0.25rem",
             color: THEME.ink,
             fontFamily: THEME.font,
             zIndex: Z_INDEX,
-            transform: "translateX(100%)",
             opacity: "0",
-            transition: "transform " + SLIDE_MS + "ms ease-out, opacity " + FADE_MS + "ms ease-out",
             overflow: "hidden"
         });
         const header = div({
@@ -556,27 +1305,40 @@ ACEUIAppLoader.drawer = (function () {
             display: "flex",
             flexDirection: "row",
             alignItems: "center",
-            justifyContent: "space-between",
-            padding: "0.45rem 0.6rem",
-            background: THEME.headerBg
+            padding: "0.45em 0.6em"
         });
-        const list = div({ flex: "1 1 auto", overflow: "hidden" });
-        const count = css(document.createElement("span"), { color: THEME.inkDim, fontSize: "0.65rem" });
-        const hot = div({
+        const count = css(document.createElement("span"), { flex: "1 1 auto", textAlign: "right", color: THEME.inkDim, fontSize: "0.65em" });
+        const hint = div({
             position: "fixed",
-            top: "0",
-            bottom: "0",
-            right: "0",
-            width: HOT_WIDTH,
-            zIndex: Z_INDEX
+            background: HINT_COLOUR,
+            opacity: HINT_ALPHA_OFF,
+            pointerEvents: "none",
+            zIndex: HINT_Z_INDEX
+        });
+        const zoneBox = div({
+            position: "fixed",
+            background: ZONE_BOX_BG,
+            border: ZONE_BOX_BORDER,
+            visibility: "hidden",
+            pointerEvents: "none",
+            zIndex: HINT_Z_INDEX
         });
 
         // building again replaces the drawer rather than stacking a second one on top
-        if (state.panel && state.panel.parentNode) { state.panel.parentNode.removeChild(state.panel); }
+        [state.panel, state.hint, state.zoneBox].forEach(function (node) {
+            if (node && node.parentNode) { node.parentNode.removeChild(node); }
+        });
 
-        if (state.hot && state.hot.parentNode) { state.hot.parentNode.removeChild(state.hot); }
+        if (state.scroller) { state.scroller.detach(); }
 
+        if (state.syncTimer) { window.clearTimeout(state.syncTimer); }
+
+        state.syncTimer = 0;
         cancelClose();
+        cancelDwell();
+        cancelPark();
+        state.last.known = false;
+        state.jumpsLogged = 0;
         state.apps = [];
         state.dev = {};
         state.devRow = null;
@@ -588,42 +1350,64 @@ ACEUIAppLoader.drawer = (function () {
 
         if (storedDev && !state.touched) { state.developer = Boolean(storedDev.on); }
 
+        defineSettings();
+        readOptions();
+
         header.appendChild(css(text(document.createElement("span"), TITLE_TEXT), {
-            color: "#fff", fontSize: "0.75rem", fontWeight: "700", letterSpacing: "0.08em"
+            color: "#fff", fontSize: "0.75em", fontWeight: "700", letterSpacing: "0.08em"
         }));
         header.appendChild(count);
+        header.appendChild(headerButton(OPTIONS_GLYPH, openSettings));
+        state.pin = headerButton(PIN_TEXT, function () { setPinned(!isPinned()); });
+        header.appendChild(state.pin);
         panel.appendChild(header);
-        panel.appendChild(list);
+        panel.appendChild(buildList());
 
         apps.forEach(function (entry) {
-            list.appendChild(buildApp(entry));
+            state.list.appendChild(buildApp(entry));
             applyVisibility(entry.name);
         });
 
         if (!apps.length) {
-            list.appendChild(css(text(document.createElement("div"), EMPTY_TEXT), {
-                padding: "0.5rem 0.6rem", color: THEME.inkDim, fontSize: "0.65rem"
+            state.list.appendChild(css(text(document.createElement("div"), EMPTY_TEXT), {
+                padding: "0.5em 0.6em", color: THEME.inkDim, fontSize: "0.65em"
             }));
         }
 
         panel.appendChild(buildDeveloperRow());
 
-        // the pointer reaching the right edge opens it; leaving the panel closes it again
-        hot.addEventListener("mouseenter", function () {
-            if (!ACEUIAppLoader.hudHidden()) { open(); }
-        });
+        // a pointer on the panel never closes it, whatever the mousemove maths says
         panel.addEventListener("mouseenter", cancelClose);
-        panel.addEventListener("mouseleave", closeSoon);
 
-        container.appendChild(hot);
+        container.appendChild(zoneBox);
+        container.appendChild(hint);
         container.appendChild(panel);
 
         state.panel = panel;
-        state.list = list;
+        state.header = header;
         state.count = count;
-        state.hot = hot;
+        state.hint = hint;
+        state.zoneBox = zoneBox;
         state.built = true;
+        state.scroller = ACEUIAppLoader.scroll ? ACEUIAppLoader.scroll.attach({ body: state.list, track: state.track, thumb: state.thumb }) : null;
+
+        wire();
+        applyLook();
         refreshRows();
+        scheduleSync();
+
+        // the intro: the edge line at full strength for a moment, so the drawer can be found
+        if (state.introTimer) { window.clearTimeout(state.introTimer); }
+
+        state.intro = true;
+        updateHint(false);
+        state.introTimer = window.setTimeout(function () {
+            state.intro = false;
+            state.introTimer = 0;
+            updateHint(false);
+        }, HINT_INTRO_MS);
+
+        logBuilt(state.look);
 
         return panel;
     };
@@ -655,15 +1439,39 @@ ACEUIAppLoader.drawer = (function () {
 
     return {
         STORE_KEY: STORE_KEY,
+        DRAWER_APP: DRAWER_APP,
+        SPECS: SPECS,
+        DEFAULTS: DEFAULTS,
         SLIDE_MS: SLIDE_MS,
         FADE_MS: FADE_MS,
         CLOSE_DELAY_MS: CLOSE_DELAY_MS,
+        HINT_INTRO_MS: HINT_INTRO_MS,
+        HINT_REACH: HINT_REACH,
+        HINT_ALPHA_NEAR: HINT_ALPHA_NEAR,
+        HINT_ALPHA_ALWAYS: HINT_ALPHA_ALWAYS,
+        MIN_PANEL_HEIGHT_REM: MIN_PANEL_HEIGHT_REM,
+        OFFSET_MAX_FRACTION: OFFSET_MAX_FRACTION,
+        JUMP_FRACTION: JUMP_FRACTION,
+        MOTION_SLIDE: MOTION_SLIDE,
+        MOTION_FADE: MOTION_FADE,
+        MOTION_NONE: MOTION_NONE,
+        paneOpen: paneOpen,
         state: state,
         belongsOn: belongsOn,
         build: build,
         open: open,
         close: close,
         toggle: toggle,
+        metrics: metrics,
+        pxPerRem: pxPerRem,
+        inZone: inZone,
+        inPanel: inPanel,
+        triggerNow: triggerNow,
+        applyLook: applyLook,
+        readOptions: readOptions,
+        resetSettings: resetSettings,
+        setPinned: setPinned,
+        isPinned: isPinned,
         isVisible: isVisible,
         applyStored: applyStored,
         adoptHudStore: adoptHudStore,

@@ -14,7 +14,7 @@ sys.path.insert(0, os.path.join(ROOT, "tools"))
 import headless  # noqa: E402
 
 HARNESS = os.path.join(ROOT, "tests", "lib", "harness.html")
-MIN_CASES = 15
+MIN_CASES = 105
 # the library loading on a fresh page, twice over: after Escape and resume (localStorage full,
 # no HUD store yet) and after a game restart (localStorage empty, the HUD store arriving later);
 # module state is per page, so these cannot be played inside the one big harness

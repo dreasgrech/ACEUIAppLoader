@@ -8,7 +8,7 @@ The findings themselves belong in the [`ACEGameInternals`](https://github.com/dr
 
 ## What it probes
 
-Ten categories, ~70 checks:
+Eleven categories, ~80 checks:
 
 - **Language & engine** — WebAssembly (expected absent), `new Function`/eval, async
   functions, Promise, BigInt, Proxy, typed arrays, TextEncoder, `structuredClone`, Intl.
@@ -32,6 +32,12 @@ Ten categories, ~70 checks:
 - **Crypto & encoding** — `crypto.getRandomValues`, `crypto.subtle`, `btoa`/`atob`.
 - **DOM & observers** — Mutation/Resize/Intersection observers, `DOMParser`,
   `customElements`, `getComputedStyle`, `matchMedia`.
+- **Pointer & screen** — the viewport in css px, px per rem (`window.FontSize`, written by
+  the stock `resize()`), `window.screen` and `devicePixelRatio`, whether the HUD has hidden
+  the cursor right now, and counters the probe fills from the moment it attaches: mousemove
+  (last and highest x), the pointer at the right edge, window `blur`/`focus`, `mouseleave` and
+  `mouseout` on the document, `e.buttons` on a press, and a hit test of an inline
+  `pointer-events: none`. See below for how to read them.
 - **Gameface bridge & telemetry** — `window.engine` and its `on`/`off`/`trigger`/
   `call`/`BindingsReady`, `cohtml`, and a scan of the `Model*` telemetry globals the
   game publishes on `window` (so you can see, live, exactly which models exist).
@@ -51,6 +57,35 @@ loader repo) can read the capability list off a headless-friendly game session:
 
 **Re-run** re-probes; **Log to console** dumps every row (name = status — detail) to
 the log for the full record.
+
+### The pointer and the screen
+
+Two things about the pointer cannot be learned from the stock bundle or from a browser, and
+the app drawer (which opens from a screen edge) needs both: **does any event fire when the
+pointer leaves the game window** — onto a second monitor — and **is the cursor confined to
+the game in fullscreen**. The *Pointer & screen* rows are counters that fill while the probe
+is attached, so the answers take one deliberate session: open the probe, push the mouse hard
+off the right edge and keep moving it, alt-tab away and back, click once, then **Re-run**.
+
+- *pointer at the right edge*: if the count of `x = width − 1` kept rising while you pushed
+  further, the cursor is confined and every flick to the edge lands in the drawer's zone. If
+  it stopped, the pointer left the window.
+- *pointer leaving the document* and *window blur / focus*: whether the engine says anything
+  when that happens. Zero after the session means a surface cannot rely on `mouseleave` or
+  `blur` to notice the pointer is gone.
+- *pointer jumps*: samples more than a quarter of the screen from the previous one, which no
+  hand produces. The drawer opened when the pointer left the window on the far side
+  (2026-09-23), so the engine most likely reports a position such as `0,0` as the pointer
+  leaves; the last jump's coordinates say what it reports.
+- *mouse buttons field*: whether `e.buttons` is populated on a press (the stock never reads
+  it; a surface that wants to know a button is held must otherwise track it).
+- *inline pointer-events: none*: the stock stylesheets use the property; this hit-tests the
+  inline form, which the drawer's edge hint relies on.
+- *cursor hidden by the HUD*: the stock HUD hides the cursor three seconds after the last
+  move and shows it again only after a 100px move — the reason an edge hint exists.
+
+Record what you find in `ACEGameInternals/docs/gameface-notes.md`; that is where these facts
+live once they are known.
 
 ### Safety of the active probes
 

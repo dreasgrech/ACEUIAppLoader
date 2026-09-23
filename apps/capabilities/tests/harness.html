@@ -73,6 +73,39 @@
         eq(ACEUIAppLoader.shared.get("capabilities").results().length, CapabilitiesProbe.CHECKS.length, "a copy, not the live list");
     });
 
+    /* The pointer rows are counters the window listeners fill; a re-run reads them. Outside the
+       game the events are synthetic, but the plumbing from listener to row is the same. */
+    t("pointer & screen: the counters fill from window and document events and a re-run reads them", function () {
+        const P = CapabilitiesProbe.pointer;
+        const result = function (name) { return state.results[rowIndex(name)]; };
+        const W = window.innerWidth;
+
+        eq(P.moves, 0, "nothing counted before any event");
+        window.dispatchEvent(new MouseEvent("mousemove", { clientX: 40, clientY: 30, bubbles: true }));
+        window.dispatchEvent(new MouseEvent("mousemove", { clientX: W - 1, clientY: 30, bubbles: true }));
+        window.dispatchEvent(new Event("blur"));
+        window.dispatchEvent(new Event("focus"));
+        document.dispatchEvent(new MouseEvent("mouseout", { relatedTarget: null, bubbles: true }));
+        window.dispatchEvent(new MouseEvent("mousedown", { clientX: 40, clientY: 30, buttons: 1, bubbles: true }));
+        eq(P.moves, 2); eq(P.maxX, W - 1); eq(P.edgeHits, 1, "the last column counts as the edge");
+        eq(P.jumps, 1, "40 to the far edge in one sample is a jump, not a movement"); ok(P.lastJump.indexOf("40,30 to ") === 0, P.lastJump);
+        eq(P.blurs, 1); eq(P.focuses, 1); eq(P.docOuts, 1, "a mouseout with no relatedTarget is the pointer leaving the page");
+        eq(P.lastButtons, 1);
+
+        CapabilitiesProbe.runAll(state);
+        eq(result("viewport").detail.indexOf(W + "x" + window.innerHeight), 0, "the viewport row says the size");
+        ok(result("px per rem").detail.indexOf("px per rem") > 0, "px per rem is reported: " + result("px per rem").detail);
+        eq(result("mousemove").status, "yes"); ok(result("mousemove").detail.indexOf("2 moves") === 0, result("mousemove").detail);
+        eq(result("pointer at the right edge").status, "yes");
+        eq(result("pointer jumps").status, "warn"); ok(result("pointer jumps").detail.indexOf("1 jump(s)") === 0, result("pointer jumps").detail);
+        eq(result("window blur / focus").status, "yes"); ok(result("window blur / focus").detail.indexOf("1 blur, 1 focus") === 0);
+        eq(result("pointer leaving the document").status, "yes");
+        eq(result("mouse buttons field").status, "yes"); ok(result("mouse buttons field").detail.indexOf("e.buttons = 1") === 0);
+        eq(result("cursor hidden by the HUD").status, "no", "no HUD here, so the cursor is shown");
+        ok(P.fixture && P.fixture.strip.style.pointerEvents === "none" && P.fixture.strip.parentNode === document.body, "the pointer-events fixture is on the body with the inline form under test");
+        eq(result("inline pointer-events: none").status, "yes", "a browser lets the hit through: " + result("inline pointer-events: none").detail);
+    });
+
     t("re-run re-probes, log dumps the report, detach stops the loop", function () {
         root.querySelector("[data-act=\"rerun\"]").click();
         ok(root.querySelector(".cp-summary").textContent.indexOf("yes") >= 0, "summary still populated after re-run");

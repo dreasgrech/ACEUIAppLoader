@@ -93,6 +93,11 @@ document.addEventListener("DOMContentLoaded", function () {
     const mouse = function (type, x, y, target) {
         (target || window).dispatchEvent(new MouseEvent(type, { clientX: x, clientY: y, bubbles: true }));
     };
+    /* Two samples that approach (x, y) from 40px inside: the drawer opens on a movement, never on a jump from wherever the pointer last was. */
+    const glide = function (x, y) {
+        mouse("mousemove", x + (x < window.innerWidth / 2 ? 40 : -40), y);
+        mouse("mousemove", x, y);
+    };
     const makeHud = function (elements) {
         const hud = { currentLayout: "default", StoredData: { lastLayout: "default", layouts: { default: { elements: elements || {} } } } };
         hud.elementModified = function (id, props) { hud.StoredData.layouts.default.elements[id] = props; };
@@ -816,6 +821,38 @@ document.addEventListener("DOMContentLoaded", function () {
         window.HUD = null;
     });
 
+    /*
+     * In game (2026-09-23): a settings window closed just before a session restart came back
+     * with it. The HUD store reaches disk only when the game saves the layout, so after a
+     * reload it can hold an older list than localStorage does -- and adopt() used to take it
+     * whenever this page had not yet touched a window, which after a reload is always.
+     */
+    t("window: a HUD store older than this session's list is not adopted; the store is brought up to date instead", function () {
+        const W = ACEUIAppLoader.window, P = ACEUIAppLoader.persist;
+        let reopened = 0;
+        const opener = function (id) { reopened += 1; W.open(id, { title: "S" }); };
+        window.HUD = null;
+        W.open("stale.a", { title: "S" }); W.close("stale.a");     // closed on purpose: localStorage says so
+        const local = P.readLocal(W.OPEN_STORE_KEY);
+        ok(typeof local.at === "number", "the record carries when it was written");
+        W.discardAll(); W.remembered.touched = false;             // the page reloads: nothing touched yet
+        W.reopen("stale.a", opener);
+        // the copy the game saved to disk earlier still lists it as open
+        const older = { open: {}, at: local.at - 60000 }; older.open[ACEUIAppLoader.page] = ["stale.a"];
+        window.HUD = makeHud({}); window.HUD.StoredData.layouts.default.elements[W.OPEN_HUD_ID] = older;
+        eq(W.adopt().length, 0, "nothing is due to come back");
+        clock.step(6000); eq(reopened, 0, "the window stays closed");
+        eq((window.HUD.StoredData.layouts.default.elements[W.OPEN_HUD_ID].open[ACEUIAppLoader.page] || []).length, 0, "and the store now holds this session's list");
+        ok(last(window.__log).indexOf("older than this session") >= 0, "the log says why");
+        // a store that is newer is adopted as before
+        const newer = { open: {}, at: Date.now() + 60000 }; newer.open[ACEUIAppLoader.page] = ["stale.a"];
+        window.HUD.StoredData.layouts.default.elements[W.OPEN_HUD_ID] = newer;
+        eq(W.adopt().join(","), "stale.a", "a newer store's list is adopted");
+        clock.step(6016); eq(reopened, 1, "and the window comes back");
+        W.close("stale.a");
+        window.HUD = null;
+    });
+
     t("settings: a settings window open when the HUD reloads comes back, drawn, with the next define; one closed by hand does not", function () {
         const S = ACEUIAppLoader.settings, W = ACEUIAppLoader.window;
         const specs = [{ key: "a", type: "toggle", label: "Alpha switch", value: true }];
@@ -1248,6 +1285,31 @@ document.addEventListener("DOMContentLoaded", function () {
         eq(S.get("bindy", "toggleKey"), "KeyJ", "Escape cancels");
         press("KeyK");
         eq(S.get("bindy", "toggleKey"), "KeyJ", "and really did stop listening");
+
+        // Delete while waiting unbinds: the drawer's hotkey has no default and a player must be able to clear one
+        control.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+        press("Delete");
+        eq(S.get("bindy", "toggleKey"), "", "Delete unbinds");
+        eq(control.textContent, "unbound", "and the control says so rather than showing nothing");
+        ok(!ACEUIAppLoader.keys.is(new KeyboardEvent("keydown", { code: "KeyJ" }), S.get("bindy", "toggleKey")), "an unbound key matches no keystroke");
+        pane.remove();
+    });
+
+    t("settings: a range shows its unit, a key control names its own empty text, and a pane can carry its own title", function () {
+        const S = ACEUIAppLoader.settings;
+        const pane = document.createElement("div");
+        document.getElementById("center").appendChild(pane);
+        S.define("unity", [
+            { key: "zone", type: "range", label: "Zone", value: 2, min: 1, max: 10, step: 0.5, unit: "rem" },
+            { key: "hot", type: "key", label: "Hotkey", value: "", empty: "none" }
+        ], { title: "App drawer" });
+        S.render("unity", pane);
+        const texts = ACEUIAppLoader.toArray(pane.querySelectorAll("span")).map(function (n) { return n.textContent; });
+        ok(texts.indexOf("2 rem") >= 0, "the value reads with its unit: " + texts.join("|"));
+        ok(texts.indexOf("none") >= 0, "the empty key uses the spec's own word");
+        const win = S.open("unity");
+        eq(win.header.textContent.indexOf("App drawer settings"), 0, "the window is titled from define's layout, not the name");
+        S.close("unity");
         pane.remove();
     });
 
@@ -1798,33 +1860,56 @@ document.addEventListener("DOMContentLoaded", function () {
         const handle = engine.on("SettingsResponseVideoPresetList", stockHandler, { tag: "stock" });
         engine.trigger("OnUICommand", "SettingsRequestVideoPresetList", { __Type: "SettingsRequestVideoPresetList", version: 0 });
 
-        t("drawer: builds a row per app, parked off-screen behind a right-edge hot zone", function () {
-            const panel = ACEUIAppLoader.drawer.build([
+        /*
+         * The zone that opens the drawer is a pointer threshold, not an element (a player's
+         * review, 2026-09-23: a 10px strip at the edge was too small to hit and the pointer
+         * ran off to a second monitor). An element the width a player might choose would
+         * swallow every click and drag on the HUD under it; a threshold blocks nothing.
+         */
+        t("drawer: builds a row per app, parked off its edge, with no element in the zone that opens it", function () {
+            const d = ACEUIAppLoader.drawer;
+            const panel = d.build([
                 { name: "alpha", info: { title: "Alpha App" }, status: "loaded" },
                 { name: "beta", info: { title: "Beta App" }, status: "failed" }
             ]);
             eq(panel.style.transform, "translateX(100%)", "starts closed, off the right edge");
             eq(panel.style.opacity, "0", "and transparent, so it fades in rather than only sliding");
             eq(panel.style.position, "fixed", "fixed to the screen, not the HUD layout");
-            ok(ACEUIAppLoader.drawer.state.hot, "hot zone created");
-            eq(ACEUIAppLoader.drawer.state.hot.style.right, "0px", "hot zone sits on the right edge");
-            eq(ACEUIAppLoader.drawer.state.apps.length, 2, "one app per app");
+            eq(panel.style.right, "0px", "on the right edge by default");
+            eq(d.state.hot, undefined, "no hot-zone element: the zone is a pointer threshold");
+            ok(d.state.hint, "an edge hint line exists instead");
+            eq(d.state.hint.style.pointerEvents, "none", "and it takes no clicks");
+            eq(d.state.hint.style.position, "fixed");
+            ok(Number(d.state.hint.style.zIndex) < Number(panel.style.zIndex), "under the panel, so even a failed pointer-events blocks nothing that matters");
+            eq(d.state.apps.length, 2, "one app per app");
             ok(panel.textContent.indexOf("Alpha App") >= 0, "uses the app's title");
             ok(panel.textContent.indexOf("failed") >= 0, "an app that did not load says so");
+            ok(panel.textContent.indexOf("OPTIONS") >= 0 && panel.textContent.indexOf("PIN") >= 0, "the header offers the drawer's own options and a pin");
+            ok(last(window.__log).indexOf("[drawer] built: right, zone 2rem (") >= 0, "the build line says where and how wide: " + last(window.__log));
+            ok(last(window.__log).indexOf("1rem = ") >= 0 && last(window.__log).indexOf("viewport " + window.innerWidth + "x" + window.innerHeight) >= 0, "and what a rem is on this screen");
         });
 
-        t("drawer: the hot zone opens it, leaving closes it after a delay", function () {
+        t("drawer: the pointer reaching the zone opens it; away from both zone and panel it closes after a delay", function () {
             const d = ACEUIAppLoader.drawer;
+            const m = d.metrics();
+            const midY = m.H / 2;
             d.close();
-            d.state.hot.dispatchEvent(new Event("mouseenter"));
+            mouse("mousemove", m.W - m.zonePx - 5, midY);
+            eq(d.state.open, false, "just inside of the zone: nothing");
+            mouse("mousemove", m.W - 1, midY);
             eq(d.state.open, true, "pointer at the edge opens it");
             ok(d.state.panel.style.transform.indexOf("translateX(0") === 0, "slid in");
             eq(d.state.panel.style.opacity, "1", "and faded up");
-            d.state.panel.dispatchEvent(new Event("mouseleave"));
+            mouse("mousemove", m.W - m.widthPx / 2, midY);
+            eq(d.state.closeTimer, 0, "over the panel: no close pending");
+            mouse("mousemove", 100, midY);
             eq(d.state.open, true, "still open: the close is delayed, not instant");
             ok(d.state.closeTimer !== 0, "a close is pending");
-            d.state.panel.dispatchEvent(new Event("mouseenter"));
+            mouse("mousemove", m.W - m.widthPx / 2, midY);
             eq(d.state.closeTimer, 0, "coming back cancels the pending close");
+            mouse("mousemove", 100, midY);
+            d.state.panel.dispatchEvent(new Event("mouseenter"));
+            eq(d.state.closeTimer, 0, "a pointer on the panel itself cancels it too, whatever the maths says");
             d.close();
             eq(d.state.panel.style.transform, "translateX(100%)", "closed again");
             eq(d.state.panel.style.opacity, "0", "and faded back out");
@@ -1844,6 +1929,325 @@ document.addEventListener("DOMContentLoaded", function () {
             ok(frames >= 15, "the slide gets " + Math.round(frames) + " frames at the measured rate");
             ok(d.FADE_MS < d.SLIDE_MS, "the fade finishes before the move does");
             ok(d.state.panel.style.transition.indexOf("opacity") > 0, "opacity is animated, not just set");
+        });
+
+        /*
+         * The stock UI sets 1rem from the resolution (min(width / 120, height / 67.5) px), so a
+         * zone in rem is the same slice of any screen where a 10px strip was 0.6rem at 1080p and
+         * 0.3rem at 4K. Nothing here is measured: the zone, the panel's box and the hint come
+         * from the settings and the viewport, so a mouse handler never reads layout.
+         */
+        t("drawer: the zone is rem from the edge, worked out from the viewport and the settings, clamped when applied", function () {
+            const d = ACEUIAppLoader.drawer, S = ACEUIAppLoader.settings, A = d.DRAWER_APP;
+            const m = d.metrics();
+            const mid = m.H / 2;
+            near(m.zonePx, 2 * m.pxPerRem, 0.01, "2rem by default: the HUD's own margin");
+            eq(m.W, window.innerWidth, "the viewport's width"); eq(m.H, window.innerHeight);
+            ok(d.inZone(m.W - 1, mid), "at the edge");
+            ok(d.inZone(m.W - m.zonePx, mid), "at the zone's inner limit");
+            ok(!d.inZone(m.W - m.zonePx - 1, mid), "a pixel further in is outside");
+            ok(!d.inZone(m.W + 5, mid), "beyond the edge is not the zone: the engine never reports a pointer there anyway");
+            S.set(A, "zone", 5);
+            near(d.metrics().zonePx, 5 * m.pxPerRem, 0.01, "the setting is in rem");
+            d.state.opts.zone = 0.2;
+            near(d.metrics().zonePx, m.pxPerRem, 0.01, "a stored value below the floor is applied as 1rem: 0.2rem would be 2px at 720p");
+            d.readOptions();
+            S.set(A, "extent", "upper");
+            ok(d.inZone(m.W - 1, 10) && !d.inZone(m.W - 1, m.H - 10), "upper: the top third only");
+            S.set(A, "extent", "lower");
+            ok(!d.inZone(m.W - 1, 10) && d.inZone(m.W - 1, m.H - 10), "lower: the bottom third");
+            S.set(A, "extent", "middle");
+            ok(d.inZone(m.W - 1, mid) && !d.inZone(m.W - 1, 10), "middle: the middle third");
+            near(parseFloat(d.state.hint.style.top), m.H / 3, 0.51, "the hint line covers the same third, on a whole pixel");
+            d.resetSettings();
+            ok(d.inZone(m.W - 1, 10) && d.inZone(m.W - 1, m.H - 10), "and reset covers the whole edge again");
+        });
+
+        t("drawer: the panel and the zone can live on the left edge, for a second monitor on the right", function () {
+            const d = ACEUIAppLoader.drawer, S = ACEUIAppLoader.settings, A = d.DRAWER_APP;
+            const m = d.metrics();
+            d.close();
+            S.set(A, "side", "left");
+            eq(d.state.panel.style.left, "0px"); eq(d.state.panel.style.right, "auto", "on the left, not the right");
+            eq(d.state.panel.style.transform, "translateX(-100%)", "parked off the left edge");
+            eq(d.state.hint.style.left, "0px", "the hint moved with it");
+            ok(d.inZone(1, m.H / 2) && !d.inZone(m.W - 1, m.H / 2), "the zone is the left edge now");
+            glide(1, m.H / 2);
+            eq(d.state.open, true, "and opens from it");
+            ok(d.inPanel(m.widthPx / 2, m.H / 2) && !d.inPanel(m.W - m.widthPx / 2, m.H / 2), "the panel's box is on the left too");
+            d.close();
+            d.resetSettings();
+            eq(d.state.panel.style.right, "0px", "back on the right");
+        });
+
+        t("drawer: triple screen puts the edge where the centre screen ends; offsets stay in the near half", function () {
+            const d = ACEUIAppLoader.drawer, S = ACEUIAppLoader.settings, A = d.DRAWER_APP;
+            let m;
+            S.set(A, "triple", true);
+            m = d.metrics();
+            near(m.offsetPx, m.W / 3, 0.01, "a third of the way in: the game spans three equal screens");
+            eq(d.state.panel.style.right, Math.round(m.offsetPx) + "px", "the panel sits at that edge");
+            ok(d.inZone(m.W - m.W / 3 - 1, m.H / 2), "the centre screen's edge opens it");
+            ok(!d.inZone(m.W - 1, m.H / 2), "the far screen's edge no longer does");
+            S.set(A, "offset", 60);
+            m = d.metrics();
+            near(m.offsetPx, m.W * d.OFFSET_MAX_FRACTION, 0.01, "offset on top of the third is clamped: the edge line never crosses into the far half");
+            d.resetSettings();
+            eq(d.metrics().offsetPx, 0);
+        });
+
+        t("drawer: insets that would leave no panel are clamped when applied", function () {
+            const d = ACEUIAppLoader.drawer;
+            let m;
+            d.state.opts.top = 30; d.state.opts.bottom = 30;      // a stored pair, 60rem on a 67.5rem screen
+            m = d.metrics();
+            ok(m.H - m.topPx - m.bottomPx >= d.MIN_PANEL_HEIGHT_REM * m.pxPerRem - 0.01, "at least " + d.MIN_PANEL_HEIGHT_REM + "rem of panel is left");
+            ok(m.bottomPx < 30 * m.pxPerRem, "the bottom inset gave way first");
+            d.readOptions();
+            m = d.metrics();
+            eq(m.topPx, 4 * m.pxPerRem); eq(m.bottomPx, 4 * m.pxPerRem);
+        });
+
+        t("drawer: dwell holds the opening until the pointer has stayed in the zone; leaving cancels it", function () {
+            const d = ACEUIAppLoader.drawer, S = ACEUIAppLoader.settings, A = d.DRAWER_APP;
+            const m = d.metrics();
+            d.close();
+            S.set(A, "dwell", 200);
+            glide(m.W - 1, m.H / 2);
+            eq(d.state.open, false, "in the zone, not open yet");
+            ok(d.state.dwellTimer !== 0, "the dwell is running");
+            mouse("mousemove", 100, m.H / 2);
+            eq(d.state.dwellTimer, 0, "leaving the zone cancels it");
+            eq(d.state.open, false);
+            d.resetSettings();
+            glide(m.W - 1, m.H / 2);
+            eq(d.state.open, true, "with no dwell (the default) it opens at once: a flick to the edge has no dwell to give");
+            d.close();
+        });
+
+        t("drawer: click mode opens on a press in the zone, and a press outside the panel closes an open drawer", function () {
+            const d = ACEUIAppLoader.drawer, S = ACEUIAppLoader.settings, A = d.DRAWER_APP;
+            const m = d.metrics();
+            d.close();
+            S.set(A, "trigger", "click");
+            glide(m.W - 1, m.H / 2);
+            eq(d.state.open, false, "hovering the zone does nothing in click mode");
+            mouse("mousedown", m.W - 1, m.H / 2);
+            eq(d.state.open, true, "a press there opens it");
+            mouse("mouseup", m.W - 1, m.H / 2);
+            eq(d.state.buttonHeld, false);
+            mouse("mousedown", m.W - m.widthPx / 2, m.H / 2);
+            mouse("mouseup", m.W - m.widthPx / 2, m.H / 2);
+            eq(d.state.open, true, "a press on the panel is the player using it");
+            mouse("mousedown", 100, m.H / 2);
+            mouse("mouseup", 100, m.H / 2);
+            eq(d.state.open, false, "a press elsewhere on the HUD closes it");
+            d.resetSettings();
+        });
+
+        t("drawer: hotkey-only with no key bound falls back to hover, so no setting can lock the player out", function () {
+            const d = ACEUIAppLoader.drawer, S = ACEUIAppLoader.settings, A = d.DRAWER_APP;
+            const m = d.metrics();
+            const press = function (code) { window.dispatchEvent(new KeyboardEvent("keydown", { code: code, bubbles: true, cancelable: true })); };
+            d.close();
+            S.set(A, "trigger", "hotkey");
+            eq(S.get(A, "toggleKey"), "", "no key by default: a default would shadow one of the player's game bindings");
+            eq(d.triggerNow(), "hover", "hotkey only with nothing bound is hover");
+            glide(m.W - 1, m.H / 2);
+            eq(d.state.open, true, "and the edge still opens it");
+            d.close();
+            S.set(A, "toggleKey", "F9");
+            eq(d.triggerNow(), "hotkey");
+            glide(m.W - 1, m.H / 2);
+            eq(d.state.open, false, "with a key bound, hover no longer opens it");
+            press("F9");
+            eq(d.state.open, true, "the key does");
+            press("F9");
+            eq(d.state.open, false, "and closes it again");
+            d.resetSettings();
+            eq(d.triggerNow(), "hover");
+        });
+
+        t("drawer: pinned, it ignores the pointer leaving and clicks outside; the header button flips the pin", function () {
+            const d = ACEUIAppLoader.drawer, S = ACEUIAppLoader.settings, A = d.DRAWER_APP;
+            const m = d.metrics();
+            eq(d.setPinned(true), true);
+            eq(S.get(A, "pinned"), true, "the pin is the setting");
+            eq(d.state.pin.textContent, "PINNED", "and the header says so");
+            d.open();
+            mouse("mousemove", 100, m.H / 2);
+            eq(d.state.closeTimer, 0, "pointer far away: no close pending");
+            mouse("mousedown", 100, m.H / 2); mouse("mouseup", 100, m.H / 2);
+            eq(d.state.open, true, "a click outside leaves it open");
+            d.state.pin.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+            eq(S.get(A, "pinned"), false, "the header button unpins");
+            eq(d.state.pin.textContent, "PIN");
+            ok(d.state.closeTimer !== 0, "and with the pointer away, the close is now pending");
+            d.close();
+            d.resetSettings();
+        });
+
+        /*
+         * The HUD hides the cursor after three seconds and shows it again only after a 100px
+         * move (BaseHud.mouseToggler in the stock bundle), so the approach to the edge is
+         * usually blind. The hint is the line that says "here", without taking any click.
+         */
+        t("drawer: the edge hint shows for a moment after a build, then as the pointer nears the edge, as the setting says", function () {
+            const d = ACEUIAppLoader.drawer, S = ACEUIAppLoader.settings, A = d.DRAWER_APP;
+            const m = d.metrics();
+            d.close();
+            d.state.intro = true; d.applyLook();
+            eq(d.state.hint.style.opacity, d.HINT_ALPHA_NEAR, "the intro after a build: full strength wherever the pointer is");
+            d.state.intro = false;
+            mouse("mousemove", 100, m.H / 2);
+            eq(d.state.hint.style.opacity, "0", "far away: nothing");
+            glide(m.W - m.zonePx * 1.5, m.H / 2);
+            eq(d.state.hint.style.opacity, d.HINT_ALPHA_NEAR, "within " + d.HINT_REACH + " zones of the edge: lit");
+            eq(d.state.open, false, "lit is not open: the pointer is not in the zone yet");
+            S.set(A, "extent", "upper");
+            glide(m.W - m.zonePx * 1.5, m.H - 10);
+            eq(d.state.hint.style.opacity, d.HINT_ALPHA_NEAR, "near the edge but below the extent: still lit, so the line (which covers the extent) shows where the drawer opens");
+            eq(d.state.open, false);
+            S.set(A, "extent", "full");
+            S.set(A, "hint", "always");
+            mouse("mousemove", 100, m.H / 2);
+            eq(d.state.hint.style.opacity, d.HINT_ALPHA_ALWAYS, "always: a quiet line whatever the pointer does");
+            S.set(A, "hint", "off");
+            glide(m.W - m.zonePx * 1.5, m.H / 2);
+            eq(d.state.hint.style.opacity, "0", "off: never");
+            d.resetSettings();
+            glide(m.W - 1, m.H / 2);
+            eq(d.state.open, true);
+            eq(d.state.hint.style.opacity, "0", "and never while the drawer is open");
+            d.close();
+        });
+
+        t("drawer: width, insets, scale, opacity and the animation are the player's, applied live without a rebuild", function () {
+            const d = ACEUIAppLoader.drawer, S = ACEUIAppLoader.settings, A = d.DRAWER_APP;
+            const rows = d.state.apps.length;
+            const label = d.state.apps[0].label;
+            S.set(A, "width", 20);
+            eq(d.state.panel.style.width, "20rem");
+            S.set(A, "top", 6);
+            eq(d.state.panel.style.top, (6 * d.pxPerRem()) + "px", "insets are written in px, since they are clamped against the viewport");
+            S.set(A, "scale", 1.3);
+            eq(d.state.panel.style.fontSize, "1.3rem", "scale is one font-size on the panel");
+            eq(label.style.fontSize, "0.75em", "everything inside is in em, so it follows");
+            S.set(A, "opacity", 0.5);
+            eq(d.state.panel.style.background, "rgba(0, 0, 0, 0.5)");
+            eq(d.state.header.style.background, "rgba(28, 30, 31, 0.5)", "the header takes the same opacity");
+            S.set(A, "motion", "none");
+            eq(d.state.panel.style.transition, "none");
+            eq(d.state.hint.style.transition, "none");
+            S.set(A, "motion", "fade");
+            ok(d.state.panel.style.transition.indexOf("opacity") === 0 && d.state.panel.style.transition.indexOf("transform") < 0, "fade: only opacity animates, nothing moves");
+            d.open();
+            ok(d.state.panel.style.transform.indexOf("translateX(0") === 0, "open: unparked at once, then faded in");
+            d.close();
+            ok(d.state.panel.style.transform.indexOf("translateX(0") === 0, "closing: still in place while it fades");
+            ok(d.state.parkTimer !== 0, "parked off-screen once the fade is over");
+            eq(d.state.apps.length, rows, "no rows were rebuilt for any of it");
+            d.resetSettings();
+            eq(d.state.panel.style.width, "15rem"); eq(d.state.panel.style.fontSize, "1rem");
+            ok(d.state.panel.style.transition.indexOf("transform") === 0, "sliding again");
+            eq(d.state.panel.style.transform, "translateX(100%)", "and parked, the fade's timer cancelled by the reset");
+        });
+
+        t("drawer: a hidden HUD closes it and keeps it closed; a held mouse button is a drag, not a request to open", function () {
+            const d = ACEUIAppLoader.drawer;
+            const m = d.metrics();
+            d.close();
+            document.body.classList.add("hide-hud");
+            glide(m.W - 1, m.H / 2);
+            eq(d.state.open, false, "the edge does nothing while the HUD is hidden");
+            d.open();
+            glide(m.W - 1, m.H / 2);
+            eq(d.state.open, false, "an open drawer closes the moment the pointer moves with the HUD hidden");
+            document.body.classList.remove("hide-hud");
+            mouse("mousedown", 100, m.H / 2);
+            eq(d.state.buttonHeld, true);
+            glide(m.W - 1, m.H / 2);
+            eq(d.state.open, false, "dragging something to the edge does not open it");
+            mouse("mouseup", 100, m.H / 2);
+            glide(m.W - 1, m.H / 2);
+            eq(d.state.open, true, "released, the edge works again");
+            d.close();
+        });
+
+        t("drawer: building again (Escape and resume) declares the settings again but subscribes and wires once", function () {
+            const d = ACEUIAppLoader.drawer, S = ACEUIAppLoader.settings, A = d.DRAWER_APP;
+            const listeners = S.listenerCount(A);
+            const before = window.__log.length;
+            ok(listeners >= 1, "one change listener from the first build");
+            d.build([
+                { name: "alpha", info: { title: "Alpha App" }, status: "loaded" },
+                { name: "beta", info: { title: "Beta App" }, status: "failed" }
+            ]);
+            eq(S.listenerCount(A), listeners, "not a second one");
+            eq(S.specs(A).length, d.SPECS.length, "the schema is there");
+            eq(d.state.apps.length, 2);
+            ok(window.__log.slice(before).some(function (l) { return l.indexOf("[drawer] built:") >= 0; }), "and it logged again");
+            d.state.look = null;
+            window.dispatchEvent(new Event("resize"));
+            ok(d.state.look, "a window resize re-applies the look (windowed mode)");
+        });
+
+        t("drawer: OPTIONS in the header opens the drawer's own settings, titled as such; resetSettings is the escape hatch", function () {
+            const d = ACEUIAppLoader.drawer, S = ACEUIAppLoader.settings, A = d.DRAWER_APP;
+            const button = ACEUIAppLoader.toArray(d.state.header.querySelectorAll("span")).filter(function (n) { return n.textContent === "OPTIONS"; })[0];
+            ok(button, "the header has an OPTIONS button");
+            button.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+            eq(S.isOpen(A), true, "it opens the settings window");
+            const win = ACEUIAppLoader.window.get(S.windowId(A));
+            eq(win.header.textContent.indexOf("App drawer settings"), 0, "titled for a player, not by its store key");
+            ok(win.body.textContent.indexOf("Edge zone") >= 0 && win.body.textContent.indexOf("2 rem") >= 0, "the zone is there, with its unit");
+            // while the pane is open the zone itself is drawn, so a number becomes an area on the screen
+            const m = d.metrics();
+            eq(d.state.zoneBox.style.visibility, "", "the zone box shows while the pane is open");
+            eq(d.state.zoneBox.style.width, Math.round(m.zonePx) + "px", "as wide as the zone");
+            eq(d.state.zoneBox.style.right, "0px"); eq(d.state.zoneBox.style.pointerEvents, "none");
+            S.set(A, "zone", 6);
+            eq(d.state.zoneBox.style.width, Math.round(6 * m.pxPerRem) + "px", "and follows the setting as it changes");
+            S.set(A, "extent", "middle");
+            eq(d.state.zoneBox.style.top, Math.round(m.H / 3) + "px", "and the extent");
+            S.close(A);
+            mouse("mousemove", 100, m.H / 2);
+            eq(d.state.zoneBox.style.visibility, "hidden", "gone once the pane is closed");
+            S.set(A, "side", "left"); S.set(A, "zone", 6);
+            d.resetSettings();
+            eq(S.get(A, "side"), "right"); eq(S.get(A, "zone"), 2);
+            eq(d.state.panel.style.right, "0px", "and the panel followed");
+        });
+
+        /*
+         * In game (2026-09-23, two monitors, the drawer on the left edge): the pointer leaving
+         * the game window to the RIGHT opened the drawer. The engine evidently reports a
+         * position such as 0,0 as the pointer goes. No hand moves a quarter of the screen
+         * between two samples, so such a sample is not a movement.
+         */
+        t("drawer: a jump in the pointer's position is not a movement: it never opens the drawer, and is logged", function () {
+            const d = ACEUIAppLoader.drawer, S = ACEUIAppLoader.settings, A = d.DRAWER_APP;
+            const m = d.metrics();
+            d.close();
+            mouse("mousemove", 100, m.H / 2);
+            const before = window.__log.length;
+            mouse("mousemove", m.W - 1, m.H / 2);
+            eq(d.state.open, false, "from 100 to the far edge in one sample: not a hand");
+            ok(window.__log.slice(before).some(function (l) { return l.indexOf("[drawer] pointer jumped from 100,") >= 0; }), "and the log says so");
+            mouse("mousemove", m.W - 1, m.H / 2);
+            eq(d.state.open, false, "the same position again is not a movement either");
+            mouse("mousemove", m.W - 2, m.H / 2);
+            eq(d.state.open, true, "a real movement inside the zone opens it");
+            d.close();
+            S.set(A, "side", "left");
+            d.state.intro = false;                                 // the rebuild a case ago started the 4 s intro
+            mouse("mousemove", m.W - 100, m.H / 2);
+            mouse("mousemove", 0, 0);
+            eq(d.state.open, false, "the drawer on the left: a 0,0 reported as the pointer leaves on the right does not open it");
+            mouse("mousemove", 0, 0);
+            eq(d.state.open, false, "nor does 0,0 repeated every frame while the pointer is away");
+            eq(d.state.hint.style.opacity, "0", "and the hint does not light for it");
+            d.resetSettings();
         });
 
         t("drawer: a switch hides the app's own root element and remembers the choice", function () {

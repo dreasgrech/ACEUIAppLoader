@@ -170,12 +170,14 @@ window.ModelUIState = {};
             eq(ACEUIAppLoader.input.heldAcrossPages(), false);
         });
 
-        t("the drawer was built on the HUD with a row per app and its hot zone", function () {
+        t("the drawer was built on the HUD with a row per app, its edge hint and its own settings", function () {
             const d = ACEUIAppLoader.drawer;
 
             ok(d.state.built, "built");
             eq(d.state.apps.length, 3, "one row per app");
-            ok(d.state.hot && d.state.hot.parentNode, "hot zone on the page");
+            ok(d.state.hint && d.state.hint.parentNode, "the edge hint is on the page (the zone itself is a pointer threshold, not an element)");
+            ok(d.state.wired, "the window listeners are on");
+            eq(ACEUIAppLoader.settings.specs(d.DRAWER_APP).length, d.SPECS.length, "the drawer declared its own settings");
             eq(d.isVisible("gadget"), false, "a developer app stays off until asked for");
         });
 

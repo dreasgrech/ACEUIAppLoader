@@ -95,6 +95,10 @@ ACEUIAppLoader.settings = (function () {
     const CAPTURE_TEXT = "press a key...";
     /** Pressing this while a key control is waiting cancels it rather than binding it. */
     const CANCEL_KEY = "Escape";
+    /** Pressing this while a key control is waiting unbinds it: the value becomes "" and the hotkey never fires. */
+    const CLEAR_KEY = "Delete";
+    /** What a key control shows for "" unless the spec names it (`empty`). */
+    const EMPTY_KEY_TEXT = "unbound";
     const CLEAR_TEXT = "Reset to defaults";
 
     /** The order control: how a row looks while it is being dragged. */
@@ -153,6 +157,10 @@ ACEUIAppLoader.settings = (function () {
         const listed = drawer && drawer.state ? drawer.state.apps : [];
         const found = listed.filter(function (entry) { return entry.name === name; })[0];
         const described = ACEUIAppLoader.app ? ACEUIAppLoader.app(name) : null;
+        const held = entry(name);
+
+        // a surface that is not an app row (the drawer's own pane) names itself in define's layout
+        if (held && held.layout.title) { return String(held.layout.title); }
 
         if (found && found.title) { return found.title; }
 
@@ -541,7 +549,8 @@ ACEUIAppLoader.settings = (function () {
             return function () { set(app, spec.key, Number((Number(get(app, spec.key)) + by).toFixed(digits))); };
         };
 
-        repaint.push(function () { value.textContent = String(get(app, spec.key)); });
+        // `unit` names what the number is ("2 rem", "350 ms"); a bare number in a pane of mixed units reads as nothing
+        repaint.push(function () { value.textContent = String(get(app, spec.key)) + (spec.unit ? " " + spec.unit : ""); });
 
         wrap.appendChild(value);
         wrap.appendChild(button("−", nudge(-step)));
@@ -719,8 +728,12 @@ ACEUIAppLoader.settings = (function () {
                 e.preventDefault();
                 e.stopPropagation();
 
-                // Escape is the way out of a menu, not a hotkey worth binding
-                if (!ACEUIAppLoader.keys.is(e, CANCEL_KEY)) { set(app, spec.key, e.code || e.key); }
+                // Escape is the way out of a menu, not a hotkey worth binding; Delete unbinds
+                if (ACEUIAppLoader.keys.is(e, CLEAR_KEY)) {
+                    set(app, spec.key, "");
+                } else if (!ACEUIAppLoader.keys.is(e, CANCEL_KEY)) {
+                    set(app, spec.key, e.code || e.key);
+                }
 
                 finish();
             };
@@ -735,9 +748,11 @@ ACEUIAppLoader.settings = (function () {
             window.addEventListener("mousedown", onElsewhere, true);
         });
 
-        // while it is waiting, the prompt is what the control says
+        // while it is waiting, the prompt is what the control says; an unbound key says so
         repaint.push(function () {
-            if (!listening.stop) { node.textContent = String(get(app, spec.key)); }
+            const value = String(get(app, spec.key));
+
+            if (!listening.stop) { node.textContent = value || spec.empty || EMPTY_KEY_TEXT; }
         });
 
         return node;

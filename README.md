@@ -52,7 +52,7 @@ The alternate zip contains the **same loader**, packed a different way, so that 
 2. If the drawer never appears **and** the newest log in `Saved Games\ACE\Logs` has no `ACEUIAppLoader` lines, delete `mods\ACEUIAppLoader.kspkg` and install the alternate zip the same way.
 3. If the drawer disappears again after you install another mod, swap back.
 
-The loader's first log line tells you which one you have: `loader 0.25.0 on /hud.html (64 records)` is the normal zip, `(32 records)` the alternate. Nothing else differs; apps, settings and everything on this page work the same with either.
+The loader's first log line tells you which one you have: `loader 0.26.0 on /hud.html (64 records)` is the normal zip, `(32 records)` the alternate. Nothing else differs; apps, settings and everything on this page work the same with either.
 </details>
 
 </td></tr>
@@ -92,9 +92,31 @@ into `Saved Games\ACE`, merge.
 <img width="800" height="450" alt="The mouse reaches the right edge, the drawer slides in, and an app is switched on" src="https://github.com/user-attachments/assets/738a4162-7706-41bf-9f63-2aa679b32273" />
 </p>
 
-Move your mouse to the **right edge of the screen** and the drawer slides in. Every ui app you
-have installed is listed there with its own switch — flick one on and it appears straight
-away, flick it off and it's gone.
+Move your mouse to the **right edge of the screen** and the drawer slides in — or set a hotkey
+for it in the drawer's own **OPTIONS**. Every ui app you have installed is listed there with
+its own switch — flick one on and it appears straight away, flick it off and it's gone.
+
+Three ways to open it, all in **OPTIONS** at the top of the drawer:
+
+- **The edge.** The pointer coming within a zone of the edge opens it. The zone is about 2%
+  of the screen's width by default (four times what the first release had) and can be made
+  wider, limited to the top, middle or bottom third of the edge, or given a short dwell so
+  passing the edge on the way to something else does not open it. A thin red line lights up
+  on the edge as you get close, since the game hides the cursor when it has been still for a
+  few seconds; while the options are open the whole zone is drawn, so you can see the area
+  you are setting.
+- **A hotkey.** Unbound until you set one, so it never clashes with a key you have bound in
+  the game. Click the control, press the key; Delete while it waits unbinds it again.
+- **A click at the edge**, for those who would rather nothing opened by itself.
+
+The drawer can also live on the **left edge**, be **pinned** open, fade in instead of sliding
+(if the slide stutters on your machine), and have its width, height, scale and opacity set. **Second monitor to the right?** If your pointer flies off the screen
+before it reaches the edge, put the drawer on the left edge, widen the zone, or give it a
+hotkey; once the pointer is on another screen the game hears nothing from it, so no edge can
+catch it there. **Triple screens:** the *Triple screen* switch puts the drawer at the edge of
+the centre screen rather than the far edge of the right one, and *Edge offset* moves it
+further in from there. The drawer is mouse-driven; a gamepad-only setup has no way to open it
+yet.
 
 ---
 
@@ -193,7 +215,7 @@ next section. **No lines at all** means the game never used the file, for one of
 1. **The game updated.** By far the most common cause. See above.
 2. **The file is in the wrong place.** It must be exactly `Saved Games\ACE\mods\ACEUIAppLoader.kspkg`,
    with that name. The usual way this goes wrong is Windows' *Extract All*, which puts
-   everything in a folder named after the zip (`ACE\ACEUIAppLoader-0.25.0-…\mods\…`); drag the
+   everything in a folder named after the zip (`ACE\ACEUIAppLoader-0.26.0-…\mods\…`); drag the
    `mods` folder itself into `Saved Games\ACE` instead.
 3. **Two copies.** Exactly one `ACEUIAppLoader…kspkg` in `mods` — an older copy left beside
    the new one (`ACEUIAppLoader (1).kspkg`, say) can win instead of it.
@@ -201,6 +223,21 @@ next section. **No lines at all** means the game never used the file, for one of
    uses its own file instead of ours. That is what the **`…-alternate.zip`** is for: delete
    `ACEUIAppLoader.kspkg`, install the alternate zip the same way, and read
    [why there are two zips](#why-there-are-two-zips) if you want to know what is going on.
+
+</details>
+
+<details>
+<summary><b>The drawer is there but I can't open it</b></summary><br>
+
+The loader ran (the log has `ACEUIAppLoader` lines, one of them `[drawer] built: right, zone
+2rem ...`) but the edge does nothing. Check the HUD is not hidden — the drawer never opens
+over a hidden HUD — and that no mouse button is held. If you changed the drawer's options,
+they may be the cause: *Open with: hotkey only* needs a key bound (with none bound the edge
+still works), and a large *Edge offset* moves the edge inwards. Pull the drawer in with its
+hotkey if you set one and press *Reset to defaults* in OPTIONS; or, from the dev console
+(a developer app), run `ACEUIAppLoader.drawer.resetSettings()`. Deleting `ACEUIAppLoader.kspkg`
+and reinstalling does **not** reset them — they live in the game's own UI settings file with
+your other HUD choices.
 
 </details>
 
