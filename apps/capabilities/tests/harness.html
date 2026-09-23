@@ -86,6 +86,75 @@
         eq(ACEUIAppLoader.shared.has("capabilities"), false);
     });
 
+    /* The model recorder: the research probe behind ACEAppResearch, as a setting of this app
+       so the loader restarts it on every HUD load and a recording survives Escape/resume. */
+    const root2 = document.createElement("div");
+    root2.id = "capabilities";
+    root.remove();
+    document.getElementById("center").appendChild(root2);
+    // a fake engine for the recorder's notification listener (the doubles carry none)
+    const fakeEngine = { handlers: {}, on: function (name, cb) { fakeEngine.handlers[name] = cb; return { clear: function () { delete fakeEngine.handlers[name]; } }; },
+        emit: function (name, message) { if (fakeEngine.handlers[name]) { fakeEngine.handlers[name](message); } } };
+    window.engine = fakeEngine;
+    const state2 = CapabilitiesProbe.attach(root2);
+    const S = ACEUIAppLoader.settings;
+    const recLines = function () { return window.__log.filter(function (l) { return l.indexOf("[capabilities] rec: ") === 0; }); };
+    const recCount = function (text) { return recLines().filter(function (l) { return l.indexOf(text) >= 0; }).length; };
+
+    t("describe renders a value for the log without JSON: no __Type tags, numbers to four decimals", function () {
+        eq(CapabilitiesProbe.describe({ __Type: "X", a: 1, b: [1.23456789, "s", null, true], c: { d: undefined } }),
+            "{a:1,b:[1.2346,\"s\",null,true],c:{d:undefined}}");
+        eq(CapabilitiesProbe.describe(-0.5), "-0.5");
+        eq(CapabilitiesProbe.describe([[[[[1]]]]]), "[[[[[...]]]]]", "depth is capped");
+    });
+
+    t("the recorder is off by default; the setting starts it and lights the Record button", function () {
+        eq(state2.rec.running, false, "off at attach");
+        eq(S.get("capabilities", CapabilitiesProbe.SETTING_RECORD), false, "the setting defaults to off");
+        const before = recLines().length;
+        S.set("capabilities", CapabilitiesProbe.SETTING_RECORD, true);
+        eq(state2.rec.running, true, "running once the setting is on");
+        ok(state2.recordButton.classList.contains("cp-on"), "the button is lit");
+        ok(recLines().length > before, "it announced itself in the log");
+    });
+
+    t("a slow field is logged once per change, with the lap position; a lap boundary writes the summary", function () {
+        window.ModelTiming = { current: "00:01.000", splits: [], splits_p: [], invalid: false };
+        window.ModelCurrentCar.current_lap_time_ms = 1000;
+        window.ModelCurrentCar.npos = 0.1;
+        window.__clock.step(1000);
+        window.__clock.step(1016);
+        eq(recCount("initial timing.splits"), 1, "logged once at first sight");
+        eq(recCount("changed timing.splits"), 0, "not again while unchanged");
+        window.ModelTiming.splits = ["00:30.000"];
+        window.ModelCurrentCar.npos = 0.34;
+        window.__clock.step(1032);
+        eq(recCount("changed timing.splits"), 1, "once on the change");
+        ok(recLines().some(function (l) { return l.indexOf("changed timing.splits") >= 0 && l.indexOf("npos:0.34") >= 0; }), "with the lap position at the change");
+        window.ModelCurrentCar.current_lap_time_ms = 20;
+        window.__clock.step(1048);
+        eq(recCount("LAP BOUNDARY"), 1, "the lap clock going backwards is a lap");
+        eq(recCount("lap summary (lap boundary)"), 1, "and the summary follows it");
+        // a UI notification is logged whole, with where in the lap it came; the car-status kind is not
+        fakeEngine.emit("UINotification", { __Type: "UINotification", type: "UINotificationType_SessionPenalty", tuples: [{ values: ["{PENALTY_CLEARED_KEY} #0", "InvestigationType_Racecar_Cut", "lblNotificationPenalty_NO_GAIN"] }] });
+        fakeEngine.emit("UINotification", { type: "UINotificationType_Car", tuples: [] });
+        eq(recCount("NOTICE "), 1, "one notice logged");
+        ok(recLines().some(function (l) { return l.indexOf("NOTICE {type:\"UINotificationType_SessionPenalty\",tuples:[{values:[\"{PENALTY_CLEARED_KEY} #0\",\"InvestigationType_Racecar_Cut\",\"lblNotificationPenalty_NO_GAIN\"]}]} at {npos:0.34") >= 0; }), "whole, with the lap position");
+    });
+
+    t("the button switches it off with a final summary, and detach stops a running recorder", function () {
+        state2.recordButton.click();
+        eq(state2.rec.running, false, "off after the button");
+        eq(S.get("capabilities", CapabilitiesProbe.SETTING_RECORD), false, "through the setting, which is the truth");
+        ok(recCount("stopped (switched off)") === 1, "with a final line");
+        S.set("capabilities", CapabilitiesProbe.SETTING_RECORD, true);
+        eq(state2.rec.running, true, "on again");
+        CapabilitiesProbe.detach(state2);
+        eq(state2.rec.running, false, "detach stops it");
+        eq(recCount("stopped (detached)"), 1);
+        S.set("capabilities", CapabilitiesProbe.SETTING_RECORD, false);
+    });
+
     H.finish();
 }());
 </script>

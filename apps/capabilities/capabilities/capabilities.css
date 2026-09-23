@@ -78,6 +78,12 @@ body.hide-hud .ace-capabilities {
     user-select: none;
 }
 
+/* the Record button lit while the model recorder writes to the log */
+.ace-capabilities .cp-btn.cp-on {
+    background: rgba(255, 96, 96, 0.35);
+    border-color: rgba(255, 128, 128, 0.7);
+}
+
 /* ---- filters: status chips + search box ----------------------------------------- */
 
 .ace-capabilities .cp-filters {

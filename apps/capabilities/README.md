@@ -61,6 +61,37 @@ from a `Blob` URL that doubles a number and is terminated immediately. Each runs
 behind a timeout and reports `warn` rather than hanging if the engine never answers,
 so the probe can never wedge the HUD.
 
+## Recording the HUD models
+
+The probe also carries the **model recorder**: the in-game verification run behind the
+research notes in ACEAppResearch (`research/*.md`). It is off by default. The **Record
+models** button, or the *Record HUD models to the log* setting in the app drawer, starts
+it; the button stays lit while it runs. Because the loader starts this app on every HUD
+page load, a recording carries on through Escape and resume, which a console snippet
+cannot.
+
+Every line it writes carries `rec:` after the app prefix, so the game log can be filtered
+for it. What it writes:
+
+- every change of the slow fields: timing strings and splits (with the lap position at
+  the change), pit window, low-frequency car state and flags, pit plan, mandatory stops,
+  session phase and clock, weather, car location (with pit time), FFB multiplier, fuel per
+  lap, realtime leaderboard order (reorders throttled to one line per half second, with a
+  count);
+- a summary at every lap boundary: FFB range and clip counts, g-force range per axis,
+  steering extremes against both locks, fuel at the line, per-corner tyre and brake ranges
+  beside their normalized companions, slip and lock, the distinct leaderboard state values;
+- calibration pairs of raw against normalized values as temperatures and pressures move;
+- the g vector at the first hard-brake and the first hard-steer frame of each lap;
+- refuelling in the pit lane, as litres per second;
+- the game clock of both models against the wall clock every minute;
+- a heartbeat every ten seconds with the per-frame fields and the leaderboard lines around
+  the focused car, and a compact dump of every leaderboard, cars-on-track and radar line
+  every thirty seconds.
+
+Switching it off, or the app being detached, writes a final summary. The findings so far
+are in ACEAppResearch's `research/in-game-findings.md`.
+
 ## Layout
 
 - `capabilities/` — the shipped app, exactly what lands in

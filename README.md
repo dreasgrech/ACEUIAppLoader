@@ -154,6 +154,8 @@ Each is a separate download with its own instructions.
    The UI Capabilities probe is also a tool for app authors which shows what is actually supported by the V8 JavaScript engine that's exposed by EVO's shipped Coherent Labs Gameface Cohtml engine.  
    <br/><br/>
    This helps app authors understand what specific capabilities are available for use in their apps.  For example, with the UI Capabilities Probe app, an app author can quickly see that WebAssembly is not supported or that not all canvas functions are available, and so on.
+   <br/><br/>
+   It also carries a <b>model recorder</b>: switched on from its Record button or its settings, it writes what the HUD's telemetry models do over a session to the game log (every change of the slow fields, a summary per lap, calibration pairs, leaderboard dumps), and keeps going through Escape and resume.
 </td>
 </tr>
 </table>
