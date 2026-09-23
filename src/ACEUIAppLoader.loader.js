@@ -672,14 +672,6 @@ ACEUIAppLoader.loader = (function () {
 
             return handle;
         };
-        /** Call `attach(root)` with `#<name>` once the DOM has it (now, or on DOMContentLoaded); once per root. */
-        /**
-         * `mount(attach, detach)`. Passing detach is what lets the app drawer really turn
-         * an app off: hiding its root leaves its key handlers, frame loop and sounds
-         * running (DOOM still answered Insert while "disabled"). With both halves the
-         * loader can stop and restart an app, and an app switched off is never attached in
-         * the first place.
-         */
         /**
          * Show or hide this app, exactly as the drawer's switch does: the root is hidden and
          * the app is stopped through its own detach, or started again on the way back.
@@ -727,6 +719,15 @@ ACEUIAppLoader.loader = (function () {
             });
         };
 
+        /**
+         * `mount(attach, detach)`: call `attach(root)` with `#<name>` once the DOM has it
+         * (now, or on DOMContentLoaded), once per root.
+         *
+         * Passing detach is what lets the app drawer really turn an app off: hiding its root
+         * leaves its key handlers, frame loop and sounds running (DOOM still answered Insert
+         * while "disabled"). With both halves the loader can stop and restart an app, and an
+         * app switched off is never attached in the first place.
+         */
         const mount = function (attach, detach) {
             // every app logged this line for itself; mount is called once, at the end of a
             // app's script, so it says "the script ran" even for an app switched off in the
@@ -986,18 +987,6 @@ ACEUIAppLoader.loader = (function () {
         return notice;
     };
 
-    /**
-     * Say so when the package was built for a different game build -- in the log, and on
-     * the HUD itself.
-     *
-     * The override this library arrives through is resolved against the base package's
-     * whole file table, so a game update can leave the package loading nothing at all;
-     * worse, the two stock files the package carries are the OLD game's, so a stale
-     * package that still wins can leave the HUD blank or every page broken. Neither
-     * symptom says what it is. `builtFor` is stamped in by the build; the game publishes
-     * its own version on ModelUIState, which is registered well before this runs.
-     * Returns whether they differ.
-     */
     /** The release a version string names: "0.9.1" of "0.9.1+release.6", or of "0.9.1". */
     const releaseOf = function (version) {
         return String(version).split(VERSION_BUILD_SEPARATOR)[0];
@@ -1010,6 +999,18 @@ ACEUIAppLoader.loader = (function () {
         return model && typeof model.game_version === "string" && model.game_version ? model.game_version : null;
     };
 
+    /**
+     * Say so when the package was built for a different game build -- in the log, and on
+     * the HUD itself.
+     *
+     * The override this library arrives through is resolved against the base package's
+     * whole file table, so a game update can leave the package loading nothing at all;
+     * worse, the two stock files the package carries are the OLD game's, so a stale
+     * package that still wins can leave the HUD blank or every page broken. Neither
+     * symptom says what it is. `builtFor` is stamped in by the build; the game publishes
+     * its own version on ModelUIState, which is registered well before this runs.
+     * Returns whether they differ.
+     */
     const warnIfGameMoved = function () {
         const built = ACEUIAppLoader.builtFor;
         const running = runningGameVersion();
