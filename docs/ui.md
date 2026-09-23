@@ -45,7 +45,7 @@ opened by OPTIONS in the header and applied live without rebuilding a row:
 | | `pinned` | off | always open: on the screen at once and after every reload; the header's PIN flips it |
 | | `hint` | near | off / when near / always |
 | Panel | `side` | right | right / left |
-| | `triple` | off | the edge a third of the way in, where the centre screen of a spanned triple ends |
+| | `triple` | off | **experimental**: the edge a third of the way in, where the centre screen of a spanned triple ends -- assumes the HUD page spans all three screens, unconfirmed on a real rig |
 | | `offset` | 0rem | further in from that edge; the edge line is clamped to the near 45% of the screen |
 | | `width` | 15rem (10–30) | |
 | | `top`, `bottom` | 4rem | insets, clamped to leave 10rem of panel |

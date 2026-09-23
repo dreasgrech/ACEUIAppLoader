@@ -206,10 +206,11 @@ ACEUIAppLoader.drawer = (function () {
      * A pointer sample that jumps more than this fraction of the screen from the previous
      * one is not a movement. With the drawer on the left edge and a second monitor on the
      * right, the pointer leaving the game to the right opened the drawer (in game
-     * 2026-09-23): the engine evidently reports a position such as 0,0 as the pointer goes.
-     * A hand at 5000 px/s moves about 85px between two 58.5 fps samples; a quarter of the
-     * screen is far beyond that. Neither a jump nor a repeat of the previous position opens
-     * the drawer, and the first few jumps are logged so the probe's answer can be checked.
+     * 2026-09-23): the engine reports **0,0** as the pointer leaves the window and the real
+     * position when it returns (log 2026-09-23 19:02: "2499,249 to 0,0", then "0,0 to
+     * 2552,219"). A hand at 5000 px/s moves about 85px between two 58.5 fps samples; a
+     * quarter of the screen is far beyond that. Neither a jump nor a repeat of the previous
+     * position opens the drawer, and the first few jumps are logged.
      */
     const JUMP_FRACTION = 0.25;
     const JUMP_LOG_MAX = 5;
@@ -281,8 +282,8 @@ ACEUIAppLoader.drawer = (function () {
         { key: "panel", type: "section", label: "Panel", columns: 2 },
         { key: KEY.side, type: "choice", label: "Side", value: SIDE_RIGHT, options: [SIDE_LEFT, SIDE_RIGHT], segmented: true,
             hint: "the edge it lives on. With a second monitor to the right, the left edge is the one the pointer cannot leave through" },
-        { key: KEY.triple, type: "toggle", label: "Triple screen", value: false,
-            hint: "puts the edge a third of the way in, where the centre screen ends" },
+        { key: KEY.triple, type: "toggle", label: "Triple screen (experimental)", value: false,
+            hint: "puts the edge a third of the way in, where the centre screen ends. Untested on a real triple: if the drawer lands in the wrong place, switch it off and report the [drawer] built line from your log" },
         { key: KEY.offset, type: "range", label: "Edge offset", value: 0, min: 0, max: OFFSET_MAX_REM, step: SIZE_STEP_REM, unit: "rem", digits: 1,
             hint: "moves the edge the drawer uses inwards from the screen edge, on top of the triple-screen third" },
         { key: KEY.width, type: "range", label: "Width", value: PANEL_WIDTH_REM, min: WIDTH_MIN_REM, max: WIDTH_MAX_REM, step: SIZE_STEP_REM, unit: "rem", digits: 1 },
@@ -425,13 +426,16 @@ ACEUIAppLoader.drawer = (function () {
      * panel is mid-slide for 300 ms, and layout reads lag in this engine), no calc() (an
      * inline calc is applied as nothing). Clamped so no stored value can put the drawer
      * where it cannot be reached or leave nothing of it: the edge line stays in the near
-     * half of the screen and the insets leave MIN_PANEL_HEIGHT_REM.
+     * half of the screen and the insets leave MIN_PANEL_HEIGHT_REM. `viewport`, optional,
+     * is `{ W, H, pxPerRem }` in place of the real ones: the tests walk every screen shape
+     * from 720p to a spanned triple through it, since none of them is on a desk here.
      */
-    const metrics = function () {
+    const metrics = function (viewport) {
         const opts = options();
-        const ppr = pxPerRem();
-        const W = window.innerWidth;
-        const H = window.innerHeight;
+        const given = viewport || {};
+        const ppr = given.pxPerRem || pxPerRem();
+        const W = given.W || window.innerWidth;
+        const H = given.H || window.innerHeight;
         const minHeight = MIN_PANEL_HEIGHT_REM * ppr;
         let top = clamp(opts.top, 0, INSET_MAX_REM) * ppr;
         let bottom = clamp(opts.bottom, 0, INSET_MAX_REM) * ppr;
@@ -465,11 +469,14 @@ ACEUIAppLoader.drawer = (function () {
         return y >= m.extentTop && y <= m.extentBottom;
     };
 
+    /** Pointer coordinates are whole pixels; the boundaries are not (W / 3, rem multiples), so a hair of slack at each. */
+    const EDGE_EPSILON_PX = 0.001;
+
     const inZone = function (x, y, m) {
         const mm = m || metrics();
         const d = edgeDistance(x, mm);
 
-        return d >= 0 && d <= mm.zonePx && inExtent(y, mm);
+        return d >= -EDGE_EPSILON_PX && d <= mm.zonePx + EDGE_EPSILON_PX && inExtent(y, mm);
     };
 
     const nearZone = function (x, m) {
@@ -1310,7 +1317,10 @@ ACEUIAppLoader.drawer = (function () {
             alignItems: "center",
             padding: "0.45em 0.6em"
         });
-        const count = css(document.createElement("span"), { flex: "1 1 auto", textAlign: "right", color: THEME.inkDim, fontSize: "0.65em" });
+        // the count is pushed right by a spacer, not by text-align: in game the aligned span drew
+        // its text straight after the title ("APPS7 loaded", 2026-09-23); a flex spacer needs no alignment
+        const spacer = div({ flex: "1 1 auto" });
+        const count = css(document.createElement("span"), { flex: "0 0 auto", marginLeft: "0.6em", color: THEME.inkDim, fontSize: "0.65em" });
         const hint = div({
             position: "fixed",
             background: HINT_COLOUR,
@@ -1357,8 +1367,9 @@ ACEUIAppLoader.drawer = (function () {
         readOptions();
 
         header.appendChild(css(text(document.createElement("span"), TITLE_TEXT), {
-            color: "#fff", fontSize: "0.75em", fontWeight: "700", letterSpacing: "0.08em"
+            flex: "0 0 auto", color: "#fff", fontSize: "0.75em", fontWeight: "700", letterSpacing: "0.08em"
         }));
+        header.appendChild(spacer);
         header.appendChild(count);
         header.appendChild(headerButton(OPTIONS_GLYPH, openSettings));
         state.pin = headerButton(PIN_TEXT, function () { setPinned(!isPinned()); });

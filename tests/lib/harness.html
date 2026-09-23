@@ -2226,6 +2226,64 @@ document.addEventListener("DOMContentLoaded", function () {
         });
 
         /*
+         * No 720p, 4K, ultrawide or triple-screen rig is on a desk here, and the geometry is
+         * pure arithmetic from the viewport, the stock's px-per-rem and the settings, so every
+         * shape is walked through metrics() with the viewport given. The px per rem is the
+         * stock formula (components.js resize()): clamp(10, 48, aspect > 1.77 ? min(W / 120,
+         * H / 67.5) : W / 120).
+         */
+        t("drawer: the geometry holds on every screen shape, 720p to a spanned triple, on either side, with the triple and offset clamps", function () {
+            const d = ACEUIAppLoader.drawer, S = ACEUIAppLoader.settings, A = d.DRAWER_APP;
+            const stockRem = function (W, H) { const ar = W / H; return Math.min(48, Math.max(10, ar > 1.77 ? Math.min(W / 120, H / 67.5) : W / 120)); };
+            const screens = [
+                { name: "720p", W: 1280, H: 720 }, { name: "1080p", W: 1920, H: 1080 }, { name: "1440p", W: 2560, H: 1440 },
+                { name: "4K", W: 3840, H: 2160 }, { name: "16:10", W: 1920, H: 1200 }, { name: "4:3", W: 1600, H: 1200 },
+                { name: "ultrawide", W: 3440, H: 1440 }, { name: "32:9", W: 5120, H: 1440 },
+                { name: "triple 1080p", W: 5760, H: 1080 }, { name: "triple 1440p", W: 7680, H: 1440 }, { name: "triple 4K", W: 11520, H: 2160 }
+            ];
+            const checkShape = function (s) {
+                const v = { W: s.W, H: s.H, pxPerRem: stockRem(s.W, s.H) };
+                const at = function (side, triple) {
+                    const m = d.metrics(v);
+                    const right = side === "right";
+                    const edge = right ? s.W - m.offsetPx : m.offsetPx;      // the edge line the drawer uses
+                    const where = s.name + " " + side + (triple ? " triple" : "");
+                    near(m.zonePx, 2 * v.pxPerRem, 0.001, where + ": zone 2rem");
+                    ok(m.zonePx >= 10 * 2 - 0.001, where + ": the zone is never under 20px (10px/rem floor)");
+                    near(m.offsetPx, triple ? s.W / 3 : 0, 0.001, where + ": the edge is " + (triple ? "a third of the way in" : "the screen edge"));
+                    ok(m.offsetPx <= s.W * d.OFFSET_MAX_FRACTION + 0.001, where + ": the edge stays in the near half");
+                    ok(m.widthPx <= s.W / 2, where + ": the panel fits in half the screen (" + Math.round(m.widthPx) + "px)");
+                    ok(m.H - m.topPx - m.bottomPx >= d.MIN_PANEL_HEIGHT_REM * v.pxPerRem - 0.001, where + ": the insets leave room");
+                    // the zone: on the drawer's edge, one zone wide, on the drawer's side of the edge line
+                    ok(d.inZone(right ? edge - 1 : edge + 1, s.H / 2, m), where + ": a pixel inside the edge is in the zone");
+                    ok(d.inZone(right ? edge - m.zonePx : edge + m.zonePx, s.H / 2, m), where + ": the zone's inner limit is in");
+                    ok(!d.inZone(right ? edge - m.zonePx - 1 : edge + m.zonePx + 1, s.H / 2, m), where + ": a pixel further is out");
+                    ok(!d.inZone(right ? edge + 1 : edge - 1, s.H / 2, m), where + ": the far side of the edge line is out (a triple's side screen)");
+                    ok(!d.inZone(right ? 1 : s.W - 1, s.H / 2, m), where + ": the opposite screen edge is out");
+                    // the panel: from the edge line inwards, one width wide, between the insets
+                    ok(d.inPanel(right ? edge - m.widthPx / 2 : edge + m.widthPx / 2, s.H / 2, m), where + ": the panel's middle is in the panel");
+                    ok(!d.inPanel(right ? edge - m.widthPx - 1 : edge + m.widthPx + 1, s.H / 2, m), where + ": past the panel's inner edge is out");
+                    ok(!d.inPanel(edge, m.topPx - 1, m) && !d.inPanel(edge, s.H - m.bottomPx + 1, m), where + ": above and below the insets is out");
+                    if (triple) { near(edge, right ? s.W * 2 / 3 : s.W / 3, 0.001, where + ": the edge line is the centre screen's boundary"); }
+                };
+                ["right", "left"].forEach(function (side) {
+                    S.set(A, "side", side);
+                    S.set(A, "triple", false); at(side, false);
+                    S.set(A, "triple", true); at(side, true);
+                });
+                // the offset on top of the triple third cannot push the edge line past the near half
+                S.set(A, "offset", 60);
+                ok(d.metrics(v).offsetPx <= s.W * d.OFFSET_MAX_FRACTION + 0.001, s.name + ": triple plus 60rem is clamped");
+                S.set(A, "offset", 0); S.set(A, "triple", false); S.set(A, "side", "right");
+            };
+            screens.forEach(checkShape);
+            // 4K at 32px/rem: 2rem is 64px; 720p at 10.67: 21px -- the same slice of each screen
+            near(d.metrics({ W: 3840, H: 2160, pxPerRem: stockRem(3840, 2160) }).zonePx, 64, 0.01, "4K: 64px");
+            near(d.metrics({ W: 1280, H: 720, pxPerRem: stockRem(1280, 720) }).zonePx, 21.33, 0.01, "720p: 21px");
+            d.resetSettings();
+        });
+
+        /*
          * In game (2026-09-23, two monitors, the drawer on the left edge): the pointer leaving
          * the game window to the RIGHT opened the drawer. The engine evidently reports a
          * position such as 0,0 as the pointer goes. No hand moves a quarter of the screen
@@ -2243,7 +2301,7 @@ document.addEventListener("DOMContentLoaded", function () {
             mouse("mousemove", m.W - 1, m.H / 2);
             eq(d.state.open, false, "the same position again is not a movement either");
             mouse("mousemove", m.W - 2, m.H / 2);
-            eq(d.state.open, true, "a real movement inside the zone opens it");
+            eq(d.state.open, true, "a real movement inside the zone opens it (trigger " + d.triggerNow() + ", held " + d.state.buttonHeld + ", zone " + d.inZone(m.W - 2, m.H / 2) + ", dwell " + d.state.opts.dwell + "/" + d.state.dwellTimer + ", last " + d.state.last.x + "," + d.state.last.y + ", opts " + JSON.stringify(d.state.opts) + ", m " + JSON.stringify(d.metrics()) + ")");
             d.close();
             S.set(A, "side", "left");
             d.state.intro = false;                                 // the rebuild a case ago started the 4 s intro
