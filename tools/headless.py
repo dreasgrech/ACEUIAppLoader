@@ -170,7 +170,8 @@ def parse_report(dom):
 
 
 def check_harness(testcase, harness_path, min_cases):
-    """unittest helper: run, print the report, assert every case passed."""
+    """unittest helper: run, print the report, assert every case passed. Returns the number of
+    cases, so a kit with several harnesses can hold their sum to its minimum."""
     browser = find_browser()
     if not browser:
         testcase.skipTest("no Chromium-based browser found (set ACE_BROWSER)")
@@ -181,3 +182,5 @@ def check_harness(testcase, harness_path, min_cases):
     testcase.assertTrue(finished, "harness did not finish")
     testcase.assertGreaterEqual(total, min_cases, "expected the full set of cases")
     testcase.assertEqual(passed, total, "cases failed:\n" + report)
+
+    return total

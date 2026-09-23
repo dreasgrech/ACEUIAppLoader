@@ -24,7 +24,7 @@ browser (tools/headless.py; skipped without a browser).
 
 Optional class attributes:
     APP_DIR       shipped folder (default: the one directory under ROOT with an app.json)
-    MIN_CASES     minimum cases a harness must report (default 1)
+    MIN_CASES     minimum cases the harnesses must report between them (default 1)
     HOT_PATH      (start marker, end marker) in the main script: that slice must not
                   build markup or touch style, and must not hold magic numbers
     ALLOW_OWN     substrings the "belongs to the library" rule should tolerate
@@ -233,6 +233,10 @@ class AppTests(unittest.TestCase):
             self.skipTest("no tests/**/harness.html")
         if not headless.find_browser():
             self.skipTest("no Chromium-based browser found (set ACE_BROWSER)")
+        # MIN_CASES guards against a suite silently shrinking; it is held to the cases of all the
+        # harnesses together, so an app may keep a second harness (recorded sessions, say) small
+        total = 0
         for page in pages:
             with self.subTest(harness=os.path.relpath(page, self.ROOT)):
-                headless.check_harness(self, page, self.MIN_CASES)
+                total += headless.check_harness(self, page, 1)
+        self.assertGreaterEqual(total, self.MIN_CASES, f"expected the full set of cases across {len(pages)} harness(es)")

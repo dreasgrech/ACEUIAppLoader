@@ -71,6 +71,9 @@ def main(argv):
     app_dir = os.path.abspath(args[0])
     repo = os.path.dirname(app_dir)
 
+    if not os.path.isdir(app_dir):
+        raise SystemExit("no such app folder: %s\n  give the path to the app's own folder, as in ACEBetterDeltaBar/betterdeltabar" % app_dir)
+
     dirty = subprocess.run(["git", "status", "--porcelain"], cwd=repo, capture_output=True, text=True)
     if dirty.returncode == 0 and dirty.stdout.strip() and "--allow-dirty" not in flags:
         raise SystemExit("the app's working tree is not clean; commit first (or --allow-dirty to build anyway):\n  "

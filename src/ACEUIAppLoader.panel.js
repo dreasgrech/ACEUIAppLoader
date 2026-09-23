@@ -36,8 +36,13 @@ ACEUIAppLoader.panel = (function () {
         return Boolean(pos) && typeof pos.fx === "number" && typeof pos.fy === "number";
     };
 
+    /** What a root with no parent (a preview page, a harness) is measured against: nothing, which every size test reads as "not ready". */
+    const EMPTY_RECT = { left: 0, top: 0, width: 0, height: 0 };
+
     const parentRect = function (panel) {
-        return panel.root.parentElement.getBoundingClientRect();
+        const parent = panel.root.parentElement;
+
+        return parent ? parent.getBoundingClientRect() : EMPTY_RECT;
     };
 
     const parentHasSize = function (panel) {
@@ -199,14 +204,16 @@ ACEUIAppLoader.panel = (function () {
             up: function () { onMouseUp(panel); }
         };
 
+        // hidden until positioned; immediate attempt now, the HUD store settles it in the loop.
+        // Before the listeners, so that a throw in here leaves nothing registered that only a
+        // handle we never returned could take off again
+        root.style.visibility = HIDDEN;
+        restoreImmediately(panel);
+
         root.addEventListener("mousedown", panel.handlers.down);
         window.addEventListener("mousemove", panel.handlers.move);
         window.addEventListener("mouseup", panel.handlers.up);
         document.addEventListener("mouseup", panel.handlers.up);
-
-        // hidden until positioned; immediate attempt now, the HUD store settles it in the loop
-        root.style.visibility = HIDDEN;
-        restoreImmediately(panel);
 
         return panel;
     };

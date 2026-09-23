@@ -255,7 +255,8 @@ ACEUIAppLoader.settings = (function () {
     const coerce = function (spec, value) {
         if (value === undefined || value === null) { return spec.value; }
 
-        if (spec.type === "toggle") { return Boolean(value); }
+        // a toggle is a boolean or nothing: a string "false" left by a hand-edited store would read as on
+        if (spec.type === "toggle") { return typeof value === "boolean" ? value : spec.value; }
 
         if (spec.type === "order") { return coerceOrder(spec, value); }
 

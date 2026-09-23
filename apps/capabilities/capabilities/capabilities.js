@@ -1226,7 +1226,7 @@ const CapabilitiesProbe = (function () {
             watch(rec, "pitwindow", pickFields(session, ["pitstop_window_ranges", "current_pitstop_window_index", "is_current_pitstop_window_open",
                 "pitstop_window_time_ms", "pitstop_window_time", "pitstop_window_requires_tyre_change", "pitstop_window_requires_refuelling"]),
                 "pit window", { time_left_ms: session.time_left_ms, lapMs: lapMs });
-            watch(rec, "session", pickFields(session, ["session_name", "phase_name", "initial_grip", "initial_weather", "total_lap", "current_lap",
+            watch(rec, "session", pickFields(session, ["session_name", "event_id", "session_id", "phase_name", "initial_grip", "initial_weather", "total_lap", "current_lap",
                 "lap_length_km", "end_session_flag", "lights_on", "lights_mode"]), "session");
             watch(rec, "timeleft_str", session.time_left, "session.time_left (string)");
             watch(rec, "timeleft_zero", typeof session.time_left_ms === "number" && session.time_left_ms <= 0, "session clock at or below zero",
@@ -1370,7 +1370,7 @@ const CapabilitiesProbe = (function () {
             rec.lastClock = now;
             recLog("CLOCK wall=" + new Date().toISOString() + " car=" + car.time_of_day_hours + ":" + car.time_of_day_minutes + ":" + car.time_of_day_seconds
                 + " session=" + (session ? session.time_of_day_hours + ":" + session.time_of_day_minutes + ":" + session.time_of_day_seconds : "?")
-                + " time_left_ms=" + describe(session ? session.time_left_ms : undefined) + " air=" + describe(car.air_temperature_c)
+                + " time_left_ms=" + describe(session ? session.time_left_ms : undefined) + " event_id=" + describe(session ? session.event_id : undefined) + " session_id=" + describe(session ? session.session_id : undefined) + " air=" + describe(car.air_temperature_c)
                 + " initial_weather=" + describe(session ? session.initial_weather : undefined) + " initial_grip=" + describe(session ? session.initial_grip : undefined));
         }
 

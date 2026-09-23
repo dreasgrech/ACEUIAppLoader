@@ -444,7 +444,16 @@ ACEUIAppLoader.loader = (function () {
         if (root.hasAttribute(MOUNTED_ATTR)) { return false; }
 
         root.setAttribute(MOUNTED_ATTR, "");
-        entry.instance = entry.attach(root);
+
+        // an attach that throws leaves nothing mounted: the mark goes with it, or the drawer could
+        // neither start the app again nor stop it for the life of the page
+        try {
+            entry.instance = entry.attach(root);
+        } catch (e) {
+            root.removeAttribute(MOUNTED_ATTR);
+            throw e;
+        }
+
         log("app " + name + " started");
 
         return true;
@@ -748,7 +757,15 @@ ACEUIAppLoader.loader = (function () {
 
                 root.setAttribute(MOUNTED_ATTR, "");
 
-                const instance = attach(root);
+                let instance = null;
+
+                // as in activate: a throw must not leave the app marked as mounted
+                try {
+                    instance = attach(root);
+                } catch (e) {
+                    root.removeAttribute(MOUNTED_ATTR);
+                    throw e;
+                }
 
                 if (entry) { entry.instance = instance; }
             };

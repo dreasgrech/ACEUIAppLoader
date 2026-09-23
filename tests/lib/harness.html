@@ -878,8 +878,12 @@ document.addEventListener("DOMContentLoaded", function () {
         eq(S.get("coerce", "n"), 10, "clamped to max");
         S.set("coerce", "n", -99);
         eq(S.get("coerce", "n"), 0, "clamped to min");
-        S.set("coerce", "b", "yes");
-        eq(S.get("coerce", "b"), true, "made a boolean");
+        S.set("coerce", "b", true);
+        eq(S.get("coerce", "b"), true, "a boolean is kept");
+        S.set("coerce", "b", "false");
+        eq(S.get("coerce", "b"), false, "a string is not a boolean: the default, not Boolean(\"false\")");
+        S.set("coerce", "b", 1);
+        eq(S.get("coerce", "b"), false, "nor is a number");
         S.set("coerce", "c", "nope");
         eq(S.get("coerce", "c"), "a", "an option that does not exist falls back to the default");
         eq(S.set("coerce", "missing", 1), undefined, "an unknown key is not invented");
