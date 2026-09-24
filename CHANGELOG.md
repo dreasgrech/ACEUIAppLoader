@@ -1,6 +1,6 @@
 # Changelog
 
-## 0.26.0 (unreleased)
+## 0.26.0 — 2026-09-24
 
 Includes 0.25.0, which was never published.
 
