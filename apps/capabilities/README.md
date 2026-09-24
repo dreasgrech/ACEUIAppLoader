@@ -2,13 +2,13 @@
 
 A capability probe for the Assetto Corsa EVO HUD. One of the loader's **developer apps**: it ships inside `ACEUIAppLoader.kspkg`, and the app drawer keeps it behind the `DEVELOPER APPS` switch that is off by default.
 
-It exists to answer one question before anything ambitious gets built on the HUD: **what can JavaScript actually do inside the game's Cohtml/V8?** The game runs V8 9.4 started with `--noexpose_wasm`, in a Cohtml sandbox with no Web Audio and no video demuxers — so the browser is not a reliable guide. This runs about 70 feature detections in the real in-game engine and reports each as **yes / no / partial / warn**, both in a draggable panel and in the game log.
+It exists to answer one question before anything ambitious gets built on the HUD: **what can JavaScript actually do inside the game's Cohtml/V8?** The game runs V8 9.4 started with `--noexpose_wasm`, in a Cohtml sandbox with no Web Audio and no video demuxers — so the browser is not a reliable guide. This runs 137 feature detections in the real in-game engine and reports each as **yes / no / partial / warn**, both in a draggable panel and in the game log.
 
 The findings themselves belong in the [`ACEGameInternals`](https://github.com/dreasgrech/ACEGameInternals) notes; this is the instrument that produces them, and the place to prototype the next capability worth leaning on — the pixel path ACEDOOM uses, a track-map renderer, networked overlays.
 
 ## What it probes
 
-Eleven categories, ~80 checks:
+Twelve categories, 137 checks:
 
 - **Language & engine** — WebAssembly (expected absent), `new Function`/eval, async
   functions, Promise, BigInt, Proxy, typed arrays, TextEncoder, `structuredClone`, Intl.
@@ -29,9 +29,10 @@ Eleven categories, ~80 checks:
   (exists but silent — no decoder), video `canPlayType` (empty — the "no demuxers"
   evidence), and the `engine.trigger` FMOD/UI-command bridge the apps actually use
   for sound.
-- **Crypto & encoding** — `crypto.getRandomValues`, `crypto.subtle`, `btoa`/`atob`.
 - **DOM & observers** — Mutation/Resize/Intersection observers, `DOMParser`,
   `customElements`, `getComputedStyle`, `matchMedia`.
+- **Input & events** — `PointerEvent`, `KeyboardEvent`, `WheelEvent`, `TouchEvent`,
+  `EventTarget`, `navigator.getGamepads` and `Gamepad`.
 - **Pointer & screen** — the viewport in css px, px per rem (`window.FontSize`, written by
   the stock `resize()`), `window.screen` and `devicePixelRatio`, whether the HUD has hidden
   the cursor right now, and counters the probe fills from the moment it attaches: mousemove
@@ -41,6 +42,9 @@ Eleven categories, ~80 checks:
 - **Gameface bridge & telemetry** — `window.engine` and its `on`/`off`/`trigger`/
   `call`/`BindingsReady`, `cohtml`, and a scan of the `Model*` telemetry globals the
   game publishes on `window` (so you can see, live, exactly which models exist).
+- **Telemetry models (live)** — whether the models the HUD's widgets read are there and
+  moving right now: `ModelCurrentCar`, `ModelTiming`, `ModelUIState`, `ModelUISessionState`,
+  `ModelUIRadarState`, `ModelCarsOnTrack`, `ModelUIDriverState`, `ModelLeaderboard`.
 
 ### Reading the results
 
@@ -74,13 +78,15 @@ off the right edge and keep moving it, alt-tab away and back, click once, then *
   when that happens. Zero after the session means a surface cannot rely on `mouseleave` or
   `blur` to notice the pointer is gone.
 - *pointer jumps*: samples more than a quarter of the screen from the previous one, which no
-  hand produces. The drawer opened when the pointer left the window on the far side
-  (2026-09-23), so the engine most likely reports a position such as `0,0` as the pointer
-  leaves; the last jump's coordinates say what it reports.
+  hand produces. The engine reports the pointer at `0,0` as it leaves the game window and at
+  its real place as it comes back (measured 2026-09-23, recorded in gameface-notes.md); the
+  last jump's coordinates show it.
 - *mouse buttons field*: whether `e.buttons` is populated on a press (the stock never reads
   it; a surface that wants to know a button is held must otherwise track it).
 - *inline pointer-events: none*: the stock stylesheets use the property; this hit-tests the
-  inline form, which the drawer's edge hint relies on.
+  inline form, which the drawer's edge hint relies on, beside a control pair that has the
+  property from the stylesheet. If neither lets the hit through, the check says so rather
+  than blaming the inline form.
 - *cursor hidden by the HUD*: the stock HUD hides the cursor three seconds after the last
   move and shows it again only after a 100px move — the reason an edge hint exists.
 
@@ -89,10 +95,11 @@ live once they are known.
 
 ### Safety of the active probes
 
-Two checks do more than test for a global's presence: they exercise it. Both are
+Four checks do more than test for a global's presence: they exercise it. All are
 deliberately harmless — a `fetch` of a local `data:` URI (no network, no loose-file
-lookup — which would crash the game — just an in-memory string) and a `Worker` loaded
-from a `Blob` URL that doubles a number and is terminated immediately. Each runs
+lookup — which would crash the game — just an in-memory string), a `Worker` loaded
+from a `Blob` URL that doubles a number and is terminated immediately, and a WebSocket
+and an XMLHttpRequest aimed at the loopback address, which nothing answers. Each runs
 behind a timeout and reports `warn` rather than hanging if the engine never answers,
 so the probe can never wedge the HUD.
 
@@ -103,20 +110,27 @@ research notes in ACEAppResearch (`research/*.md`). It is off by default. The **
 models** button, or the *Record HUD models to the log* setting in the app drawer, starts
 it; the button stays lit while it runs. Because the loader starts this app on every HUD
 page load, a recording carries on through Escape and resume, which a console snippet
-cannot.
+cannot. The setting is kept like any other, so a recording also starts again on the next
+game launch until it is switched off. Switched off and on again, a recording starts from
+nothing.
 
 Every line it writes carries `rec:` after the app prefix, so the game log can be filtered
 for it. What it writes:
 
-- every change of the slow fields: timing strings and splits (with the lap position at
+- every change of the slow fields (the fields that count down every frame or second,
+  such as the time in the pits and the session clock, go into the line's context rather
+  than making lines of their own): timing strings and splits (with the lap position at
   the change), pit window, low-frequency car state and flags, pit plan, mandatory stops,
   session phase and clock, weather, car location (with pit time), FFB multiplier, fuel per
   lap, realtime leaderboard order (reorders throttled to one line per half second, with a
   count);
-- a summary at every lap boundary: FFB range and clip counts, g-force range per axis,
+- a line for each correction the game makes to its lap clock (a small step back, common in
+  multiplayer), and a summary at every lap boundary (the clock back to the line, a drop of
+  more than a second, or the lap count moving): FFB range and clip counts, g-force range per axis,
   steering extremes against both locks, fuel at the line, per-corner tyre and brake ranges
   beside their normalized companions, slip and lock, the distinct leaderboard state values;
-- calibration pairs of raw against normalized values as temperatures and pressures move;
+- calibration pairs of raw against normalized values, once per step of each temperature
+  and pressure;
 - the g vector at the first hard-brake and the first hard-steer frame of each lap;
 - refuelling in the pit lane, as litres per second;
 - the game clock of both models against the wall clock every minute;

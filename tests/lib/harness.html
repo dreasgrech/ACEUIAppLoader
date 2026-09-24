@@ -832,9 +832,11 @@ document.addEventListener("DOMContentLoaded", function () {
         let reopened = 0;
         const opener = function (id) { reopened += 1; W.open(id, { title: "S" }); };
         window.HUD = null;
+        W.remembered.adopted = false;                              // a page before the HUD store is adopted
         W.open("stale.a", { title: "S" }); W.close("stale.a");     // closed on purpose: localStorage says so
         const local = P.readLocal(W.OPEN_STORE_KEY);
         ok(typeof local.at === "number", "the record carries when it was written");
+        eq(local.ops[ACEUIAppLoader.page]["stale.a"], false, "and, the store not adopted yet, the close as a change to replay on its list");
         W.discardAll(); W.remembered.touched = false;             // the page reloads: nothing touched yet
         W.reopen("stale.a", opener);
         // the copy the game saved to disk earlier still lists it as open
@@ -843,7 +845,8 @@ document.addEventListener("DOMContentLoaded", function () {
         eq(W.adopt().length, 0, "nothing is due to come back");
         clock.step(6000); eq(reopened, 0, "the window stays closed");
         eq((window.HUD.StoredData.layouts.default.elements[W.OPEN_HUD_ID].open[ACEUIAppLoader.page] || []).length, 0, "and the store now holds this session's list");
-        ok(last(window.__log).indexOf("older than this session") >= 0, "the log says why");
+        ok(last(window.__log).indexOf("replayed on its list") >= 0, "the log says why: " + last(window.__log));
+        eq(P.readLocal(W.OPEN_STORE_KEY).ops, undefined, "the changes, replayed, are not kept as changes any more");
         // a store that is newer is adopted as before
         const newer = { open: {}, at: Date.now() + 60000 }; newer.open[ACEUIAppLoader.page] = ["stale.a"];
         window.HUD.StoredData.layouts.default.elements[W.OPEN_HUD_ID] = newer;
@@ -1125,6 +1128,7 @@ document.addEventListener("DOMContentLoaded", function () {
         arrows.dispatchEvent(new MouseEvent("mouseover", { bubbles: true })); eq(foot.children[0].textContent, "the chevrons", "chips hint too");
         arrows.dispatchEvent(new MouseEvent("mouseout", { bubbles: true }));
         eq(show.children[2].tagName, "DIV", "a non-toggle in a chips section is an ordinary row");
+        eq(show.children[2].style.width, "100%", "on a line of its own (second review, 2026-09-24)");
         ok(show.children[2].textContent.indexOf("Band") === 0, "with its label");
 
         const win = S.open("wide");
@@ -2133,7 +2137,7 @@ document.addEventListener("DOMContentLoaded", function () {
             const rows = d.state.apps.length;
             const label = d.state.apps[0].label;
             S.set(A, "width", 20);
-            eq(d.state.panel.style.width, "20rem");
+            eq(d.state.panel.style.width, Math.round(20 * d.pxPerRem()) + "px", "20rem, in whole pixels");
             S.set(A, "top", 6);
             eq(d.state.panel.style.top, (6 * d.pxPerRem()) + "px", "insets are written in px, since they are clamped against the viewport");
             S.set(A, "scale", 1.3);
@@ -2154,7 +2158,7 @@ document.addEventListener("DOMContentLoaded", function () {
             ok(d.state.parkTimer !== 0, "parked off-screen once the fade is over");
             eq(d.state.apps.length, rows, "no rows were rebuilt for any of it");
             d.resetSettings();
-            eq(d.state.panel.style.width, "15rem"); eq(d.state.panel.style.fontSize, "1rem");
+            eq(d.state.panel.style.width, Math.round(15 * d.pxPerRem()) + "px"); eq(d.state.panel.style.fontSize, "1rem");
             ok(d.state.panel.style.transition.indexOf("transform") === 0, "sliding again");
             eq(d.state.panel.style.transform, "translateX(100%)", "and parked, the fade's timer cancelled by the reset");
         });
@@ -2246,7 +2250,8 @@ document.addEventListener("DOMContentLoaded", function () {
                 const at = function (side, triple) {
                     const m = d.metrics(v);
                     const right = side === "right";
-                    const edge = right ? s.W - m.offsetPx : m.offsetPx;      // the edge line the drawer uses
+                    // the edge line the drawer uses: the whole pixel the panel is written at (second review, 2026-09-24)
+                    const edge = right ? s.W - Math.round(m.offsetPx) : Math.round(m.offsetPx);
                     const where = s.name + " " + side + (triple ? " triple" : "");
                     near(m.zonePx, 2 * v.pxPerRem, 0.001, where + ": zone 2rem");
                     ok(m.zonePx >= 10 * 2 - 0.001, where + ": the zone is never under 20px (10px/rem floor)");
@@ -2264,7 +2269,7 @@ document.addEventListener("DOMContentLoaded", function () {
                     ok(d.inPanel(right ? edge - m.widthPx / 2 : edge + m.widthPx / 2, s.H / 2, m), where + ": the panel's middle is in the panel");
                     ok(!d.inPanel(right ? edge - m.widthPx - 1 : edge + m.widthPx + 1, s.H / 2, m), where + ": past the panel's inner edge is out");
                     ok(!d.inPanel(edge, m.topPx - 1, m) && !d.inPanel(edge, s.H - m.bottomPx + 1, m), where + ": above and below the insets is out");
-                    if (triple) { near(edge, right ? s.W * 2 / 3 : s.W / 3, 0.001, where + ": the edge line is the centre screen's boundary"); }
+                    if (triple) { near(edge, right ? s.W * 2 / 3 : s.W / 3, 0.5, where + ": the edge line is the centre screen's boundary, to the pixel"); }
                 };
                 ["right", "left"].forEach(function (side) {
                     S.set(A, "side", side);
@@ -2312,6 +2317,290 @@ document.addEventListener("DOMContentLoaded", function () {
             eq(d.state.open, false, "nor does 0,0 repeated every frame while the pointer is away");
             eq(d.state.hint.style.opacity, "0", "and the hint does not light for it");
             d.resetSettings();
+        });
+
+        t("drawer (review 2026-09-24): closed with an edge offset it is hidden, not only transparent, so the strip still over the screen catches no click", function () {
+            const d = ACEUIAppLoader.drawer, S = ACEUIAppLoader.settings, A = d.DRAWER_APP;
+            d.close();
+            S.set(A, "motion", "none"); S.set(A, "offset", 20);
+            d.open(); eq(d.state.panel.style.visibility, "", "open: shown");
+            d.close(); eq(d.state.panel.style.visibility, "hidden", "closed: hidden as well as moved (parked by its own width, it would still overlap the screen)");
+            d.open(); eq(d.state.panel.style.visibility, "", "and shown again on opening");
+            d.close();
+            S.set(A, "motion", "slide"); d.open(); d.close();
+            eq(d.state.panel.style.visibility, "", "sliding out: still visible while it moves"); ok(d.state.parkTimer !== 0, "hidden once the slide is over");
+            d.resetSettings();
+        });
+
+        t("drawer (review 2026-09-24): pinned, it comes back as soon as the HUD is shown again", function () {
+            const d = ACEUIAppLoader.drawer;
+            const m = d.metrics();
+            d.close(); d.setPinned(true); eq(d.state.open, true);
+            document.body.classList.add("hide-hud");
+            mouse("mousemove", 300, m.H / 2); mouse("mousemove", 320, m.H / 2);
+            eq(d.state.open, false, "the HUD hidden: put away");
+            document.body.classList.remove("hide-hud");
+            mouse("mousemove", 340, m.H / 2);
+            eq(d.state.open, true, "the HUD back: so is the pinned drawer");
+            d.setPinned(false); d.close(); d.resetSettings();
+        });
+
+        t("drawer (review 2026-09-24): a vertical jump is judged against the height, 0,0 is always the pointer gone, and a jump clears a button the page never saw released", function () {
+            const d = ACEUIAppLoader.drawer, S = ACEUIAppLoader.settings, A = d.DRAWER_APP;
+            const m = d.metrics();
+            d.close();
+            S.set(A, "side", "left"); d.state.intro = false;
+            mouse("mousemove", 100, 100);
+            mouse("mousemove", 0, 0);
+            eq(d.state.open, false, "100,100 to 0,0 is well under a quarter of the screen, but 0,0 is the pointer leaving: not a movement");
+            mouse("mousemove", 60, 100);
+            mouse("mousedown", 60, 100); eq(d.state.buttonHeld, true, "a press");
+            const drop = Math.round(m.H * 0.3);
+            ok(drop < m.W * 0.25, "a drop that a quarter of the width would call a movement");
+            mouse("mousemove", 60, 100 + drop);
+            eq(d.state.buttonHeld, false, "a drop of 30% of the height in one sample is a jump: the pointer went away, and a release out there never reached us");
+            mouse("mouseup", 60, 100 + drop);
+            d.resetSettings(); d.close();
+        });
+
+        t("drawer (review 2026-09-24): with the edge set in from the screen's, a fast hand crossing its zone between two samples still reaches it", function () {
+            const d = ACEUIAppLoader.drawer, S = ACEUIAppLoader.settings, A = d.DRAWER_APP;
+            d.close();
+            S.set(A, "offset", 20);
+            const m = d.metrics(), line = m.W - m.offsetPx;
+            ok(m.zonePx < 120, "the zone is narrower than the step below");
+            mouse("mousemove", Math.round(line - 60), m.H / 2);
+            eq(d.state.open, false);
+            mouse("mousemove", Math.round(line + 60), m.H / 2);
+            eq(d.state.open, true, "from this side of the line to beyond it in one sample: reached");
+            d.close();
+            S.set(A, "dwell", 200);
+            mouse("mousemove", Math.round(line - 60), m.H / 2); mouse("mousemove", Math.round(line + 60), m.H / 2);
+            eq(d.state.open, false, "with a dwell asked for, a pass-through is exactly what it refuses");
+            d.resetSettings(); d.close();
+        });
+
+        t("drawer (review 2026-09-24): opened by the hotkey it waits for the pointer to reach it before any auto-close; a press cancels a pending dwell", function () {
+            const d = ACEUIAppLoader.drawer, S = ACEUIAppLoader.settings, A = d.DRAWER_APP;
+            const m = d.metrics();
+            d.close();
+            S.set(A, "toggleKey", "KeyJ");
+            mouse("mousemove", 300, m.H / 2);
+            window.dispatchEvent(new KeyboardEvent("keydown", { code: "KeyJ" }));
+            eq(d.state.open, true, "the key opens it"); eq(d.state.visitPending, true);
+            mouse("mousemove", 320, m.H / 2);
+            eq(d.state.closeTimer, 0, "the pointer a screen away: no close pending yet");
+            mouse("mousemove", Math.round(m.W - m.widthPx / 2), m.H / 2);
+            eq(d.state.visitPending, false, "it reached the panel");
+            mouse("mousemove", Math.round(m.W - m.widthPx / 2) - 40, m.H / 2);
+            mouse("mousemove", 300, m.H / 2);
+            ok(d.state.closeTimer !== 0, "now leaving it closes it after the delay");
+            d.close();
+            S.set(A, "toggleKey", ""); S.set(A, "dwell", 200);
+            glide(m.W - 1, m.H / 2); ok(d.state.dwellTimer !== 0, "a dwell running");
+            mouse("mousedown", m.W - 1, m.H / 2); eq(d.state.dwellTimer, 0, "a press calls it off");
+            mouse("mouseup", m.W - 1, m.H / 2);
+            d.resetSettings(); d.close();
+        });
+
+        t("drawer (review 2026-09-24): while its own settings pane is open it stays open, so the Panel settings can be seen changing", function () {
+            const d = ACEUIAppLoader.drawer, S = ACEUIAppLoader.settings, A = d.DRAWER_APP;
+            const m = d.metrics();
+            d.close();
+            S.open(A); ok(S.isOpen(A), "the pane is open");
+            d.open();
+            mouse("mousemove", 300, m.H / 2); mouse("mousemove", 320, m.H / 2);
+            eq(d.state.closeTimer, 0, "the pointer away: no close while the pane is open");
+            mouse("mousedown", 320, m.H / 2); mouse("mouseup", 320, m.H / 2);
+            eq(d.state.open, true, "a press in the pane (outside the drawer) leaves it open");
+            S.close(A);
+            mouse("mousemove", 340, m.H / 2);
+            ok(d.state.closeTimer !== 0, "the pane closed: away from it, it closes as before");
+            d.close(); d.resetSettings();
+        });
+
+        t("drawer (second review 2026-09-24): an app whose start throws is logged and left stopped; the drawer still builds and its switch still saves", function () {
+            const d = ACEUIAppLoader.drawer, P = ACEUIAppLoader.persist;
+            const root = document.createElement("div");
+            root.id = "brittle";
+            document.getElementById("center").appendChild(root);
+            const entry = { name: "brittle", info: { title: "Brittle" }, status: "loaded" };
+            ACEUIAppLoader.loader.apps.push(entry);
+            entry.attach = function () { throw new Error("boom"); };
+            entry.detach = function () {};
+            d.state.visible.brittle = true;
+            const list = [
+                { name: "alpha", info: { title: "Alpha App" }, status: "loaded" },
+                { name: "brittle", info: { title: "Brittle" }, status: "loaded" },
+                { name: "beta", info: { title: "Beta App" }, status: "failed" }
+            ];
+            const before = window.__log.length;
+            const panel = d.build(list);
+            ok(panel && panel.parentNode, "the drawer is built and on the page");
+            eq(d.state.apps.length, 3, "every row, including those after the app that threw");
+            ok(window.__log.slice(before).some(function (l) { return l.indexOf("[drawer] starting brittle failed") >= 0; }), "the throw is logged");
+            eq(root.hasAttribute("data-mounted"), false, "nothing left marked as running");
+            d.setVisible("brittle", false);
+            d.setVisible("brittle", true);
+            eq(P.readLocal(d.STORE_KEY).brittle, true, "the switch saved although the start threw again");
+            root.parentNode.removeChild(root);
+            ACEUIAppLoader.loader.apps.splice(ACEUIAppLoader.loader.apps.indexOf(entry), 1);
+            delete d.state.visible.brittle;
+            d.build([list[0], list[2]]);
+        });
+
+        t("drawer (second review 2026-09-24): the hotkey puts a pinned drawer away and unpins it, so the next pointer move does not bring it back", function () {
+            const d = ACEUIAppLoader.drawer, S = ACEUIAppLoader.settings, A = d.DRAWER_APP;
+            const m = d.metrics();
+            d.close();
+            S.set(A, "toggleKey", "KeyJ");
+            d.setPinned(true);
+            eq(d.state.open, true, "pinned: open");
+            window.dispatchEvent(new KeyboardEvent("keydown", { code: "KeyJ" }));
+            eq(d.state.open, false, "the key closes it");
+            eq(d.isPinned(), false, "and unpins it, as the pin's hint says");
+            mouse("mousemove", 300, m.H / 2); mouse("mousemove", 320, m.H / 2);
+            eq(d.state.open, false, "the pointer moving does not bring it back");
+            d.resetSettings(); d.close();
+        });
+
+        t("drawer (second review 2026-09-24): unpinning, or Reset to defaults, never closes it under the pointer or with its own pane open", function () {
+            const d = ACEUIAppLoader.drawer, S = ACEUIAppLoader.settings, A = d.DRAWER_APP;
+            const m = d.metrics();
+            const onPanel = Math.round(m.W - m.widthPx / 2);
+            d.close();
+            d.setPinned(true);
+            mouse("mousemove", onPanel, m.H / 2); mouse("mousemove", onPanel - 10, m.H / 2);
+            d.setPinned(false);
+            eq(d.state.closeTimer, 0, "unpinned with the pointer on it: no close");
+            mouse("mousemove", onPanel - 40, m.H / 2); mouse("mousemove", 300, m.H / 2);
+            ok(d.state.closeTimer !== 0, "the pointer leaving closes it as usual");
+            d.close();
+            S.open(A);
+            d.open();
+            mouse("mousemove", 300, m.H / 2); mouse("mousemove", 320, m.H / 2);
+            S.set(A, "pinned", true); S.set(A, "pinned", false);
+            eq(d.state.closeTimer, 0, "unpinned in its own pane: stays while the pane is open");
+            d.resetSettings();
+            eq(d.state.closeTimer, 0, "Reset to defaults in the pane: stays too");
+            eq(d.state.open, true);
+            S.close(A);
+            d.close(); d.resetSettings();
+        });
+
+        t("drawer (second review 2026-09-24): the pointer gone (0,0) keeps nothing open, even where a left-hand zone covers 0,0", function () {
+            const d = ACEUIAppLoader.drawer, S = ACEUIAppLoader.settings, A = d.DRAWER_APP;
+            d.close();
+            S.set(A, "side", "left"); d.state.intro = false;
+            const m = d.metrics();
+            ok(d.inZone(0, 0, m), "the premise: 0,0 is inside the left zone");
+            glide(1, m.H / 2);
+            eq(d.state.open, true, "opened at the left edge");
+            mouse("mousemove", Math.round(m.widthPx / 2), m.H / 2);
+            mouse("mousemove", Math.round(m.widthPx + 40), m.H / 2);
+            ok(d.state.closeTimer !== 0, "off the panel: a close is pending");
+            mouse("mousemove", 0, 0);
+            ok(d.state.closeTimer !== 0, "the pointer leaving the window does not call it off");
+            d.resetSettings(); d.close();
+        });
+
+        t("drawer (second review 2026-09-24): a press in the zone above or below the panel does not close it", function () {
+            const d = ACEUIAppLoader.drawer;
+            d.close();
+            const m = d.metrics();
+            ok(m.topPx > 2, "the premise: the panel starts below the top of the zone");
+            d.open();
+            mouse("mousemove", m.W - 3, 1); mouse("mousemove", m.W - 2, 1);
+            ok(d.inZone(m.W - 2, 1, m) && !d.inPanel(m.W - 2, 1, m), "in the zone, above the panel");
+            mouse("mousedown", m.W - 2, 1); mouse("mouseup", m.W - 2, 1);
+            eq(d.state.open, true, "still open");
+            mouse("mousedown", 300, m.H / 2); mouse("mouseup", 300, m.H / 2);
+            eq(d.state.open, false, "a press elsewhere still closes it");
+        });
+
+        t("drawer (second review 2026-09-24): nothing opens it on a hidden HUD, pinned or asked directly", function () {
+            const d = ACEUIAppLoader.drawer;
+            const m = d.metrics();
+            d.close();
+            document.body.classList.add("hide-hud");
+            d.open();
+            eq(d.state.open, false, "open() on a hidden HUD does nothing");
+            d.setPinned(true);
+            eq(d.state.open, false, "nor does pinning it");
+            document.body.classList.remove("hide-hud");
+            mouse("mousemove", 300, m.H / 2); mouse("mousemove", 320, m.H / 2);
+            eq(d.state.open, true, "the HUD back: the pinned drawer is too");
+            d.setPinned(false); d.close(); d.resetSettings();
+        });
+
+        t("drawer (second review 2026-09-24): a repeated sample neither starts nor calls off a dwell; Dwell shows whenever hover is in force", function () {
+            const d = ACEUIAppLoader.drawer, S = ACEUIAppLoader.settings, A = d.DRAWER_APP;
+            const m = d.metrics();
+            d.close();
+            S.set(A, "dwell", 200);
+            glide(m.W - 1, m.H / 2);
+            ok(d.state.dwellTimer !== 0, "a dwell running");
+            mouse("mousemove", m.W - 1, m.H / 2);
+            ok(d.state.dwellTimer !== 0, "the same position again leaves it running");
+            mouse("mousemove", 300, m.H / 2); mouse("mousemove", 320, m.H / 2);
+            eq(d.state.dwellTimer, 0, "moving away calls it off");
+            const dwell = S.specs(A).filter(function (x) { return x.key === "dwell"; })[0];
+            S.set(A, "trigger", "hotkey");
+            eq(dwell.when(A), true, "hotkey only with no key bound is hover: Dwell shown");
+            S.set(A, "toggleKey", "KeyJ");
+            eq(dwell.when(A), false, "with a key bound: hidden");
+            S.set(A, "trigger", "click");
+            eq(dwell.when(A), false, "click at edge: hidden");
+            d.resetSettings(); d.close();
+        });
+
+        t("drawer (second review 2026-09-24): at a fractional edge offset the panel's first pixel column is on the panel", function () {
+            const d = ACEUIAppLoader.drawer, S = ACEUIAppLoader.settings, A = d.DRAWER_APP;
+            const had = Object.prototype.hasOwnProperty.call(window, "FontSize"), was = window.FontSize;
+            window.FontSize = 64 / 3;                              // 1rem at 1440p
+            d.close();
+            S.set(A, "side", "left"); S.set(A, "offset", 1); d.state.intro = false;
+            const m = d.metrics();
+            eq(d.state.panel.style.left, "21px", "the panel is written at the whole pixel");
+            d.open();
+            mouse("mousemove", 40, m.H / 2); mouse("mousemove", 21, m.H / 2);
+            ok(d.inPanel(21, m.H / 2, m), "x = 21 is the panel's first column");
+            eq(d.state.closeTimer, 0, "resting there, no close");
+            d.resetSettings(); d.close();
+            if (had) { window.FontSize = was; } else { delete window.FontSize; }
+            d.applyLook();
+        });
+
+        t("drawer (second review 2026-09-24): an early flip merges into the switches on disk instead of replacing them; stored junk is not taken", function () {
+            const d = ACEUIAppLoader.drawer, P = ACEUIAppLoader.persist;
+            const elements = {};
+            elements[d.HUD_ID] = { keepoff: false, racy: true };
+            elements[d.DEV_HUD_ID] = { on: true };
+            window.HUD = null;                                     // a restart: the store is not there yet
+            P.removeLocal(d.STORE_KEY); P.removeLocal(d.DEV_STORE_KEY);
+            d.state.visible = {}; d.state.developer = false; d.state.touched = false;
+            d.state.touchedNames = {}; d.state.touchedDev = false;  // earlier cases flipped the developer switch
+            d.setVisible("racy", false);                           // the player acts first
+            window.HUD = makeHud(elements);                        // the store arrives
+            d.adoptHudStore();
+            eq(d.isVisible("racy"), false, "the flip wins");
+            eq(d.isVisible("keepoff"), false, "another switch saved on disk is kept");
+            eq(d.developerShown(), true, "and the developer switch on disk too");
+            eq(P.readHud(d.HUD_ID).keepoff, false, "written back intact");
+            eq(P.readHud(d.HUD_ID).racy, false, "with the flip");
+            const junk = {};
+            junk[d.HUD_ID] = "junk";
+            junk[d.DEV_HUD_ID] = { on: "false" };
+            window.HUD = makeHud(junk);
+            d.state.visible = {}; d.state.developer = false; d.state.touched = false;
+            d.adoptHudStore();
+            eq(d.developerShown(), false, "a stored \"false\" is not on");
+            eq(typeof d.state.visible, "object", "a stored string is not taken as the switch map");
+            d.setVisible("junky", false);
+            eq(d.isVisible("junky"), false, "switches still work");
+            delete d.state.visible.junky; delete d.state.visible.racy; delete d.state.visible.keepoff;
+            d.state.developer = false; d.state.touched = false;
+            window.HUD = null;
         });
 
         t("drawer: a switch hides the app's own root element and remembers the choice", function () {

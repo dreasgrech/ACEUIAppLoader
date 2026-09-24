@@ -99,12 +99,93 @@ ACEUIAppLoader.window = (function () {
     };
 
     /**
-     * What is remembered as open, per page. Read once at load: within a game session
-     * localStorage has it (the HUD store is not there yet when this runs); across a restart
-     * the HUD store is adopted when it arrives (see `adopt`). `touched` means this page
-     * opened or closed something already, so its state is newer than anything on disk.
+     * When each page's list was last written, from a record. Each page carries its own stamp
+     * (`pageAt`): one stamp for the whole record let a change on one page (a menu page an app
+     * lives on too) overwrite every other page's list, and a window opened before the HUD
+     * store arrived wiped the HUD's list from disk (full review, 2026-09-24). A record from
+     * before per-page stamps counts every page at its one `at`.
      */
-    const remembered = { pages: storedPages(persist.readHud(OPEN_HUD_ID) || persist.readLocal(OPEN_STORE_KEY)), touched: false };
+    const pageStamps = function (record) {
+        const out = {};
+        const legacy = record && typeof record.at === "number" ? record.at : 0;
+        const stamps = record && record.pageAt && typeof record.pageAt === "object" ? record.pageAt : {};
+
+        Object.keys(storedPages(record)).forEach(function (name) {
+            out[name] = typeof stamps[name] === "number" ? stamps[name] : legacy;
+        });
+
+        return out;
+    };
+
+    /** Two records merged page by page, each page's list taken from whichever wrote it last. */
+    const mergeRecords = function (a, b) {
+        const pagesA = storedPages(a);
+        const pagesB = storedPages(b);
+        const atA = pageStamps(a);
+        const atB = pageStamps(b);
+        const out = { pages: {}, at: {}, fromA: {} };
+
+        Object.keys(pagesA).concat(Object.keys(pagesB)).forEach(function (name) {
+            // b wins a tie: in adopt b is the store, and a list this page merely created empty has no stamp to beat it with
+            const useB = Object.prototype.hasOwnProperty.call(pagesB, name)
+                && (!Object.prototype.hasOwnProperty.call(pagesA, name) || atB[name] >= atA[name]);
+
+            out.pages[name] = Object.assign({}, useB ? pagesB[name] : pagesA[name]);
+            out.at[name] = useB ? atB[name] : atA[name];
+            out.fromA[name] = !useB && Object.prototype.hasOwnProperty.call(pagesB, name);
+        });
+
+        return out;
+    };
+
+    /**
+     * The opens and closes made before the HUD store was adopted, from a record: page -> id ->
+     * open (true) or closed (false), the last word per window. Only localStorage ever holds
+     * them (see saveRemembered); anything not of that shape is dropped.
+     */
+    const pendingOf = function (record) {
+        const out = {};
+        const ops = record && record.ops && typeof record.ops === "object" && !Array.isArray(record.ops) ? record.ops : {};
+
+        Object.keys(ops).forEach(function (name) {
+            const byId = ops[name];
+
+            if (!byId || typeof byId !== "object" || Array.isArray(byId)) { return; }
+
+            Object.keys(byId).forEach(function (id) {
+                if (id && typeof byId[id] === "boolean") {
+                    if (!out[name]) { out[name] = {}; }
+
+                    out[name][id] = byId[id];
+                }
+            });
+        });
+
+        return out;
+    };
+
+    /**
+     * What is remembered as open, per page, and when each page's list was written. Read once
+     * at load from both stores, page by page, the newer list winning (within a game session
+     * localStorage usually has it and the HUD store is not there yet; across a restart the
+     * HUD store is adopted when it arrives, see `adopt`). `pending` holds the opens and closes
+     * made before the HUD store was adopted, on this page and on any page loaded before it
+     * that never saw the store (they come with localStorage), replayed on its lists when it is.
+     */
+    const localRecord = persist.readLocal(OPEN_STORE_KEY);
+    const loaded = mergeRecords(localRecord, persist.readHud(OPEN_HUD_ID));
+    /** What was loaded, in the stored shape: the snapshot adopt merges with, never touched by this page's own changes. */
+    const loadedRecord0 = function () {
+        const record = { open: {}, pageAt: {} };
+
+        Object.keys(loaded.pages).forEach(function (name) {
+            record.open[name] = Object.keys(loaded.pages[name]);
+            record.pageAt[name] = loaded.at[name];
+        });
+
+        return record;
+    };
+    const remembered = { pages: mergeRecords(loadedRecord0(), null).pages, at: Object.assign({}, loaded.at), pending: pendingOf(localRecord), touched: false, adopted: false };
 
     /** The open ids remembered for this page, as a map. */
     const openHere = function () {
@@ -114,30 +195,34 @@ ACEUIAppLoader.window = (function () {
     };
 
     /**
-     * The record carries when it was written. The two stores drift: the HUD store reaches
-     * disk only when the game saves the layout, so after a reload it can hold an older list
-     * than localStorage does -- a settings window closed just before a session restart came
-     * back with it (seen in game 2026-09-23). `adopt` compares the stamps.
+     * The record, with every page's stamp. The two stores drift: the HUD store reaches disk
+     * only when the game saves the layout, so after a reload it can hold an older list than
+     * localStorage does -- a settings window closed just before a session restart came back
+     * with it (seen in game 2026-09-23). A page whose windows are all shut is kept, empty,
+     * with its stamp: dropped, an older copy of it elsewhere would win again.
+     *
+     * Until the HUD store has been adopted, only localStorage is written, with the pending
+     * changes: the lists this page holds then are not the store's (after a restart they are
+     * only what localStorage had), and written over the store they wiped what it remembered
+     * for every page; kept with their changes, a reload before the store arrives still replays
+     * them on its lists rather than putting this page's in their place (second review, 2026-09-24).
      */
     const saveRemembered = function () {
-        const record = { open: {}, at: Date.now() };
+        const record = { open: {}, pageAt: {}, at: Date.now() };
 
         Object.keys(remembered.pages).forEach(function (name) {
-            const ids = Object.keys(remembered.pages[name]);
-
-            if (ids.length) { record.open[name] = ids; }
+            record.open[name] = Object.keys(remembered.pages[name]);
+            record.pageAt[name] = typeof remembered.at[name] === "number" ? remembered.at[name] : 0;
         });
 
+        if (!remembered.adopted) {
+            record.ops = remembered.pending;
+            persist.writeLocal(OPEN_STORE_KEY, record);
+
+            return;
+        }
+
         persist.save(OPEN_HUD_ID, OPEN_STORE_KEY, record);
-    };
-
-    /** Is the HUD store's record older than the one localStorage holds? Unstamped records count as old. */
-    const hudIsStale = function (stored) {
-        const local = persist.readLocal(OPEN_STORE_KEY);
-
-        if (!local || typeof local.at !== "number") { return false; }
-
-        return typeof stored.at !== "number" || stored.at < local.at;
     };
 
     const rememberOpen = function (id, on) {
@@ -146,6 +231,16 @@ ACEUIAppLoader.window = (function () {
         if (Boolean(here[id]) === on) { return; }
 
         if (on) { here[id] = true; } else { delete here[id]; }
+
+        // before the store is adopted the change is kept as a change, and the list's stamp is left as loaded:
+        // the store's list, when it comes, is the base the change is replayed on
+        if (remembered.adopted) {
+            remembered.at[page] = Date.now();
+        } else {
+            if (!remembered.pending[page]) { remembered.pending[page] = {}; }
+
+            remembered.pending[page][id] = on;
+        }
 
         remembered.touched = true;
         saveRemembered();
@@ -200,33 +295,53 @@ ACEUIAppLoader.window = (function () {
     };
 
     /**
-     * The HUD store arrived. If this page has already opened or closed a window, its state
-     * is the newer one and is written to disk; otherwise the store's list is adopted and
-     * every remembered window whose owner has registered comes back on the next frame.
-     * Returns the ids due to come back.
+     * The HUD store arrived. Page by page, its list and the one this page loaded are merged,
+     * the newer winning (the disk lagging behind this game session keeps ours); the opens and
+     * closes this page made meanwhile are replayed on top of its own page's list, so a window
+     * opened before the store came does not wipe what the store remembered, and one closed
+     * stays closed. Both stores are written with the result, and every remembered window of
+     * this page whose owner has registered comes back on the next frame. Returns those ids.
      */
     const adopt = function () {
-        if (remembered.touched) {
-            saveRemembered();
-
-            return [];
-        }
-
         const stored = persist.readHud(OPEN_HUD_ID);
+        const pending = remembered.pending;
+        const changed = Object.keys(pending);
 
-        if (!stored || !stored.open || typeof stored.open !== "object") { return []; }
+        remembered.adopted = true;
+        remembered.pending = {};
 
-        // the disk lagging behind this game session: localStorage is the truth, and the
-        // store is brought up to date rather than the other way round
-        if (hudIsStale(stored)) {
-            persist.writeHud(OPEN_HUD_ID, persist.readLocal(OPEN_STORE_KEY));
-            ACEUIAppLoader.log("[window] the HUD store's list of open windows was older than this session's; kept ours");
+        if (!stored || !stored.open || typeof stored.open !== "object") {
+            // nothing on disk to merge with: this session's lists, its changes in them, are the record
+            if (remembered.touched || changed.length) { saveRemembered(); }
 
             return [];
         }
 
-        remembered.pages = storedPages(stored);
-        persist.writeLocal(OPEN_STORE_KEY, stored);
+        const merged = mergeRecords(loadedRecord0(), stored);
+        const kept = Object.keys(merged.fromA).filter(function (name) { return merged.fromA[name]; });
+
+        if (kept.length) {
+            ACEUIAppLoader.log("[window] the HUD store's list of open windows was older than this session's; kept ours (" + kept.join(", ") + ")");
+        }
+
+        // the opens and closes made before the store came, replayed on its lists, each page's on its own
+        changed.forEach(function (name) {
+            const base = merged.pages[name] || {};
+
+            Object.keys(pending[name]).forEach(function (id) {
+                if (pending[name][id]) { base[id] = true; } else { delete base[id]; }
+            });
+            merged.pages[name] = base;
+            merged.at[name] = Date.now();
+        });
+
+        if (changed.length) {
+            ACEUIAppLoader.log("[window] windows opened or closed before the HUD store arrived, replayed on its list: " + changed.join(", "));
+        }
+
+        remembered.pages = merged.pages;
+        remembered.at = merged.at;
+        saveRemembered();
 
         const coming = Object.keys(openHere()).filter(due);
 
@@ -351,7 +466,7 @@ ACEUIAppLoader.window = (function () {
             fontWeight: "700",
             letterSpacing: "0.04em"
         }, opts.title || id);
-        const shut = make("span", {
+        const closeButton = make("span", {
             padding: "0 0.3rem",
             color: THEME.inkDim,
             fontWeight: "700",
@@ -361,13 +476,13 @@ ACEUIAppLoader.window = (function () {
         const body = make("div", { padding: "0.4rem 0.6rem 0.6rem 0.6rem" });
 
         root.setAttribute(WINDOW_ATTR, id);
-        shut.setAttribute(CLOSE_ATTR, "");
-        shut.setAttribute(NO_DRAG_ATTR, "");
+        closeButton.setAttribute(CLOSE_ATTR, "");
+        closeButton.setAttribute(NO_DRAG_ATTR, "");
         body.setAttribute(NO_DRAG_ATTR, "");
-        shut.addEventListener("click", function (e) { close(id); e.stopPropagation(); });
+        closeButton.addEventListener("click", function (e) { close(id); e.stopPropagation(); });
 
         header.appendChild(titleNode);
-        header.appendChild(shut);
+        header.appendChild(closeButton);
         root.appendChild(header);
         root.appendChild(body);
         container().appendChild(root);

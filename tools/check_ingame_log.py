@@ -89,7 +89,10 @@ def scan(loader_lines):
         if m:
             current = m.group(1)
             pages.setdefault(current, {"presets": None, "bundled": 0, "attempted": [], "loaded": [],
-                                       "overridden": [], "empty": False, "problems": []})
+                                       "overridden": [], "empty": False, "problems": [], "loads": []})
+            # every load of the page (Escape and resume reloads the HUD) is judged on its own: an app that
+            # loaded the first time and hung the second must not be hidden by the first time
+            pages[current]["loads"].append({"attempted": [], "loaded": []})
             continue
         if current is None:
             continue
@@ -103,6 +106,8 @@ def scan(loader_lines):
             m = re.search(pattern, line)
             if m:
                 page[key].append(m.group(1))
+                if key in ("attempted", "loaded"):
+                    page["loads"][-1][key].append(m.group(1))
         if re.search(r"\bnothing to load\b", line):
             page["empty"] = True
         if any(k in line for k in PROBLEM_KEYS):
@@ -120,13 +125,14 @@ def report(pages):
             counts.append(f"{page['presets']} installed")
         if page["bundled"]:
             counts.append(f"{page['bundled']} bundled")
-        missing = [m for m in page["attempted"] if m not in page["loaded"]]
+        # started and never finished within the same load of the page, each name once
+        missing = list(dict.fromkeys(m for load in page["loads"] for m in load["attempted"] if m not in load["loaded"]))
         # each HUD load appends the same names again; say each once, in first-seen order
         loaded = list(dict.fromkeys(page["loaded"]))
         state = ", ".join(loaded) if loaded else "nothing for this page"
         print(f"  {name}: {' + '.join(counts) if counts else 'no sources'} -> {state}")
         if page["overridden"]:
-            print(f"      installed copies replaced the bundled: {', '.join(page['overridden'])}")
+            print(f"      installed copies replaced the bundled: {', '.join(dict.fromkeys(page['overridden']))}")
         for line in page["problems"]:
             # the give-up line is normal on a page with no apps (driverlabels.html never gets an answer); on the HUD it is the failure
             note = any(k in line for k in NOTE_KEYS) or ("; no installed apps" in line and name != "/hud.html")
@@ -201,7 +207,7 @@ def main(argv):
           f"no crashes beyond the usual {len(driver_crashes)} driver exception(s)"
           if driver_crashes else
           f"RESULT: OK - loader on {len(pages)} page(s), on the HUD: "
-          f"{', '.join(hud['loaded']) if hud['loaded'] else 'nothing'}, no crashes")
+          f"{', '.join(hud_loaded) if hud_loaded else 'nothing'}, no crashes")
     return 0
 
 

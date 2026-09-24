@@ -37,6 +37,7 @@ Download the **`ACEUIAppLoader-….zip`** from the [latest release](../../releas
 
 Inside is one folder, `mods`. Take the zip **without** `-alternate` in its name; [the other one](#why-there-are-two-zips) is a fallback.
 
+<a name="why-there-are-two-zips"></a>
 <details>
 <summary>Why there are two available zips for download? (normal and alternate)</summary>
    
@@ -98,8 +99,9 @@ its own switch — flick one on and it appears straight away, flick it off and i
 
 Three ways to open it, all in **OPTIONS** at the top of the drawer:
 
-- **The edge.** The pointer coming within a zone of the edge opens it. The zone is about 2%
-  of the screen's width by default (four times what the first release had) and can be made
+- **The edge.** The pointer coming within a zone of the edge opens it. The zone is 2rem by
+  default, which scales with the screen (32px at 1080p, 43px at 1440p, against the first
+  release's fixed 10px), and can be made
   wider, limited to the top, middle or bottom third of the edge, or given a short dwell so
   passing the edge on the way to something else does not open it. A thin red line lights up
   on the edge as you get close, since the game hides the cursor when it has been still for a

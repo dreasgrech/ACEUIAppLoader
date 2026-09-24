@@ -5,7 +5,7 @@ in the order below because each builds on the previous. Apps only ever talk to
 `ACEUIAppLoader.*`.
 
 The surfaces the loader draws for you -- the app drawer, windows and a settings page per
-app -- are in [`ui.md`](ui.md); the app lifecycle is in [`writing-a-app.md`](writing-a-app.md).
+app -- are in [`ui.md`](ui.md); the app lifecycle is in [`writing-an-app.md`](writing-an-app.md).
 
 ## The namespaces
 

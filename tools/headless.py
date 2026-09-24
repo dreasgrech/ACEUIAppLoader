@@ -37,6 +37,8 @@ PROFILE_PREFIX = "aceuiapploader-headless-"
 TIMEOUT_S = 120
 VIRTUAL_TIME_BUDGET_MS = 10000
 KILL_RETRIES = 6
+# how long to wait for a killed browser's output before giving up on it and cleaning up
+KILL_COLLECT_S = 10
 KILL_RETRY_S = 0.5
 
 
@@ -153,8 +155,14 @@ def run_harness(harness_path, browser=None):
 
 
 def kill_and_collect(proc):
+    """Kill a browser that ran out of time and read what it wrote. The read has a limit of its own: a
+    helper that left the tree can still hold the pipe, and an unbounded read would then hang the run
+    before the cleanup in run_harness's finally, leaving the browser behind (review, 2026-09-24)."""
     kill_tree(proc.pid)
-    return proc.communicate()
+    try:
+        return proc.communicate(timeout=KILL_COLLECT_S)
+    except subprocess.TimeoutExpired:
+        return "", ""
 
 
 def parse_report(dom):

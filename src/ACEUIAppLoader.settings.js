@@ -120,6 +120,7 @@ ACEUIAppLoader.settings = (function () {
     const HINT_IDLE_TEXT = "";
     /** Decimals of a column width in percent; three columns are 33.333%. */
     const COLUMN_DECIMALS = 3;
+    const PERCENT = 100;
 
     /** The settings window is an ACEUIAppLoader.window; this is its id and default width (define's `width` overrides). */
     const WINDOW_ID_SUFFIX = ".settings";
@@ -1066,7 +1067,11 @@ ACEUIAppLoader.settings = (function () {
             watchWhen(row, spec, rowStyle.display);
 
             if (target.columns > 1) {
-                css(row, { width: (100 / target.columns).toFixed(COLUMN_DECIMALS) + "%", boxSizing: "border-box", paddingRight: "0.6rem" });
+                css(row, { width: (PERCENT / target.columns).toFixed(COLUMN_DECIMALS) + "%", boxSizing: "border-box", paddingRight: "0.6rem" });
+            } else if (target.chips) {
+                // among chips in a wrapping row, an ordinary row takes a line of its own, as ui.md says, its
+                // control at the right edge; left to its content it sat on the chips' line (second review, 2026-09-24)
+                css(row, { width: PERCENT + "%", boxSizing: "border-box" });
             }
 
             if (spec.swatch) { row.appendChild(swatch(spec.swatch)); }
@@ -1079,7 +1084,13 @@ ACEUIAppLoader.settings = (function () {
             target.body.appendChild(row);
 
             // a block control (a list) goes under its label, the full width of the pane
-            if (control && BLOCK_TYPES.indexOf(spec.type) >= 0) { target.body.appendChild(control(app, spec, held.repaint)); }
+            if (control && BLOCK_TYPES.indexOf(spec.type) >= 0) {
+                const block = control(app, spec, held.repaint);
+
+                // hidden with its label when the spec's `when` says so (full review, 2026-09-24: the list stayed)
+                watchWhen(block, spec, block.style.display || "block");
+                target.body.appendChild(block);
+            }
 
             if (spec.hint && !footerHints) {
                 const hint = make("div", { color: THEME.inkDim, fontSize: "0.6rem", paddingBottom: "0.2rem", width: "100%" }, spec.hint);

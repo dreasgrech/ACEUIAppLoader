@@ -1,0 +1,57 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<title>windows across a game restart, with changes made before the HUD store arrives</title>
+<style> body { margin: 0; background: #222; color: #ddd; font: 12px monospace; } #results { white-space: pre; } </style>
+<!-- the first HUD page of a new game session, reached after a menu page an app also lives on:
+     localStorage holds only what that menu page wrote this session; the HUD store, arriving a
+     little later, holds what was open on the HUD when the game was quit. A window is opened here
+     before the store comes. Each page's list must survive the other's (full review, 2026-09-24:
+     one stamp for the whole record let either wipe the other) -->
+<script src="doubles.js"></script>
+<script>
+localStorage.setItem("acewindows.open", JSON.stringify({ open: { "ingame.html": ["memo.menu"] }, pageAt: { "ingame.html": Date.now() }, at: Date.now() }));
+</script>
+<script src="lib.js"></script>
+</head>
+<body>
+<pre id="results"></pre>
+<div id="done" hidden></div>
+<script>
+(function () {
+    const H = window.__harness, t = H.t, eq = H.eq, ok = H.ok;
+    const W = ACEUIAppLoader.window, clock = window.__clock;
+    const opened = [];
+    const opener = function (id) { opened.push(id); W.open(id, { title: id }); };
+    const here = ACEUIAppLoader.page;
+
+    t("a menu page's newer list does not wipe the HUD's list on disk, and a window opened here before the store arrives is added to it, not put in its place", function () {
+        eq(W.reopen("memo.hud", opener), false, "nothing of this page's is known before the store comes");
+        W.open("memo.early", { title: "early" }); ok(W.isOpen("memo.early"), "a window opened before the store arrives");
+        window.HUD = { currentLayout: "default", StoredData: { lastLayout: "default", layouts: { default: { elements: {
+            hud_acewindows: { open: { "reload-ops.html": ["memo.hud"] }, at: Date.now() - 3600000 } } } } } };
+        window.HUD.elementModified = function (id, props) { window.HUD.StoredData.layouts.default.elements[id] = props; };
+        // the store is there but not adopted yet (the poll that adopts it is up to 50 ms away): a window opened
+        // now must not write this page's partial lists over it (second review, 2026-09-24)
+        W.open("memo.gap", { title: "gap" });
+        eq(window.HUD.StoredData.layouts.default.elements.hud_acewindows.open[here].join(","), "memo.hud", "the store is not written before it is adopted");
+        eq(window.HUD.StoredData.layouts.default.elements.hud_acewindows.open["ingame.html"], undefined, "nor given the menu page's list in place of its own");
+        eq(W.adopt().join(","), "memo.hud", "the store arrives: the window open on the HUD at quit is due, although the menu page wrote later");
+        clock.step(1000); eq(opened.join(","), "memo.hud", "and back a frame later"); ok(W.isOpen("memo.early") && W.isOpen("memo.gap"), "the early ones are still open");
+        const stored = window.HUD.StoredData.layouts.default.elements.hud_acewindows;
+        eq(stored.open[here].slice().sort().join(","), "memo.early,memo.gap,memo.hud", "the disk now lists all of this page's windows");
+        eq(stored.open["ingame.html"].join(","), "memo.menu", "and still the menu page's own");
+    });
+
+    t("a window closed here after the store arrived is what the disk says", function () {
+        W.close("memo.early"); W.close("memo.gap");
+        const stored = window.HUD.StoredData.layouts.default.elements.hud_acewindows;
+        eq(stored.open[here].join(","), "memo.hud", "the closes are what the disk says");
+    });
+
+    H.finish(window.__warn.map(function (w) { return "WARN " + w; }));
+}());
+</script>
+</body>
+</html>

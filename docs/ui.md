@@ -42,7 +42,7 @@ opened by OPTIONS in the header and applied live without rebuilding a row:
 | | `dwell` | 0 ms | how long the pointer must stay in the zone; 0 because a flick to the edge has no dwell to give |
 | | `closeDelay` | 350 ms | |
 | | `toggleKey` | unbound | Delete while the control waits unbinds it |
-| | `pinned` | off | always open: on the screen at once and after every reload; the header's PIN flips it |
+| | `pinned` | off | always open: on the screen at once and after every reload; the header's PIN flips it, and the toggle key closing it unpins it |
 | | `hint` | near | off / when near / always |
 | Panel | `side` | right | right / left |
 | | `triple` | off | **experimental**: the edge a third of the way in, where the centre screen of a spanned triple ends -- assumes the HUD page spans all three screens, unconfirmed on a real rig |
@@ -64,7 +64,11 @@ logged (`[drawer] pointer jumped from ... to ...`).
 Every value is clamped again when applied, so no stored value can put the drawer where it
 cannot be reached. `ACEUIAppLoader.drawer.resetSettings()` is the escape hatch from the dev
 console. A hidden HUD closes the drawer and keeps it closed; a held mouse button (a panel being
-dragged to the edge) does not open it; a press outside the panel closes it. Once at build the
+dragged to the edge) does not open it; a press outside the panel closes it unless it is pinned
+or its own settings pane is open (the drawer stays open while the pane is, so the Panel settings
+can be seen changing). Opened by the hotkey, it does not close by itself until the pointer has
+reached it. Closed, it is hidden as well as moved, so a drawer set in from the edge leaves no
+invisible strip over the screen. Once at build the
 log says what it did: `[drawer] built: right, zone 2rem (43px), 1rem = 21.33px, viewport
 2560x1440, trigger hover`.
 
@@ -259,7 +263,8 @@ ACEUIAppLoader.settings.define("betterdeltabar", [
   otherwise. Keep it for a handful of short options; a long list still wants the cycle.
 - A section with **`flow: "chips"`** draws its toggles as chips in a wrapping row, the
   label inside the pill, lit green when on. Anything in the section that is not a toggle
-  is drawn as an ordinary row.
+  is drawn as an ordinary row. A chip has no room for a hint line under it, so a chip's
+  `hint` shows only in a pane with `hints: "footer"`.
 
 - Any spec, sections included, can carry **`when: function (app) { ... }`**: it is drawn
   only while that returns true, judged again on every change. An option that means nothing

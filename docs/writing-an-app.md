@@ -70,7 +70,7 @@ me.toggle(function () { return options.toggleKey; });   // shows and hides the a
 | `scale(root, {min, max, step, onScale})` | panel scale: one `font-size` in rem on the root, everything inside in em. Applies it, clamps it, follows the app's own `scale` setting when it declared one — so a −/+ button and the settings window move the same value — and remembers it either way. Returns `{ value, set, nudge, bounds, stop }` |
 | `scaleSpec({label, value, min, max, step})` | the settings spec for that scale, to drop into the app's own `define` call |
 | `recall(key, fallback)`, `remember(key, value)`, `forget(key)` | a small value under the app's own key, for state that must survive the HUD reload on Escape/resume |
-| `mount(attach, detach)` | calls `attach(#<name>)` once the DOM has the root, once per root, and logs the app's script-loaded line. Passing `detach` is what lets the app drawer really stop the app |
+| `mount(attach, detach)` | calls `attach(#<name>)` once the DOM has the root, once per root, and logs the app's script-loaded line. Passing `detach` is what lets the app drawer really stop the app. Make `attach` all or nothing: if it throws, release whatever it had already set up before rethrowing, because the loader then treats the app as not started and the drawer's switch can start it again |
 | `show(on)`, `shown()` | switch this app on or off exactly as the drawer's own switch does — root hidden, app stopped through its `detach`, started again on the way back |
 | `toggle(getKey)` | bind a key that shows and hides this app, for as long as the page lives. Returns an unbind |
 

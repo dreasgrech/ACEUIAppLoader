@@ -24,7 +24,7 @@ from appkit import AppTests  # noqa: E402
 
 class Tests(AppTests):
     ROOT = ROOT
-    MIN_CASES = 4
+    MIN_CASES = 13
     HOT_PATH = ("// ---- rendering", "// ---- lifecycle")
 
 

@@ -50,7 +50,7 @@
         ok(state.rows[rowIndex("engine audio bridge")].dot.className.indexOf("cp-no") >= 0, "engine bridge absent outside the game");
     });
 
-    /* Three checks are asynchronous and slow on purpose, so a re-run leaves the previous
+    /* Four checks are asynchronous and slow on purpose, so a re-run leaves the previous
        run's probes in flight; their callbacks would write an old answer into a fresh row
        and decrement a pending count that is no longer theirs. */
     t("a re-run starts a new generation, so probes still in flight cannot write into it", function () {
@@ -175,17 +175,75 @@
         ok(recLines().some(function (l) { return l.indexOf("NOTICE {type:\"UINotificationType_SessionPenalty\",tuples:[{values:[\"{PENALTY_CLEARED_KEY} #0\",\"InvestigationType_Racecar_Cut\",\"lblNotificationPenalty_NO_GAIN\"]}]} at {npos:0.34") >= 0; }), "whole, with the lap position");
     });
 
+    t("full review 2026-09-24: the game correcting its lap clock is one line, not a lap; a real wrap, or the lap count moving, is a lap", function () {
+        const car = window.ModelCurrentCar;
+        car.current_lap_time_ms = 30000; window.__clock.step(2000);
+        const laps = recCount("LAP BOUNDARY");
+        car.current_lap_time_ms = 29955; window.__clock.step(2016);
+        eq(recCount("LAP BOUNDARY"), laps, "45 ms back far from the line: no lap");
+        eq(recCount("CLOCK STEP BACK: lap clock 30000 -> 29955"), 1, "one line for the correction, in the fields the replay extractor reads");
+        car.current_lap_time_ms = 29000; window.__clock.step(2032);
+        eq(recCount("LAP BOUNDARY"), laps, "955 ms back, far from the line: still a correction");
+        car.current_lap_time_ms = 40; window.__clock.step(2048);
+        eq(recCount("LAP BOUNDARY"), laps + 1, "back to the line: a lap");
+        car.low_frequency = { total_lap_count: 3 }; car.current_lap_time_ms = 5000; window.__clock.step(2064);
+        car.low_frequency = { total_lap_count: 4 }; car.current_lap_time_ms = 5016; window.__clock.step(2080);
+        eq(recCount("LAP BOUNDARY"), laps + 2, "the lap count moving is a lap, whatever the clock does");
+        car.low_frequency = undefined;
+    });
+
+    t("second review 2026-09-24: a count a frame behind the clock's boundary is that boundary; a frame without the clock keeps the last one; corrections every frame are one line in 250 ms", function () {
+        const car = window.ModelCurrentCar;
+        car.low_frequency = { total_lap_count: 5 }; car.current_lap_time_ms = 90000; window.__clock.step(3000);
+        const laps = recCount("LAP BOUNDARY");
+        car.current_lap_time_ms = 20; window.__clock.step(3016);
+        eq(recCount("LAP BOUNDARY"), laps + 1, "the clock wraps: a lap");
+        car.low_frequency = { total_lap_count: 6 }; car.current_lap_time_ms = 36; window.__clock.step(3032);
+        eq(recCount("LAP BOUNDARY"), laps + 1, "the count a frame late is the same boundary, not a lap of one frame");
+        car.current_lap_time_ms = 60000; window.__clock.step(3048);
+        car.current_lap_time_ms = undefined; window.__clock.step(3064);
+        car.current_lap_time_ms = 30; window.__clock.step(3080);
+        eq(recCount("LAP BOUNDARY"), laps + 2, "a frame with no clock between: the wrap still seen against the last clock");
+        ok(recLines().some(function (l) { return l.indexOf("LAP BOUNDARY: lap clock 60000 -> 30") >= 0; }), "and logged from it");
+        car.current_lap_time_ms = 40000; window.__clock.step(3200);
+        const steps = recCount("CLOCK STEP BACK");
+        car.current_lap_time_ms = 39990; window.__clock.step(3216);
+        car.current_lap_time_ms = 39980; window.__clock.step(3232);
+        car.current_lap_time_ms = 39970; window.__clock.step(3248);
+        eq(recCount("CLOCK STEP BACK"), steps + 1, "three corrections in 32 ms: one line");
+        car.current_lap_time_ms = 39960; window.__clock.step(3600);
+        eq(recCount("CLOCK STEP BACK"), steps + 2, "the next after the gap");
+        ok(recLines().some(function (l) { return l.indexOf("CLOCK STEP BACK: lap clock 39970 -> 39960") >= 0 && l.indexOf("(2 more since the last line)") >= 0; }), "saying how many it held back");
+        car.low_frequency = undefined;
+    });
+
+    t("full review 2026-09-24: a recording switched off and on again starts from nothing", function () {
+        const starts = recCount("start: ");
+        S.set("capabilities", CapabilitiesProbe.SETTING_RECORD, false);
+        S.set("capabilities", CapabilitiesProbe.SETTING_RECORD, true);
+        eq(state2.rec.frames, 0, "no frames carried over"); eq(state2.rec.lap, null, "no lap carried over");
+        window.__clock.step(2096);
+        eq(recCount("start: "), starts + 1, "the first frame of the new recording writes its start line again");
+    });
+
     t("the button switches it off with a final summary, and detach stops a running recorder", function () {
+        const stoppedBefore = recCount("stopped (switched off)");
         state2.recordButton.click();
         eq(state2.rec.running, false, "off after the button");
         eq(S.get("capabilities", CapabilitiesProbe.SETTING_RECORD), false, "through the setting, which is the truth");
-        ok(recCount("stopped (switched off)") === 1, "with a final line");
+        eq(recCount("stopped (switched off)"), stoppedBefore + 1, "with a final line");
         S.set("capabilities", CapabilitiesProbe.SETTING_RECORD, true);
         eq(state2.rec.running, true, "on again");
         CapabilitiesProbe.detach(state2);
         eq(state2.rec.running, false, "detach stops it");
         eq(recCount("stopped (detached)"), 1);
         S.set("capabilities", CapabilitiesProbe.SETTING_RECORD, false);
+        // and detach leaves nothing behind: no fixture in the page, no listener counting
+        CapabilitiesProbe.detach(state);
+        eq(document.querySelectorAll(".cp-pe-probe, .cp-pe-strip, .cp-pe-control, .cp-pe-control-strip").length, 0, "the pointer fixture is gone");
+        const moves = CapabilitiesProbe.pointer.moves;
+        window.dispatchEvent(new MouseEvent("mousemove", { clientX: 5, clientY: 5 }));
+        eq(CapabilitiesProbe.pointer.moves, moves, "and nothing is listening any more");
     });
 
     H.finish();

@@ -3,8 +3,10 @@
  * --font-family-main is the game's. Stock HUD widget look: black panel, solid dark
  * header, coloured status dots. No var() fallbacks (Cohtml does not support them).
  *
- * The script only ever writes textContent and class names here (status colours keyed
- * by .cp-yes / .cp-no / .cp-partial / .cp-warn); it never writes colours or sizes.
+ * The script writes textContent and class names here (status colours keyed by .cp-yes /
+ * .cp-no / .cp-partial / .cp-warn), never colours or sizes, with two exceptions: the pointer
+ * fixture's strip gets an inline pointer-events: none, because the inline form is what that
+ * check tests, and the library's scroll module sizes and moves the scrollbar thumb.
  */
 
 .ace-capabilities {
@@ -255,14 +257,27 @@ body.hide-hud .ace-capabilities {
 
 /* ---- the pointer-events fixture: two transparent 4px boxes at the screen's corner ------
    The script puts `pointer-events: none` on the strip inline (the form under test) and
-   hit-tests the corner; the target under it is what a working strip lets the hit reach. */
+   hit-tests the corner; the target under it is what a working strip lets the hit reach.
+   The control pair beside it (8px to the right, PE_CONTROL_OFFSET_PX in the script) has
+   the property from this stylesheet, the form the stock uses. */
 
 .cp-pe-probe,
-.cp-pe-strip {
+.cp-pe-strip,
+.cp-pe-control,
+.cp-pe-control-strip {
     position: fixed;
     left: 0;
     top: 0;
     width: 4px;
     height: 4px;
     z-index: 9500;
+}
+
+.cp-pe-control,
+.cp-pe-control-strip {
+    left: 8px;
+}
+
+.cp-pe-control-strip {
+    pointer-events: none;
 }

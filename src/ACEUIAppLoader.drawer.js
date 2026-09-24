@@ -51,8 +51,8 @@
  * (the `me.scale` technique); the panel's own width and the zone are in rem.
  *
  * Cohtml notes: the panel is built once, and the only per-interaction writes are a
- * transform and an opacity on the panel, an opacity on the hint line and colours on a
- * row. Nothing is rebuilt per frame -- there is no frame loop here at all; the drawer
+ * transform, an opacity and a visibility on the panel, an opacity on the hint line, a
+ * visibility on the zone box and colours on a row. Nothing is rebuilt per frame -- there is no frame loop here at all; the drawer
  * reacts to mouse events only, and the mouse handlers read no layout: the zone and the
  * panel's box are worked out from the settings and the viewport, never measured.
  *
@@ -99,7 +99,7 @@ ACEUIAppLoader.drawer = (function () {
     const SETTINGS_TITLE = "App drawer";
     const SETTINGS_WIDTH = "36rem";
 
-    /** Setting keys, and their defaults. Every value is clamped again in metrics(). */
+    /** Setting keys, and their defaults. Every value is clamped again where it is used (metrics, applyLook, closeSoon, onMove). */
     const KEY = {
         zone: "zone", extent: "extent", trigger: "trigger", dwell: "dwell", closeDelay: "closeDelay",
         toggleKey: "toggleKey", pinned: "pinned", hint: "hint",
@@ -183,7 +183,7 @@ ACEUIAppLoader.drawer = (function () {
      * usually hidden by then (see the header). Thin rather than zone-wide because inline
      * `pointer-events: none` is unproven in this engine (the stock uses it in stylesheets
      * only): a line under the panel blocks nothing that matters if it fails. For a few
-     * seconds after every build it shows at full strength whatever the setting, so a
+     * seconds after every build it shows at full strength (unless the hint is off), so a
      * player who never found the old strip sees where the drawer lives.
      */
     const HINT_REACH = 2;
@@ -257,20 +257,32 @@ ACEUIAppLoader.drawer = (function () {
     const EMPTY_TEXT = "no apps loaded on this page";
     const DEV_TEXT = "DEVELOPER APPS";
 
+    /** How the pane lays its sections out, and how many decimals each kind of value shows. */
+    const SECTION_COLUMNS = 2;
+    const DIGITS_REM = 1;
+    const DIGITS_MS = 0;
+    const DIGITS_FACTOR = 2;
+
     /** The drawer's settings, in the order the pane draws them. */
     const SPECS = [
-        { key: "opening", type: "section", label: "Opening", columns: 2 },
-        { key: KEY.zone, type: "range", label: "Edge zone", value: ZONE_REM, min: ZONE_MIN_REM, max: ZONE_MAX_REM, step: ZONE_STEP_REM, unit: "rem", digits: 1,
+        { key: "opening", type: "section", label: "Opening", columns: SECTION_COLUMNS },
+        { key: KEY.zone, type: "range", label: "Edge zone", value: ZONE_REM, min: ZONE_MIN_REM, max: ZONE_MAX_REM, step: ZONE_STEP_REM, unit: "rem", digits: DIGITS_REM,
             hint: "how close to the edge the pointer must come; 2 is the HUD's own margin. Mouse travel is in pixels, so a low resolution wants more" },
         { key: KEY.extent, type: "choice", label: "Along the edge", value: EXTENT_FULL, options: [EXTENT_FULL, EXTENT_UPPER, EXTENT_MIDDLE, EXTENT_LOWER], segmented: true,
             hint: "which part of the edge opens it: the whole height or one third of it" },
         { key: KEY.trigger, type: "choice", label: "Open with", value: TRIGGER_HOVER, options: [TRIGGER_HOVER, TRIGGER_CLICK, TRIGGER_HOTKEY], segmented: true,
             labels: { hover: "Hover", click: "Click at edge", hotkey: "Hotkey only" },
             hint: "hover: reaching the zone opens it; click: a press in the zone; hotkey only: the key below (with no key bound, hover applies)" },
-        { key: KEY.dwell, type: "range", label: "Dwell", value: DWELL_MS, min: 0, max: DWELL_MAX_MS, step: DELAY_STEP_MS, unit: "ms", digits: 0,
-            when: function (app) { return ACEUIAppLoader.settings.get(app, KEY.trigger) === TRIGGER_HOVER; },
+        { key: KEY.dwell, type: "range", label: "Dwell", value: DWELL_MS, min: 0, max: DWELL_MAX_MS, step: DELAY_STEP_MS, unit: "ms", digits: DIGITS_MS,
+            // shown whenever hover is the trigger in force, which "hotkey only" with no key bound also is (triggerNow)
+            when: function (app) {
+                const S = ACEUIAppLoader.settings;
+                const trigger = S.get(app, KEY.trigger);
+
+                return trigger === TRIGGER_HOVER || (trigger === TRIGGER_HOTKEY && !S.get(app, KEY.toggleKey));
+            },
             hint: "how long the pointer must stay in the zone before it opens; 0 opens at once, which is what a flick to the edge needs" },
-        { key: KEY.closeDelay, type: "range", label: "Close after", value: CLOSE_DELAY_MS, min: CLOSE_MIN_MS, max: CLOSE_MAX_MS, step: DELAY_STEP_MS, unit: "ms", digits: 0,
+        { key: KEY.closeDelay, type: "range", label: "Close after", value: CLOSE_DELAY_MS, min: CLOSE_MIN_MS, max: CLOSE_MAX_MS, step: DELAY_STEP_MS, unit: "ms", digits: DIGITS_MS,
             hint: "how long the pointer can be away from the drawer before it closes" },
         { key: KEY.toggleKey, type: "key", label: "Toggle key", value: "",
             hint: "a key that opens and closes it from anywhere; click, then press the key. Delete while waiting unbinds it" },
@@ -279,19 +291,19 @@ ACEUIAppLoader.drawer = (function () {
         { key: KEY.hint, type: "choice", label: "Edge hint", value: HINT_NEAR, options: [HINT_OFF, HINT_NEAR, HINT_ALWAYS], segmented: true,
             labels: { off: "Off", near: "When near", always: "Always" },
             hint: "a thin line on the edge: as the pointer nears it (the cursor is often hidden by then), always, or never" },
-        { key: "panel", type: "section", label: "Panel", columns: 2 },
+        { key: "panel", type: "section", label: "Panel", columns: SECTION_COLUMNS },
         { key: KEY.side, type: "choice", label: "Side", value: SIDE_RIGHT, options: [SIDE_LEFT, SIDE_RIGHT], segmented: true,
             hint: "the edge it lives on. With a second monitor to the right, the left edge is the one the pointer cannot leave through" },
         { key: KEY.triple, type: "toggle", label: "Triple screen (experimental)", value: false,
             hint: "puts the edge a third of the way in, where the centre screen ends. Untested on a real triple: if the drawer lands in the wrong place, switch it off and report the [drawer] built line from your log" },
-        { key: KEY.offset, type: "range", label: "Edge offset", value: 0, min: 0, max: OFFSET_MAX_REM, step: SIZE_STEP_REM, unit: "rem", digits: 1,
+        { key: KEY.offset, type: "range", label: "Edge offset", value: 0, min: 0, max: OFFSET_MAX_REM, step: SIZE_STEP_REM, unit: "rem", digits: DIGITS_REM,
             hint: "moves the edge the drawer uses inwards from the screen edge, on top of the triple-screen third" },
-        { key: KEY.width, type: "range", label: "Width", value: PANEL_WIDTH_REM, min: WIDTH_MIN_REM, max: WIDTH_MAX_REM, step: SIZE_STEP_REM, unit: "rem", digits: 1 },
-        { key: KEY.top, type: "range", label: "Top inset", value: PANEL_TOP_REM, min: 0, max: INSET_MAX_REM, step: SIZE_STEP_REM, unit: "rem", digits: 1 },
-        { key: KEY.bottom, type: "range", label: "Bottom inset", value: PANEL_BOTTOM_REM, min: 0, max: INSET_MAX_REM, step: SIZE_STEP_REM, unit: "rem", digits: 1 },
-        { key: KEY.scale, type: "range", label: "Scale", value: SCALE_DEFAULT, min: SCALE_MIN, max: SCALE_MAX, step: SCALE_STEP, digits: 2,
+        { key: KEY.width, type: "range", label: "Width", value: PANEL_WIDTH_REM, min: WIDTH_MIN_REM, max: WIDTH_MAX_REM, step: SIZE_STEP_REM, unit: "rem", digits: DIGITS_REM },
+        { key: KEY.top, type: "range", label: "Top inset", value: PANEL_TOP_REM, min: 0, max: INSET_MAX_REM, step: SIZE_STEP_REM, unit: "rem", digits: DIGITS_REM },
+        { key: KEY.bottom, type: "range", label: "Bottom inset", value: PANEL_BOTTOM_REM, min: 0, max: INSET_MAX_REM, step: SIZE_STEP_REM, unit: "rem", digits: DIGITS_REM },
+        { key: KEY.scale, type: "range", label: "Scale", value: SCALE_DEFAULT, min: SCALE_MIN, max: SCALE_MAX, step: SCALE_STEP, digits: DIGITS_FACTOR,
             hint: "the size of the rows and text; the width is its own setting" },
-        { key: KEY.opacity, type: "range", label: "Opacity", value: OPACITY_DEFAULT, min: OPACITY_MIN, max: OPACITY_MAX, step: OPACITY_STEP, digits: 2 },
+        { key: KEY.opacity, type: "range", label: "Opacity", value: OPACITY_DEFAULT, min: OPACITY_MIN, max: OPACITY_MAX, step: OPACITY_STEP, digits: DIGITS_FACTOR },
         { key: KEY.motion, type: "choice", label: "Motion", value: MOTION_SLIDE, options: [MOTION_SLIDE, MOTION_FADE, MOTION_NONE], segmented: true,
             labels: { slide: "Slide", fade: "Fade", none: "None" },
             hint: "how it appears: slide in from the edge, fade in place, or at once. Fade moves nothing, if the slide stutters on your machine" }
@@ -325,6 +337,8 @@ ACEUIAppLoader.drawer = (function () {
         devRow: null,           // { box, label }, the switch at the foot of the panel
         openers: {},            // name -> what to open when its OPTIONS button is clicked
         touched: false,         // the user flipped a switch: newer than anything on disk
+        touchedNames: {},       // which app switches were flipped before the HUD store was adopted
+        touchedDev: false,      // and whether the developer switch was
         closeTimer: 0,
         dwellTimer: 0,
         introTimer: 0,
@@ -338,7 +352,8 @@ ACEUIAppLoader.drawer = (function () {
         last: { x: 0, y: 0, known: false },     // the previous pointer sample, for the jump guard
         jumpsLogged: 0,
         syncTimer: 0,           // the list's scrollbar is measured after a slide, never during one
-        parkTimer: 0            // fade: the panel is parked off-screen once the fade is over
+        parkTimer: 0,           // the panel is hidden (and, after a fade, parked) once it has finished going
+        visitPending: false     // opened by the hotkey: no auto-close until the pointer has reached the panel
     };
 
     const persist = ACEUIAppLoader.persist;
@@ -349,13 +364,35 @@ ACEUIAppLoader.drawer = (function () {
      * loader creates it. The HUD store is preferred when it happens to be ready already;
      * otherwise localStorage carries us until adoptHudStore() picks it up.
      */
+    /**
+     * A stored switch map as the drawer can use it: a plain object, and of its entries only
+     * the booleans (a hand-edited or damaged store's "false" would otherwise read as on).
+     * Null for anything that is not a map.
+     */
+    const switchesOf = function (stored) {
+        if (!stored || typeof stored !== "object" || Array.isArray(stored)) { return null; }
+
+        const out = {};
+
+        Object.keys(stored).forEach(function (name) {
+            if (typeof stored[name] === "boolean") { out[name] = stored[name]; }
+        });
+
+        return out;
+    };
+
+    /** The developer switch as stored: on only when it says true. */
+    const developerOf = function (dev) {
+        return Boolean(dev && typeof dev === "object" && dev.on === true);
+    };
+
     const loadStored = function () {
-        const stored = persist.readHud(HUD_ID) || persist.readLocal(STORE_KEY);
+        const stored = switchesOf(persist.readHud(HUD_ID) || persist.readLocal(STORE_KEY));
         const dev = persist.readHud(DEV_HUD_ID) || persist.readLocal(DEV_STORE_KEY);
 
         if (stored && !state.touched) { state.visible = stored; }
 
-        if (dev && !state.touched) { state.developer = Boolean(dev.on); }
+        if (dev && !state.touched) { state.developer = developerOf(dev); }
     };
 
     loadStored();
@@ -415,10 +452,15 @@ ACEUIAppLoader.drawer = (function () {
     const pxPerRem = function () {
         const root = document.documentElement;
         const published = typeof window.FontSize === "number" ? window.FontSize : 0;
-        const inline = root ? parseFloat(root.style.fontSize) : 0;
-        const computed = root ? parseFloat(getComputedStyle(root).fontSize) : 0;
 
-        return published || inline || computed || FALLBACK_PX_PER_REM;
+        // this runs on every pointer move: the style read is only made when the stock published nothing
+        if (published) { return published; }
+
+        const inline = root ? parseFloat(root.style.fontSize) : 0;
+
+        if (inline) { return inline; }
+
+        return (root ? parseFloat(getComputedStyle(root).fontSize) : 0) || FALLBACK_PX_PER_REM;
     };
 
     /**
@@ -460,9 +502,16 @@ ACEUIAppLoader.drawer = (function () {
         };
     };
 
-    /** How far a pointer x is from the edge line the drawer uses; negative beyond it. */
+    /**
+     * How far a pointer x is from the edge line the drawer uses; negative beyond it. From the
+     * whole pixel applyLook writes the panel at: from the fraction, the panel's first column
+     * at a fractional offset (1rem at 1440p is 21.33px) was in neither the zone nor the panel,
+     * and a pointer resting there closed the drawer under it (second review, 2026-09-24).
+     */
     const edgeDistance = function (x, m) {
-        return m.side === SIDE_LEFT ? x - m.offsetPx : m.W - m.offsetPx - x;
+        const offset = Math.round(m.offsetPx);
+
+        return m.side === SIDE_LEFT ? x - offset : m.W - offset - x;
     };
 
     const inExtent = function (y, m) {
@@ -489,7 +538,8 @@ ACEUIAppLoader.drawer = (function () {
         const mm = m || metrics();
         const d = edgeDistance(x, mm);
 
-        return d >= 0 && d <= mm.widthPx && y >= mm.topPx && y <= mm.H - mm.bottomPx;
+        // the box as applyLook writes it, in whole pixels
+        return d >= 0 && d <= Math.round(mm.widthPx) && y >= Math.round(mm.topPx) && y <= mm.H - Math.round(mm.bottomPx);
     };
 
     // ---- visibility ----------------------------------------------------------------
@@ -550,8 +600,15 @@ ACEUIAppLoader.drawer = (function () {
 
         if (root) { root.style.display = on ? "" : "none"; }
 
+        // an app whose attach throws is logged and left stopped: the throw must not reach build(),
+        // setVisible() or refreshAll(), which would leave no drawer, or a switch half flipped
+        // (second review, 2026-09-24: activate rethrows since a failed start clears its mark)
         if (loader) {
-            if (on) { loader.activate(name); } else { loader.deactivate(name); }
+            if (on) {
+                ACEUIAppLoader.safely("[drawer] starting " + name, function () { loader.activate(name); });
+            } else {
+                loader.deactivate(name);
+            }
         }
 
         return on;
@@ -587,6 +644,7 @@ ACEUIAppLoader.drawer = (function () {
     const setVisible = function (name, on) {
         state.visible[name] = Boolean(on);
         state.touched = true;
+        state.touchedNames[name] = true;
         applyVisibility(name);
         store();
 
@@ -621,6 +679,7 @@ ACEUIAppLoader.drawer = (function () {
     const setDeveloper = function (on) {
         state.developer = Boolean(on);
         state.touched = true;
+        state.touchedDev = true;
         store();
         refreshRows();
         refreshAll();
@@ -657,7 +716,8 @@ ACEUIAppLoader.drawer = (function () {
             state.devRow.label.style.color = state.developer ? THEME.ink : THEME.inkOff;
         }
 
-        syncList();
+        // measured once the rows' new layout exists: layout reads lag in this engine
+        scheduleSync();
     };
 
     /** Re-apply every switch: after adopting the HUD store, apps may need hiding. */
@@ -681,24 +741,40 @@ ACEUIAppLoader.drawer = (function () {
      * `persist.whenHudReady` rather than polling for it here.
      */
     const adoptHudStore = function () {
+        const stored = switchesOf(persist.readHud(HUD_ID));
+        const dev = persist.readHud(DEV_HUD_ID);
+
         // A switch the user flipped before the store existed reached localStorage only,
         // and localStorage dies with the game: their choice is newer than anything on
-        // disk, so rather than skipping, this is the moment to write it *to* disk.
+        // disk, so rather than skipping, this is the moment to write it *to* disk. Only
+        // the switches they flipped: the rest of the map on disk is still the truth (a
+        // single early flip wrote the whole in-memory map, which after a restart is empty,
+        // and wiped every other switch saved; second review, 2026-09-24)
         if (state.touched) {
+            if (stored) {
+                Object.keys(stored).forEach(function (name) {
+                    if (!state.touchedNames[name]) { state.visible[name] = stored[name]; }
+                });
+            }
+
+            if (dev && !state.touchedDev) { state.developer = developerOf(dev); }
+
+            state.touchedNames = {};
+            state.touchedDev = false;
             store();
+            refreshRows();
+            refreshAll();
 
             return false;
         }
 
-        const stored = persist.readHud(HUD_ID);
-        const dev = persist.readHud(DEV_HUD_ID);
         let adopted = false;
 
         // the developer switch first, and on its own: `isVisible` consults it, and a
         // profile that has never touched an app switch still has one of these to restore
         if (dev) {
-            state.developer = Boolean(dev.on);
-            persist.writeLocal(DEV_STORE_KEY, dev);
+            state.developer = developerOf(dev);
+            persist.writeLocal(DEV_STORE_KEY, { on: state.developer });
             adopted = true;
         }
 
@@ -807,9 +883,11 @@ ACEUIAppLoader.drawer = (function () {
         cancelDwell();
         cancelPark();
 
-        if (!state.panel || state.open) { return; }
+        // never on a hidden HUD, whoever asks (a pinned build, the pin turned on while hidden)
+        if (!state.panel || state.open || ACEUIAppLoader.hudHidden()) { return; }
 
         state.open = true;
+        state.panel.style.visibility = "";
         // with a fade the transition names opacity only, so this move is instant: unparked, then faded in
         state.panel.style.transform = "translateX(0)";
         state.panel.style.opacity = "1";
@@ -825,20 +903,40 @@ ACEUIAppLoader.drawer = (function () {
         if (!state.panel || !state.open) { return; }
 
         state.open = false;
+        state.visitPending = false;
         state.panel.style.opacity = "0";
 
-        // a fading panel is parked off-screen once it is invisible; parked at once, it would vanish rather than fade
-        if (options().motion === MOTION_FADE) {
-            state.parkTimer = window.setTimeout(function () {
-                state.parkTimer = 0;
+        const motion = options().motion;
+        const settle = motion === MOTION_SLIDE ? SLIDE_MS : (motion === MOTION_FADE ? FADE_MS : 0);
+        // Once it has gone the panel is hidden as well as moved: parked by its own width, a panel set in from
+        // the edge (Edge offset, Triple screen) still overlaps the screen, and at opacity 0 alone it would sit
+        // there unseen, catching clicks meant for the HUD (full review, 2026-09-24). A fading panel is parked
+        // only then too; parked at once, it would vanish rather than fade
+        const park = function () {
+            state.parkTimer = 0;
 
-                if (!state.open && state.panel) { state.panel.style.transform = closedTransform(); }
-            }, FADE_MS);
-        } else {
-            state.panel.style.transform = closedTransform();
-        }
+            if (!state.open && state.panel) {
+                state.panel.style.transform = closedTransform();
+                state.panel.style.visibility = "hidden";
+            }
+        };
+
+        if (motion !== MOTION_FADE) { state.panel.style.transform = closedTransform(); }
+
+        if (settle > 0) { state.parkTimer = window.setTimeout(park, settle); } else { park(); }
 
         updateHint(false);
+    };
+
+    /** The dwell is up: open only if the pointer is still in the zone, no button is held and the HUD is showing. */
+    const dwellDone = function () {
+        state.dwellTimer = 0;
+
+        const last = state.last;
+
+        if (ACEUIAppLoader.hudHidden() || state.buttonHeld || !last.known || !inZone(last.x, last.y, metrics())) { return; }
+
+        open();
     };
 
     const closeSoon = function () {
@@ -914,11 +1012,19 @@ ACEUIAppLoader.drawer = (function () {
         const x = e.clientX;
         const y = e.clientY;
         const last = state.last;
+        const prevX = last.x;
         const moved = !last.known || x !== last.x || y !== last.y;
-        const jump = last.known && Math.max(Math.abs(x - last.x), Math.abs(y - last.y)) > m.W * JUMP_FRACTION;
-        const arrived = last.known && moved && !jump;
+        // across against the width, down against the height (on a triple a quarter of the width is taller than the screen)
+        const jump = last.known && (Math.abs(x - last.x) > m.W * JUMP_FRACTION || Math.abs(y - last.y) > m.H * JUMP_FRACTION);
+        // the engine's report of a pointer that has left the window, whatever the distance (gameface-notes.md)
+        const gone = x === 0 && y === 0;
+        const arrived = last.known && moved && !jump && !gone;
 
-        if (jump) { logJump(last, x, y); }
+        if ((jump || gone) && moved && last.known) {
+            logJump(last, x, y);
+            // the pointer went elsewhere and came back: a button released out there never reached us
+            state.buttonHeld = false;
+        }
 
         last.x = x;
         last.y = y;
@@ -936,42 +1042,64 @@ ACEUIAppLoader.drawer = (function () {
         }
 
         const zone = inZone(x, y, m);
+        // an edge set in from the screen's (offset, triple) does not stop the pointer, and a fast hand can cross
+        // its zone between two samples: from this side of the line to beyond it counts as reaching it, when
+        // nothing asks the pointer to stay (a dwell is there to refuse a pass-through)
+        const crossed = arrived && m.offsetPx > 0 && options().dwell <= 0 && inExtent(y, m) && edgeDistance(prevX, m) >= 0 && edgeDistance(x, m) < 0;
 
         // near the edge anywhere along it, not only within the extent: the line itself shows
         // which part of the edge opens the drawer. Only a movement lights it: a jump or a
         // repeated position is the engine talking, not the hand
         updateHint(arrived && nearZone(x, m));
 
+        // pinned means on the screen: back as soon as the HUD is (a hidden HUD closed it)
+        if (!state.open && isPinned()) {
+            open();
+
+            return;
+        }
+
         if (!state.open) {
-            if (arrived && triggerNow() === TRIGGER_HOVER && zone && !state.buttonHeld) {
+            if (arrived && triggerNow() === TRIGGER_HOVER && (zone || crossed) && !state.buttonHeld) {
                 if (options().dwell > 0) {
-                    if (!state.dwellTimer) { state.dwellTimer = window.setTimeout(open, clamp(options().dwell, 0, DWELL_MAX_MS)); }
+                    if (!state.dwellTimer) { state.dwellTimer = window.setTimeout(dwellDone, clamp(options().dwell, 0, DWELL_MAX_MS)); }
                 } else {
                     open();
                 }
-            } else {
+            } else if (moved) {
+                // a repeat of the last sample is the engine talking, not the hand: it neither starts nor calls off a dwell
                 cancelDwell();
             }
 
             return;
         }
 
-        if (isPinned()) { return; }
-
-        if (zone || inPanel(x, y, m)) {
+        // its own settings pane is open: the Panel settings are being changed on it, so it stays to be seen
+        if (isPinned() || paneOpen()) {
             cancelClose();
-        } else if (!state.closeTimer) {
+
+            return;
+        }
+
+        // the pointer gone (0,0) is in neither, whatever the geometry says: at the top of a left-hand
+        // zone it kept the drawer open for as long as the pointer was on another monitor
+        if (!gone && (zone || inPanel(x, y, m))) {
+            state.visitPending = false;
+            cancelClose();
+        } else if (!state.visitPending && !state.closeTimer) {
             closeSoon();
         }
     };
 
     /**
      * A press: in the zone it opens the drawer when that is the trigger; outside the panel
-     * it closes an open drawer (pinned or not, a click elsewhere on the HUD is the player
-     * moving on). Tracked either way, so a drag in progress cannot open it.
+     * it closes an open drawer (a click elsewhere on the HUD is the player moving on) unless
+     * it is pinned or its own settings pane is open. Tracked either way, so a drag in
+     * progress cannot open it, and a pending dwell is called off.
      */
     const onDown = function (e) {
         state.buttonHeld = true;
+        cancelDwell();
 
         if (!state.panel || ACEUIAppLoader.hudHidden()) { return; }
 
@@ -983,7 +1111,9 @@ ACEUIAppLoader.drawer = (function () {
             return;
         }
 
-        if (!inPanel(e.clientX, e.clientY, m) && !isPinned()) { close(); }
+        // a press in the zone (above or below the panel, along a full-height zone) is at the drawer, not elsewhere:
+        // closing there, the next move in the zone opened it again
+        if (!inPanel(e.clientX, e.clientY, m) && !inZone(e.clientX, e.clientY, m) && !isPinned() && !paneOpen()) { close(); }
     };
 
     const onUp = function () {
@@ -1000,7 +1130,12 @@ ACEUIAppLoader.drawer = (function () {
     const onHotkey = function (e) {
         if (!state.panel || ACEUIAppLoader.hudHidden()) { return; }
 
+        // closing a pinned drawer unpins it, as its hint says: left pinned, the next pointer move brought it back
+        if (state.open && isPinned()) { setPinned(false); }
+
         toggle();
+        // opened from anywhere: the pointer may be a screen away, so no auto-close until it has reached the panel
+        state.visitPending = state.open;
         e.preventDefault();
     };
 
@@ -1034,8 +1169,8 @@ ACEUIAppLoader.drawer = (function () {
     /**
      * Put the settings on the panel and the hint. Called on build, on every change and on
      * a window resize; it writes styles only, never rebuilds rows, so a change is instant.
-     * Offsets and insets are written in px (they are clamped against the viewport), the
-     * width in rem, and the scale is one font-size in rem on the panel, everything inside
+     * Offsets, insets and the width are written in whole px (clamped against the viewport;
+     * the width is rem worked out in px, as metrics() gives it), and the scale is one font-size in rem on the panel, everything inside
      * being in em.
      */
     const applyLook = function () {
@@ -1066,14 +1201,15 @@ ACEUIAppLoader.drawer = (function () {
             right: left ? "auto" : Math.round(m.offsetPx) + "px",
             top: Math.round(m.topPx) + "px",
             bottom: Math.round(m.bottomPx) + "px",
-            width: (m.widthPx / m.pxPerRem) + "rem",
+            width: Math.round(m.widthPx) + "px",
             fontSize: clamp(opts.scale, SCALE_MIN, SCALE_MAX) + "rem",
             background: rgba(PANEL_RGB, alpha),
             borderLeft: left ? "none" : THEME.border,
             borderRight: left ? THEME.border : "none",
             borderRadius: left ? "0 0.25em 0.25em 0" : "0.25em 0 0 0.25em",
             transition: slide,
-            transform: state.open ? "translateX(0)" : closedTransform()
+            transform: state.open ? "translateX(0)" : closedTransform(),
+            visibility: state.open || state.parkTimer ? "" : "hidden"
         });
 
         if (state.header) { state.header.style.background = rgba(HEADER_RGB, alpha); }
@@ -1091,17 +1227,33 @@ ACEUIAppLoader.drawer = (function () {
 
         paintPin();
         updateHint(false);
-        syncList();
+        // measured once the new sizes have a layout: layout reads lag in this engine
+        scheduleSync();
 
         return m;
+    };
+
+    /** Is the pointer, as last seen, on the drawer or its zone? */
+    const pointerHere = function () {
+        const last = state.last;
+        const m = metrics();
+
+        return last.known && !(last.x === 0 && last.y === 0) && (inZone(last.x, last.y, m) || inPanel(last.x, last.y, m));
     };
 
     const onSettingChange = function (key) {
         applyLook();
 
-        // pinned means on the screen, now and after every reload, not "stays once you open it"
+        // pinned means on the screen, now and after every reload, not "stays once you open it". Unpinned
+        // (or every key notified by Reset to defaults), it goes as any open drawer goes: not while its pane
+        // is open, not under the pointer, not before a hotkey visit; the next move away closes it
+        // (second review, 2026-09-24: it closed under a still pointer, and with its own pane open)
         if (key === KEY.pinned) {
-            if (isPinned()) { open(); } else if (state.open) { closeSoon(); }
+            if (isPinned()) {
+                open();
+            } else if (state.open && !paneOpen() && !state.visitPending && !pointerHere()) {
+                closeSoon();
+            }
         }
     };
 
@@ -1247,7 +1399,7 @@ ACEUIAppLoader.drawer = (function () {
 
         holder.appendChild(buildRow(app, function () { toggleApp(app.name); }));
 
-        if (entry.status !== "loaded") { holder.appendChild(buildStatus(app)); }
+        if (entry.status !== LOADED_STATUS) { holder.appendChild(buildStatus(app)); }
 
         app.holder = holder;
         state.apps.push(app);
@@ -1298,7 +1450,7 @@ ACEUIAppLoader.drawer = (function () {
     const build = function (apps) {
         const selector = ACEUIAppLoader.loader ? ACEUIAppLoader.loader.CONTAINER_SELECTOR : "";
         const container = (selector && document.querySelector(selector)) || document.body;
-        const stored = persist.readHud(HUD_ID) || persist.readLocal(STORE_KEY);
+        const stored = switchesOf(persist.readHud(HUD_ID) || persist.readLocal(STORE_KEY));
         const storedDev = persist.readHud(DEV_HUD_ID) || persist.readLocal(DEV_STORE_KEY);
         const panel = div({
             position: "fixed",
@@ -1361,7 +1513,7 @@ ACEUIAppLoader.drawer = (function () {
 
         if (stored && !state.touched) { state.visible = stored; }
 
-        if (storedDev && !state.touched) { state.developer = Boolean(storedDev.on); }
+        if (storedDev && !state.touched) { state.developer = developerOf(storedDev); }
 
         defineSettings();
         readOptions();

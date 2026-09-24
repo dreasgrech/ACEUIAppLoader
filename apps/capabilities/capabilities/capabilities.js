@@ -16,14 +16,16 @@
  * the panel is for reading it live. The list is long, so the body scrolls (wheel or
  * the scrollbar; drag the panel by its header).
  *
- * Three probes are *active* rather than presence-only: a fetch of a `data:` URI, a
- * Blob-URL Worker round-trip, and a WebSocket connection to a loopback port. All are
- * local (no external service, no file lookup), each runs behind a timeout, and the
- * worker and the socket are always closed -- so nothing here can hang. The summary is
+ * Four probes are *active* rather than presence-only: a fetch of a `data:` URI, a
+ * Blob-URL Worker round-trip, and a WebSocket connection and an XMLHttpRequest to a
+ * loopback port. All are local (no external service, no file lookup), each runs behind a
+ * timeout, and the worker, the socket and the request are always closed -- so nothing
+ * here can hang. The summary is
  * recomputed once those settle, so its counts are accurate.
  *
  * Cohtml rules: the panel is built once at attach and never rebuilt per frame; the
- * only per-frame work is the shared panel lifecycle settling the restored position.
+ * only per-frame work is the shared panel lifecycle settling the restored position and,
+ * while it is switched on, the model recorder (its lines gated by change and by time).
  * Rows are rewritten once, when a probe settles, not on a loop.
  *
  * Identity (name, version, title, root, logger, storage keys) comes from
@@ -87,7 +89,9 @@ const CapabilitiesProbe = (function () {
         statusPartial: "cp-partial",
         statusWarn: "cp-warn",
         peProbe: "cp-pe-probe",
-        peStrip: "cp-pe-strip"
+        peStrip: "cp-pe-strip",
+        peControl: "cp-pe-control",
+        peControlStrip: "cp-pe-control-strip"
     };
 
     const STATUS_CLASS = {};
@@ -187,6 +191,8 @@ const CapabilitiesProbe = (function () {
     };
     /** Where the pointer-events fixture is hit-tested: inside its 4px boxes at the corner. */
     const PE_POINT_PX = 2;
+    /** The control pair sits this far to the right of the pair under test (see capabilities.css). */
+    const PE_CONTROL_OFFSET_PX = 8;
     /**
      * A jump between two samples this large is not a hand movement (85px is a very fast
      * flick at 58.5 fps). The app drawer opened when the pointer left the game window with
@@ -264,15 +270,24 @@ const CapabilitiesProbe = (function () {
         target.className = CLASS.peProbe;
         strip.className = CLASS.peStrip;
         strip.style.pointerEvents = "none";
+        // the same pair beside it with pointer-events: none from the stylesheet, the form the stock uses: if the
+        // engine's hit test honours neither, the inline answer would say nothing about the inline form
+        const controlTarget = document.createElement("div");
+        const controlStrip = document.createElement("div");
+
+        controlTarget.className = CLASS.peControl;
+        controlStrip.className = CLASS.peControlStrip;
         document.body.appendChild(target);
         document.body.appendChild(strip);
-        pointer.fixture = { target: target, strip: strip };
+        document.body.appendChild(controlTarget);
+        document.body.appendChild(controlStrip);
+        pointer.fixture = { target: target, strip: strip, controlTarget: controlTarget, controlStrip: controlStrip };
     };
 
     const removePointerFixture = function () {
         if (!pointer.fixture) { return; }
 
-        [pointer.fixture.target, pointer.fixture.strip].forEach(function (node) {
+        [pointer.fixture.target, pointer.fixture.strip, pointer.fixture.controlTarget, pointer.fixture.controlStrip].forEach(function (node) {
             if (node.parentNode) { node.parentNode.removeChild(node); }
         });
         pointer.fixture = null;
@@ -382,9 +397,17 @@ const CapabilitiesProbe = (function () {
 
         hit = document.elementFromPoint(PE_POINT_PX, PE_POINT_PX);
 
+        const control = document.elementFromPoint(PE_POINT_PX + PE_CONTROL_OFFSET_PX, PE_POINT_PX);
+
         if (hit === fixture.target) { return { status: YES, detail: "a strip with inline pointer-events: none let the hit reach what is under it" }; }
 
-        if (hit === fixture.strip) { return { status: NO, detail: "the strip took the hit: inline pointer-events: none is ignored" }; }
+        if (hit === fixture.strip && control === fixture.controlStrip) {
+            return { status: WARN, detail: "the hit test honours pointer-events: none in neither form here: says nothing about the inline one" };
+        }
+
+        if (hit === fixture.strip && control === fixture.controlTarget) {
+            return { status: NO, detail: "the strip took the hit: inline pointer-events: none is ignored (the stylesheet form works)" };
+        }
 
         return { status: WARN, detail: "hit " + (hit ? hit.tagName.toLowerCase() : "nothing") + " instead: not laid out yet? re-run" };
     };
@@ -1081,6 +1104,27 @@ const CapabilitiesProbe = (function () {
     const REC_REFUEL_REPORT_MS = 1000;
     const REC_REFUEL_END_MS = 2000;
     const REC_LINES_AROUND = 3;
+    /** Lines either side of the focused one, both sides of it: the window is twice the reach plus the line itself. */
+    const REC_SIDES = 2;
+    /** How many leaderboard lines the heartbeat shows from the top. */
+    const REC_LEADERBOARD_FIRST = 4;
+    /** Decimals for seconds and rates in the recorder's lines: whole, tenths, hundredths. */
+    const REC_WHOLE = 0;
+    const REC_TENTHS = 1;
+    const REC_HUNDREDTHS = 2;
+    /**
+     * A lap boundary, by the rule the delta bar measured (docs/notes.md there): the lap clock back by more
+     * than 150 ms and either landing in the first 5 s or dropping by more than a second, or the lap count
+     * moving. Any smaller step back is the game correcting its clock (79 of them in 107 s of one
+     * multiplayer session, the largest 54 ms): one line each, not a lap summary each (full review, 2026-09-24).
+     */
+    const REC_LAP_JITTER_MS = 150;
+    const REC_LAP_LANDING_MS = 5000;
+    const REC_LAP_DROP_MS = 1000;
+    /** A lap count moving within this much lap clock after a clock boundary (or of a lap's start) is that boundary, as in the delta bar. */
+    const REC_LAP_GRACE_MS = 500;
+    /** At most one CLOCK STEP BACK line in this long; the ones between are counted into the next line. */
+    const REC_STEP_BACK_GAP_MS = 250;
     const REC_DESCRIBE_DEPTH = 4;
     const REC_DECIMALS = 4;
     const REC_CORNERS = ["tyre_lf", "tyre_rf", "tyre_lr", "tyre_rr"];
@@ -1214,9 +1258,14 @@ const CapabilitiesProbe = (function () {
             ratesText: "",
             rateWindowAt: 0,
             seen: { state: {}, color_override: {}, car_location: {}, rt_car_location: {}, lb_car_location: {} },
-            calib: {},          // last bucket per corner per quantity
+            calib: {},          // buckets already logged, per corner per quantity
             pitFuel: null,      // refuelling bookkeeping while in the pit lane
             lapTimePrev: -1,
+            lapCountPrev: null,
+            timersSet: false,   // the CLOCK, heartbeat and dump timers are set from the first frame with a car
+            boundaryClock: null, // the lap clock on the frame of the last boundary, for the late count's grace
+            stepBackAt: 0,      // when the last CLOCK STEP BACK line was written
+            stepBacksSkipped: 0, // the step backs since then that were not
             notices: null       // engine.on handle for UINotification while recording
         };
     };
@@ -1250,7 +1299,7 @@ const CapabilitiesProbe = (function () {
 
         const secs = (now - L.startedAt) / MS_PER_S;
 
-        recLog("---- lap summary (" + why + "): " + secs.toFixed(1) + " s, " + L.frames + " frames, " + (L.frames / (secs || 1)).toFixed(1) + " fps");
+        recLog("---- lap summary (" + why + "): " + secs.toFixed(REC_TENTHS) + " s, " + L.frames + " frames, " + (L.frames / (secs || 1)).toFixed(REC_TENTHS) + " fps");
         recLog("ffb_strength " + statText(L.ffb) + " changes=" + L.ffbChanges + " frames>=" + REC_CLIP_LEVEL + ": " + L.ffbClip
             + " frames>1.0: " + L.ffbOver + " multiplier=" + describe(car ? car.car_ffb_mupliplier : undefined));
         recLog("g_forces x " + statText(L.g.x) + " y " + statText(L.g.y) + " z " + statText(L.g.z));
@@ -1279,9 +1328,12 @@ const CapabilitiesProbe = (function () {
         const key = corner + "." + kind;
         const bucket = Math.floor(raw / step);
 
-        if (rec.calib[key] === bucket) { return; }
+        // each bucket once per key: a value hovering on a boundary crossed it every frame (full review, 2026-09-24)
+        if (!rec.calib[key]) { rec.calib[key] = {}; }
 
-        rec.calib[key] = bucket;
+        if (rec.calib[key][bucket]) { return; }
+
+        rec.calib[key][bucket] = true;
         recLog("calib " + key + ": raw=" + describe(raw) + " normalized=" + describe(normalized));
     };
 
@@ -1294,7 +1346,7 @@ const CapabilitiesProbe = (function () {
     };
 
     const heartbeat = function (rec, now, car, timing, rt, lb, cot) {
-        recLog("== heartbeat t+" + ((now - rec.startedAt) / MS_PER_S).toFixed(0) + "s frames=" + rec.frames);
+        recLog("== heartbeat t+" + ((now - rec.startedAt) / MS_PER_S).toFixed(REC_WHOLE) + "s frames=" + rec.frames);
         recLog("car: " + describe(pickFields(car, ["speed", "gear", "rpm", "npos", "npos_perc", "current_lap_time_ms", "predicted_lap_time_ms",
             "delta_time_ms", "delta_time_ms_ui", "delta_time_drivername", "car_location", "is_player_car", "has_focused_car", "ffb_strength",
             "steering_percent", "steer_degrees", "g_forces", "gas_percent", "brake_percent", "air_temperature_c", "fuel_liter_current_quantity",
@@ -1305,19 +1357,19 @@ const CapabilitiesProbe = (function () {
             + " delta_current_p=" + describe(timing ? timing.delta_current_p : undefined) + " delta_last_p=" + describe(timing ? timing.delta_last_p : undefined));
 
         if (rt && rt.lines) {
-            let f = -1;
+            let focusedIndex = -1;
 
-            rt.lines.forEach(function (line, i) { if (line.focused) { f = i; } });
+            rt.lines.forEach(function (line, i) { if (line.focused) { focusedIndex = i; } });
 
-            const from = Math.max(0, f - REC_LINES_AROUND);
+            const from = Math.max(0, focusedIndex - REC_LINES_AROUND);
 
-            recLog("realtime lines=" + rt.lines.length + " focusedIndex=" + f + " around: " + describe(rt.lines.slice(from, from + 2 * REC_LINES_AROUND + 1)));
+            recLog("realtime lines=" + rt.lines.length + " focusedIndex=" + focusedIndex + " around: " + describe(rt.lines.slice(from, from + REC_SIDES * REC_LINES_AROUND + 1)));
         } else {
             recLog("realtime leaderboard: missing");
         }
 
         if (lb && lb.lines) {
-            recLog("leaderboard lines=" + lb.lines.length + " first4: " + describe(lb.lines.slice(0, 4).map(function (l) {
+            recLog("leaderboard lines=" + lb.lines.length + " first" + REC_LEADERBOARD_FIRST + ": " + describe(lb.lines.slice(0, REC_LEADERBOARD_FIRST).map(function (l) {
                 return pickFields(l, ["pos", "car_number", "car_location", "time_diff", "last_lap_time", "best_lap_time", "total_laps", "num_pits",
                     "state", "color_override", "tyre_compound", "mandatory_pitstops_countdown"]);
             })));
@@ -1340,7 +1392,7 @@ const CapabilitiesProbe = (function () {
 
     /** Every line of every leaderboard model, compact: lapped cars, pit cars and the far end of the field too. */
     const fullDump = function (rec, now, rt, lb, cot, radar) {
-        recLog("== full dump t+" + ((now - rec.startedAt) / MS_PER_S).toFixed(0) + "s");
+        recLog("== full dump t+" + ((now - rec.startedAt) / MS_PER_S).toFixed(REC_WHOLE) + "s");
 
         if (rt && rt.lines) {
             recLog("realtime all: " + describe(rt.lines.map(function (l) {
@@ -1420,12 +1472,12 @@ const CapabilitiesProbe = (function () {
                     const dt = (now - F.riseAt) / MS_PER_S;
 
                     F.reportedAt = now;
-                    recLog("REFUEL: " + describe(F.riseFrom) + " -> " + describe(litres) + " L in " + dt.toFixed(2) + " s = " + describe((litres - F.riseFrom) / (dt || 1)) + " L/s");
+                    recLog("REFUEL: " + describe(F.riseFrom) + " -> " + describe(litres) + " L in " + dt.toFixed(REC_HUNDREDTHS) + " s = " + describe((litres - F.riseFrom) / (dt || 1)) + " L/s");
                 }
             } else if (F.riseAt && now - F.lastAt > REC_REFUEL_END_MS) {
                 const dt = (F.lastAt - F.riseAt) / MS_PER_S;
 
-                recLog("REFUEL ended: " + describe(F.riseFrom) + " -> " + describe(F.last) + " L in " + dt.toFixed(2) + " s = "
+                recLog("REFUEL ended: " + describe(F.riseFrom) + " -> " + describe(F.last) + " L in " + dt.toFixed(REC_HUNDREDTHS) + " s = "
                     + describe((F.last - F.riseFrom) / (dt || 1)) + " L/s time_in_pits=" + describe(pitTime));
                 F.riseAt = 0;
             }
@@ -1433,10 +1485,10 @@ const CapabilitiesProbe = (function () {
             const F = rec.pitFuel;
 
             if (F.riseAt) {
-                recLog("REFUEL ended (left pit lane): " + describe(F.riseFrom) + " -> " + describe(F.last) + " L in " + ((F.lastAt - F.riseAt) / MS_PER_S).toFixed(2) + " s");
+                recLog("REFUEL ended (left pit lane): " + describe(F.riseFrom) + " -> " + describe(F.last) + " L in " + ((F.lastAt - F.riseAt) / MS_PER_S).toFixed(REC_HUNDREDTHS) + " s");
             }
 
-            recLog("pit lane left with fuel=" + describe(litres) + " after " + ((now - F.enteredAt) / MS_PER_S).toFixed(1) + " s (entered with " + describe(F.entered) + ")");
+            recLog("pit lane left with fuel=" + describe(litres) + " after " + ((now - F.enteredAt) / MS_PER_S).toFixed(REC_TENTHS) + " s (entered with " + describe(F.entered) + ")");
             rec.pitFuel = null;
         }
     };
@@ -1456,13 +1508,19 @@ const CapabilitiesProbe = (function () {
         }
 
         watch(rec, "location", car.car_location, "car_location", { time_in_pits: car.pit_info ? car.pit_info.time_in_pits : undefined, npos: car.npos, lapMs: lapMs });
-        watch(rec, "pit_info", car.pit_info, "pit_info");
+        // without time_in_pits, which counts down every frame of a stop: a line per change of what the stop is for
+        const pit = car.pit_info && typeof car.pit_info === "object" ? Object.assign({}, car.pit_info) : car.pit_info;
+
+        if (pit && typeof pit === "object") { delete pit.time_in_pits; }
+
+        watch(rec, "pit_info", pit, "pit_info", { time_in_pits: car.pit_info ? car.pit_info.time_in_pits : undefined });
         watch(rec, "lowfreq", pickFields(lf, ["total_lap_count", "current_pos", "total_drivers", "last_laptime_ms", "best_laptime_ms", "is_last_lap",
             "mandatory_pitstops_done", "race_cut_gained_time_ms", "race_cut_current_delta", "performance_mode_name", "flags", "distance_to_deadline"]),
             "low_frequency", { lapMs: lapMs, npos: car.npos, time_left_ms: session ? session.time_left_ms : undefined });
         watch(rec, "driverstate", window.ModelUIDriverState, "ModelUIDriverState");
         watch(rec, "penaltystate", window.ModelUIPenaltyState, "ModelUIPenaltyState");
-        watch(rec, "wrongway", { is_wrong_way: car.is_wrong_way, control_lock_time: car.control_lock_time, is_drs_available: car.is_drs_available }, "wrong way / control lock / drs");
+        watch(rec, "wrongway", { is_wrong_way: car.is_wrong_way, control_locked: typeof car.control_lock_time === "number" && car.control_lock_time > 0, is_drs_available: car.is_drs_available },
+            "wrong way / control lock / drs", { control_lock_time: car.control_lock_time });
         watch(rec, "cleared", car.cleared_mandatory_pitstops_count, "cleared_mandatory_pitstops_count");
         watch(rec, "ffbmul", car.car_ffb_mupliplier, "car_ffb_mupliplier");
         watch(rec, "perlap", car.fuel_liter_per_lap, "fuel_liter_per_lap",
@@ -1472,16 +1530,20 @@ const CapabilitiesProbe = (function () {
 
         if (session) {
             watch(rec, "pitwindow", pickFields(session, ["pitstop_window_ranges", "current_pitstop_window_index", "is_current_pitstop_window_open",
-                "pitstop_window_time_ms", "pitstop_window_time", "pitstop_window_requires_tyre_change", "pitstop_window_requires_refuelling"]),
-                "pit window", { time_left_ms: session.time_left_ms, lapMs: lapMs });
+                "pitstop_window_requires_tyre_change", "pitstop_window_requires_refuelling"]),
+                "pit window", { time_left_ms: session.time_left_ms, pitstop_window_time_ms: session.pitstop_window_time_ms, pitstop_window_time: session.pitstop_window_time, lapMs: lapMs });
             watch(rec, "session", pickFields(session, ["session_name", "event_id", "session_id", "phase_name", "initial_grip", "initial_weather", "total_lap", "current_lap",
                 "lap_length_km", "end_session_flag", "lights_on", "lights_mode"]), "session");
-            watch(rec, "timeleft_str", session.time_left, "session.time_left (string)");
+            // the session clock's string ticks every second: its format is sampled once, the clock itself is on the CLOCK line
+            if (typeof session.time_left === "string" && !("timeleft_fmt" in rec.last)) {
+                rec.last.timeleft_fmt = "1";
+                recLog("session.time_left format sample: " + describe(session.time_left));
+            }
             watch(rec, "timeleft_zero", typeof session.time_left_ms === "number" && session.time_left_ms <= 0, "session clock at or below zero",
                 { time_left_ms: session.time_left_ms, is_last_lap: lf ? lf.is_last_lap : undefined, total_lap_count: lf ? lf.total_lap_count : undefined,
                     current_lap: session.current_lap, total_lap: session.total_lap, lapMs: lapMs, npos: car.npos, phase: session.phase_name });
-            watch(rec, "nextsession", pickFields(session, ["has_next_session", "time_to_next_session", "wait_time", "show_waiting_for_players", "disconnected_from_server"]),
-                "next session / waiting");
+            watch(rec, "nextsession", pickFields(session, ["has_next_session", "show_waiting_for_players", "disconnected_from_server"]),
+                "next session / waiting", { time_to_next_session: session.time_to_next_session, wait_time: session.wait_time });
         }
 
         if (rt && rt.lines) {
@@ -1559,6 +1621,18 @@ const CapabilitiesProbe = (function () {
             return;
         }
 
+        // the timers run from the recording's first frame with a car, not from the page's clock at zero: the
+        // CLOCK line (with the session ids) comes at once, the heartbeat and the dump one interval later
+        // (second review, 2026-09-24: after every Escape/resume the first CLOCK line came a minute late)
+        if (!rec.timersSet) {
+            rec.timersSet = true;
+            rec.lastClock = now - REC_CLOCK_MS - 1;
+            rec.lastHeartbeat = now;
+            rec.lastFullDump = now;
+        }
+
+        if (!rec.startedAt) { rec.startedAt = now; }
+
         if (!rec.lap) {
             rec.lap = newLap(now, car.fuel_liter_current_quantity);
             recLog("start: " + describe(pickFields(car, ["car_location", "npos", "current_lap_time_ms", "fuel_liter_current_quantity", "g_forces", "steer_degrees",
@@ -1568,16 +1642,38 @@ const CapabilitiesProbe = (function () {
         }
 
         const lapMs = car.current_lap_time_ms;
+        const lapCount = car.low_frequency && typeof car.low_frequency.total_lap_count === "number" ? car.low_frequency.total_lap_count : null;
+        const stepBack = typeof lapMs === "number" && rec.lapTimePrev >= 0 && lapMs < rec.lapTimePrev;
+        const clockWrapped = stepBack && lapMs < rec.lapTimePrev - REC_LAP_JITTER_MS && (lapMs < REC_LAP_LANDING_MS || rec.lapTimePrev - lapMs > REC_LAP_DROP_MS);
+        // the lap count's rule as the delta bar has it: moving in a lap's first moments, or within them after
+        // the clock's own boundary (a count a frame late), it is that boundary, not a lap of one frame
+        const clockNow = typeof lapMs === "number" ? lapMs : (rec.lapTimePrev >= 0 ? rec.lapTimePrev : null);
+        const justStarted = clockNow !== null && clockNow < REC_LAP_GRACE_MS;
+        const justWrapped = rec.boundaryClock !== null && clockNow !== null && clockNow >= rec.boundaryClock && clockNow - rec.boundaryClock < REC_LAP_GRACE_MS;
+        const countMoved = lapCount !== null && rec.lapCountPrev !== null && lapCount !== rec.lapCountPrev && !justStarted && !justWrapped;
 
-        // a lap boundary is the lap clock going backwards
-        if (typeof lapMs === "number" && rec.lapTimePrev >= 0 && lapMs < rec.lapTimePrev) {
-            recLog("LAP BOUNDARY: lap clock " + rec.lapTimePrev + " -> " + lapMs + " npos=" + describe(car.npos) + " location=" + describe(car.car_location)
+        if (clockWrapped || countMoved) {
+            recLog("LAP BOUNDARY: lap clock " + rec.lapTimePrev + " -> " + describe(lapMs) + " npos=" + describe(car.npos) + " location=" + describe(car.car_location)
                 + " timing=" + describe(timing) + " lowfreq=" + describe(pickFields(car.low_frequency, ["total_lap_count", "last_laptime_ms", "best_laptime_ms", "is_last_lap"])));
             lapSummary(rec, car, now, "lap boundary");
             rec.lap = newLap(now, car.fuel_liter_current_quantity);
+            rec.boundaryClock = typeof lapMs === "number" ? lapMs : null;
+        } else if (stepBack && now - rec.stepBackAt < REC_STEP_BACK_GAP_MS) {
+            // a clock stepping back every frame would be a line a frame: counted into the next line instead
+            rec.stepBacksSkipped += 1;
+        } else if (stepBack) {
+            // the game correcting its clock: one line, in the fields the replay extractor reads
+            recLog("CLOCK STEP BACK: lap clock " + rec.lapTimePrev + " -> " + lapMs + " location=" + describe(car.car_location)
+                + " invalid=" + describe(timing ? timing.invalid : undefined) + " total_lap_count:" + describe(lapCount)
+                + (rec.stepBacksSkipped ? " (" + rec.stepBacksSkipped + " more since the last line)" : ""));
+            rec.stepBackAt = now;
+            rec.stepBacksSkipped = 0;
         }
 
-        rec.lapTimePrev = typeof lapMs === "number" ? lapMs : -1;
+        // a frame without the clock keeps the last one, as the delta bar does: forgetting it lost the next wrap
+        if (typeof lapMs === "number") { rec.lapTimePrev = lapMs; }
+
+        if (lapCount !== null) { rec.lapCountPrev = lapCount; }
 
         const L = rec.lap;
 
@@ -1655,7 +1751,14 @@ const CapabilitiesProbe = (function () {
     const recStart = function (rec, now) {
         if (rec.running) { return; }
 
+        // a new recording starts from nothing: switched off and on in one page load, the laps, the fuel,
+        // the frames and the last-seen values of the one before would be carried into it (full review, 2026-09-24)
+        const fresh = recCreate();
+
+        Object.keys(fresh).forEach(function (key) { if (key !== "notices") { rec[key] = fresh[key]; } });
+        rec.timersSet = false;
         rec.running = true;
+        // at attach the frame clock has not run yet: the first recorded frame sets the start then
         rec.startedAt = now;
         enableModels();
         listenForNotices(rec);
@@ -1880,7 +1983,7 @@ const CapabilitiesProbe = (function () {
 
     const runAll = function (state) {
         /**
-         * Each run is numbered. Three of these checks are asynchronous and slow on purpose
+         * Each run is numbered. Four of these checks are asynchronous and slow on purpose
          * -- the socket probe waits up to three seconds for a refusal -- so clicking
          * Re-run leaves the previous run's probes in flight. Their callbacks close over
          * this state and would write their old answer into a fresh row, and decrement a
@@ -2126,8 +2229,6 @@ const CapabilitiesProbe = (function () {
             state.unsubscribe = null;
         }
 
-        recStop(state.rec, state.frameNow, "detached");
-
         // kept, not nulled: the probe's own checks finish after a detach and still
         // re-filter the list, and a detached scroller is a no-op rather than a crash
         if (state.scroller) { state.scroller.detach(); }
@@ -2138,6 +2239,10 @@ const CapabilitiesProbe = (function () {
         }
 
         removePointerFixture();
+
+        // last, and guarded: the final summary walks the models, and a throw there must not leave the
+        // listeners and the fixture behind (second review, 2026-09-24)
+        ACEUIAppLoader.safely(REC_TAG + "stopping", function () { recStop(state.rec, state.frameNow, "detached"); });
     };
 
     return {

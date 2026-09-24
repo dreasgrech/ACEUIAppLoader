@@ -1,0 +1,57 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<title>windows across a reload that came before the HUD store was adopted</title>
+<style> body { margin: 0; background: #222; color: #ddd; font: 12px monospace; } #results { white-space: pre; } </style>
+<!-- a game restart; on the first page load a window was opened (memo.z) and another closed (memo.shut)
+     before the HUD store arrived, then the page reloaded before it did. localStorage holds what that load
+     wrote: its lists, with the list's stamp as loaded, and the changes kept as changes. The HUD store,
+     arriving now, holds what was open when the game was quit. Written over the store, the first load's
+     partial list wiped memo.s from disk (second review, 2026-09-24) -->
+<script src="doubles.js"></script>
+<script>
+localStorage.setItem("acewindows.open", JSON.stringify({
+    open: { "reload-pending.html": ["memo.z"] }, pageAt: { "reload-pending.html": 0 },
+    ops: { "reload-pending.html": { "memo.z": true, "memo.shut": false } }, at: Date.now() }));
+</script>
+<script src="lib.js"></script>
+</head>
+<body>
+<pre id="results"></pre>
+<div id="done" hidden></div>
+<script>
+(function () {
+    const H = window.__harness, t = H.t, eq = H.eq, ok = H.ok;
+    const W = ACEUIAppLoader.window, clock = window.__clock;
+    const opened = [];
+    const opener = function (id) { opened.push(id); W.open(id, { title: id }); };
+    const here = ACEUIAppLoader.page;
+    const local = function () { return JSON.parse(localStorage.getItem(W.OPEN_STORE_KEY)); };
+
+    t("the changes made before the store was adopted come through the reload with localStorage, and the window opened then comes back", function () {
+        eq(here, "reload-pending.html");
+        eq(W.reopen("memo.z", opener), true, "the window opened on the last load is due");
+        eq(W.reopen("memo.s", opener), false, "the one only the disk knows waits for the store");
+        eq(W.reopen("memo.shut", opener), false, "the one closed on the last load is not due");
+        clock.step(1000); eq(opened.join(","), "memo.z", "back a frame later");
+        eq(local().ops[here]["memo.shut"], false, "the changes are still kept as changes");
+    });
+
+    t("the store arriving takes its lists as the base and replays the changes on them: nothing it remembered is lost, and the closed window stays closed", function () {
+        window.HUD = { currentLayout: "default", StoredData: { lastLayout: "default", layouts: { default: { elements: {
+            hud_acewindows: { open: { "reload-pending.html": ["memo.s", "memo.shut"], "other.html": ["memo.other"] }, at: Date.now() - 3600000 } } } } } };
+        window.HUD.elementModified = function (id, props) { window.HUD.StoredData.layouts.default.elements[id] = props; };
+        eq(W.adopt().join(","), "memo.s", "the window the disk remembered is due");
+        clock.step(2000); eq(opened.join(","), "memo.z,memo.s", "and back"); eq(W.isOpen("memo.shut"), false, "the closed one stays closed");
+        const stored = window.HUD.StoredData.layouts.default.elements.hud_acewindows;
+        eq(stored.open[here].slice().sort().join(","), "memo.s,memo.z", "the disk lists the store's window and the one opened before it came");
+        eq(stored.open["other.html"].join(","), "memo.other", "and another page's list untouched");
+        eq(local().ops, undefined, "the changes, replayed, are not kept as changes any more");
+    });
+
+    H.finish(window.__warn.map(function (w) { return "WARN " + w; }));
+}());
+</script>
+</body>
+</html>

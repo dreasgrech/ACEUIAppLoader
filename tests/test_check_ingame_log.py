@@ -67,7 +67,7 @@ class CheckIngameLogTests(unittest.TestCase):
         and was reported as a failure on every single run."""
         code, out = run(log(
             OTHER,
-            "no preset list answer in 1500 ms; no installed apps",
+            "no preset list answer in 3000 ms (attempt 2 of 2); no installed apps; a .settingspreset in Saved Games\\ACE\\Video that is not empty, or not a preset, stops the game listing that folder",
             "nothing to load",
             HUD,
             "presets: 3 app(s)",
@@ -93,10 +93,27 @@ class CheckIngameLogTests(unittest.TestCase):
         self.assertEqual(code, 0, out)
         self.assertIn("note: ", out)
         self.assertIn("asking again", out)
-        code, out = run(log(HUD, "no preset list answer in 3000 ms; no installed apps", "bundled: 3 app(s)",
+        # the give-up line exactly as the loader writes it (loader.js: the attempt count and the hint)
+        code, out = run(log(HUD, "no preset list answer in 3000 ms (attempt 2 of 2); no installed apps; a .settingspreset in Saved Games\\ACE\\Video that is not empty, or not a preset, stops the game listing that folder", "bundled: 3 app(s)",
                             "app doom 0.5.4: loading 4 script(s), 1 stylesheet(s)", "app doom loaded"))
         self.assertEqual(code, 2, out)
         self.assertIn("no installed apps", out)
+
+    def test_each_hud_load_is_judged_on_its_own_and_names_are_listed_once(self):
+        """Escape and resume reloads the HUD: an app that loaded the first time and hung the second
+        must fail the run, and a clean run with two loads lists each app once in the RESULT line."""
+        code, out = run(log(
+            HUD, "bundled: 1 app(s)", "app doom 0.5.4: loading 4 script(s), 1 stylesheet(s)", "app doom loaded",
+            HUD, "bundled: 1 app(s)", "app doom 0.5.4: loading 4 script(s), 1 stylesheet(s)",
+        ))
+        self.assertEqual(code, 2, out)
+        self.assertIn("never finished", out)
+        code, out = run(log(
+            HUD, "bundled: 1 app(s)", "app doom 0.5.4: loading 4 script(s), 1 stylesheet(s)", "app doom loaded",
+            HUD, "bundled: 1 app(s)", "app doom 0.5.4: loading 4 script(s), 1 stylesheet(s)", "app doom loaded",
+        ))
+        self.assertEqual(code, 0, out)
+        self.assertIn("on the HUD: doom, no crashes", out)
 
     def test_nothing_on_the_hud_is_a_failure(self):
         code, out = run(log(HUD, "no preset list answer in 1500 ms; no installed apps", "nothing to load"))

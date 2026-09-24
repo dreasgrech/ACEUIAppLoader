@@ -3,7 +3,7 @@
 Everything the README leaves out, for anyone building the loader rather than installing it.
 Installing is one file in a folder; this is the rest.
 
-[`writing-a-app.md`](writing-a-app.md) is the guide to writing an app against the library --
+[`writing-an-app.md`](writing-an-app.md) is the guide to writing an app against the library --
 that needs none of this, because an app is loose files and no build step.
 
 ## Commands
@@ -26,7 +26,7 @@ python tools/repad.py                                # after installing or remov
 
 **After a game patch, run `post_update.py`.** A patch moves the stock files the package carries and changes the hash set the override is measured against, so the package quietly stops being the one the game picks and the symptom is that nothing appears. That tool rebuilds, re-measures when something it depends on has moved, reinstalls, and then replays the lookup over the packages actually in your mods folder to say whether both ways in still resolve to it.
 
-**`--dups=auto` reads a measurement, not a constant.** How many table records the overrides carry is chosen by `tune_dups.py` and recorded in `dups.json` behind a fingerprint of the package's file set; the build refuses to use a measurement taken for a different set. Why any of that is necessary is [`docs/how-it-works.md`](docs/how-it-works.md).
+**`--dups=auto` reads a measurement, not a constant.** How many table records the overrides carry is chosen by `tune_dups.py` and recorded in `dups.json` behind a fingerprint of the package's file set; the build refuses to use a measurement taken for a different set. Why any of that is necessary is [`how-it-works.md`](how-it-works.md).
 
 **Another package mod can take your override away.** Padding is chosen against everything installed when a package is built, so installing or removing one can make another stop winning, silently. `repad.py` replays the lookup over the whole mods folder, rebuilds whichever packages lost, and repeats until they all resolve or nothing improves. It needs a registry beside the mods folder saying how to rebuild each one, because the padding lives in each package's own repo — run it once to see the format.
 
@@ -93,4 +93,4 @@ docs/                      see below
 
 ## Style
 
-No classes, no `this`, no `var`, no arrow functions, no function declarations. One self-invoking module per file assigned onto the namespace, four-space indent, double quotes, braces on every `if`. The test kit enforces it on every app and on `src/` — see [`docs/style.md`](docs/style.md).
+No classes, no `this`, no `var`, no arrow functions, no function declarations. One self-invoking module per file assigned onto the namespace, four-space indent, double quotes, braces on every `if`. The test kit enforces it on every app and on `src/` — see [`style.md`](style.md).

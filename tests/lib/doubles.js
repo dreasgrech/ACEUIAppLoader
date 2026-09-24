@@ -83,7 +83,9 @@
     };
 
     const near = function (a, b, eps, what) {
-        if (Math.abs(a - b) > eps) { throw new Error((what || "") + " expected ~" + b + " got " + a); }
+        // written so that NaN fails: `Math.abs(NaN - b) > eps` is false, and a transform that was
+        // never written parses to NaN, so the old form passed when the code under test wrote nothing
+        if (!(Math.abs(a - b) <= eps)) { throw new Error((what || "") + " expected ~" + b + " got " + a); }
     };
 
     /** An element by id, created in <body> when the page does not carry it. */
