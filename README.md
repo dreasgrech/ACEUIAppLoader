@@ -98,6 +98,10 @@ Three ways to open it, all in **OPTIONS** at the top of the drawer:
 
 The drawer can also live on the **left edge**, be **pinned** open, fade in instead of sliding (if the slide stutters on your machine), and have its width, height, scale and opacity set. 
 
+<p align="center">
+<img width="2560" height="1440" alt="image" src="https://github.com/user-attachments/assets/dd56d4e9-b7ad-4843-81a4-cd79b44df6f2" />
+</p>
+
 **Second monitor to the right?** If your pointer flies off the screen before it reaches the edge, put the drawer on the left edge, widen the zone, or give it a hotkey; once the pointer is on another screen the game hears nothing from it (it reports the pointer at the top-left corner until it comes back — the drawer knows to ignore that), so no edge can catch it there. 
 
 **Triple screens (experimental):** the *Triple screen* switch puts the drawer at the edge of the centre screen rather than the far edge of the right one, and *Edge offset* moves it further in from there. It assumes the game's HUD page spans all three screens, which no triple-screen rig has confirmed yet; if the drawer lands in the wrong place, switch it off (the plain edge always works) and please open an issue with the `[drawer] built: … viewport …` line from your log — that one line settles it. The drawer is mouse-driven; a gamepad-only setup has no way to open it yet.
