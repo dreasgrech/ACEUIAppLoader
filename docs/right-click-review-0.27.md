@@ -59,7 +59,15 @@ The installed package is stale: `Saved Games\ACE\mods\...\ACEUIAppLoader.kspkg` 
 - **The probe (DEVELOPER APPS, Capabilities Probe): right-click a few times, left-click, drag something, then re-run and read the "right button" and "mouse buttons field" rows.** This answers the open questions below. Send the row texts back.
 - `python tools/check_ingame_log.py` for errors afterwards.
 
-### 3. Open questions only the game can answer (from the probe's "right button" row)
+In-game results so far (2026-09-25, logs `log-260925-182422.txt` and `log-260925-182627.txt`, locally installed build of the release code):
+- `check_ingame_log.py` RESULT OK: loader 0.27.0 on 6 pages, all 7 apps on the HUD, DOOM 0.6.1, no crashes beyond the usual driver exceptions; "Text transformation" 0 and "alignItems" 0.
+- 12 right-clicks on BetterDeltaBar and the probe each opened or closed the options once, in strict alternation: a right press reaches the page as `e.button === 2`.
+- The options window reopened at its stored spot every time (BetterDeltaBar) and was placed beside the app and stored (the probe); two drags of the probe ended and saved on release.
+- No setting changed and no control was pressed around the right-clicks.
+- Second session (`log-260925-183144.txt`, the step-by-step list): left clicks on a toggle right after a right-click all responded (BetterDeltaBar's attract toggle flipped six times); the window reopened at its dragged spot and came back open at it after Escape/resume; a right-click on the window closed it; PedalGraph's and DOOM's options opened and closed by right-click with DOOM running. Not visible in the log (they are never logged): section folding, DOOM's screen right-click and alt-tab, the drawer switch itself.
+- **The probe's answer** (full report, 18:37:11): "right button = yes -- 14 right-button press(es), cancelable true. e.button seen: 0, 2; right releases 14, left releases reported as another button 0, right clicks 0, clicks after a middle or right release 0, right clicks after their release's task 0, contextmenu events 0"; "mouse buttons field = yes -- e.buttons = 1 on the last press, 0 on the last release". The engine sends no click and no contextmenu for the right button, and releases report their button correctly: the click rule never acts in game (a guard only), and none of the accepted misreported-release cases below can occur. Recorded in `ACEGameInternals/docs/gameface-notes.md`.
+
+### 3. Open questions only the game can answer (answered 2026-09-25, above: no right-button click, releases report their button, `e.buttons` present)
 
 - Does the engine send a `click` for a right or middle press at all? (Chrome does not.) If it does not, the click rule never acts in game and is a harmless guard. If it does, the row says whether it arrives in the release's own task (the rule catches it) or later (a WARN: the rule cannot).
 - What `e.button` does a release report, and does a left release ever report another button (WARN: left drags would not end)?
