@@ -114,6 +114,19 @@ The drawer can also live on the **left edge**, be **pinned** open, fade in inste
 
 Each is a separate download with its own instructions.
 
+### [Better Delta Bar](https://github.com/dreasgrech/ACEBetterDeltaBar)
+<table>
+<tr>
+<td width="400" valign="top"><a href="https://github.com/dreasgrech/ACEBetterDeltaBar"><img width="400" alt="658412032-8e760704-70a7-414d-bc93-24cf0f78bc19" src="https://github.com/user-attachments/assets/eee9a138-e3d5-44a7-a8c8-66f721d73007" />
+</a></td>
+<td valign="top">
+A delta bar with two layouts (compact and full) that shows whether you are gaining or losing time right now.
+</td>
+</tr>
+</table>
+
+
+
 ### [Pedal Graph](https://github.com/dreasgrech/ACEPedalGraph)
 <table>
 <tr>
