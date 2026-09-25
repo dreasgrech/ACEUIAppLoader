@@ -29,7 +29,7 @@
 - Stored settings and folded sections are read from both stores key by key, so a setting newer than an app's HUD record keeps its value.
 - A damaged settings or folds record is ignored, and one app's cannot keep another's from being adopted.
 - `persist.writeHud` returns false when the HUD store's write throws, logged once per record; `save` and the loader's own writers keep the change in localStorage.
-- The click after a middle or right press on a panel or the drawer presses nothing there, nor where the release came, on every panel (only `data-noright` exempts a part).
+- The click after a middle or right press on a panel or the drawer presses nothing (only `data-noright` exempts a part).
 - `errorText` and `safely` no longer throw on an error that cannot be printed.
 - A browser's own drag and drop does not start inside a panel (except in a `data-nodrag` part), nor anywhere while one is being dragged.
 - Off the HUD page a window no longer waits for a HUD store before it shows.
@@ -37,7 +37,7 @@
 - 279 library browser cases.
 
 ### UI Capabilities Probe 0.6.0
-- New "right button" row: the buttons a press reports, whether a right press is cancelable, right releases and clicks, clicks in a middle or right release's task and after it, left releases reported as another button, and `contextmenu` events; WARN when a right click comes after its release's task.
+- New "right button" row: what right presses and releases report, whether a click or `contextmenu` follows, and a WARN if a right click comes too late; the mouse-buttons row also shows the last release's `e.buttons`.
 
 ## 0.26.0 — 2026-09-24
 
