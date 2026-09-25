@@ -87,6 +87,17 @@
         window.dispatchEvent(new Event("focus"));
         document.dispatchEvent(new MouseEvent("mouseout", { relatedTarget: null, bubbles: true }));
         window.dispatchEvent(new MouseEvent("mousedown", { clientX: 40, clientY: 30, buttons: 1, bubbles: true }));
+        CapabilitiesProbe.runAll(state);
+        eq(result("right button").status, "warn", "a left press only: no right button yet"); ok(result("right button").detail.indexOf("e.button seen: 0;") > 0, result("right button").detail);
+        window.dispatchEvent(new MouseEvent("contextmenu", { clientX: 40, clientY: 30, button: 2, bubbles: true }));
+        CapabilitiesProbe.runAll(state);
+        eq(result("right button").status, "warn", "a contextmenu alone is not a right press");
+        window.dispatchEvent(new MouseEvent("mousedown", { clientX: 40, clientY: 30, button: 2, buttons: 2, bubbles: true, cancelable: true }));
+        window.dispatchEvent(new MouseEvent("mouseup", { clientX: 40, clientY: 30, button: 2, bubbles: true }));
+        window.dispatchEvent(new MouseEvent("click", { clientX: 40, clientY: 30, button: 2, bubbles: true }));
+        window.dispatchEvent(new MouseEvent("mouseup", { clientX: 40, clientY: 30, button: 0, bubbles: true }));
+        window.dispatchEvent(new MouseEvent("mousedown", { clientX: 40, clientY: 30, buttons: 1, bubbles: true }));
+        eq(P.rightDowns, 1); eq(P.rightUps, 1, "only the right button's release"); eq(P.rightClicks, 1); eq(P.contextMenus, 1); eq(P.buttonsSeen.join(","), "0,2");
         eq(P.moves, 2); eq(P.maxX, W - 1); eq(P.edgeHits, 1, "the last column counts as the edge");
         eq(P.jumps, 1, "40 to the far edge in one sample is a jump, not a movement"); ok(P.lastJump.indexOf("40,30 to ") === 0, P.lastJump);
         eq(P.blurs, 1); eq(P.focuses, 1); eq(P.docOuts, 1, "a mouseout with no relatedTarget is the pointer leaving the page");
@@ -101,9 +112,145 @@
         eq(result("window blur / focus").status, "yes"); ok(result("window blur / focus").detail.indexOf("1 blur, 1 focus") === 0);
         eq(result("pointer leaving the document").status, "yes");
         eq(result("mouse buttons field").status, "yes"); ok(result("mouse buttons field").detail.indexOf("e.buttons = 1") === 0);
+        eq(result("right button").status, "yes"); eq(result("right button").detail, "1 right-button press(es), cancelable true. e.button seen: 0, 2; right releases 1, left releases reported as another button 0, right clicks 1, clicks after a middle or right release 1, right clicks after their release's task 0, contextmenu events 1");
+        // an engine with no e.button field: named, and not asked for another right-click
+        const kept = { seen: P.buttonsSeen, downs: P.rightDowns, ups: P.rightUps };
+        P.buttonsSeen = [null]; P.rightDowns = 0; P.rightUps = 0;
+        CapabilitiesProbe.runAll(state);
+        eq(result("right button").status, "no"); ok(result("right button").detail.indexOf("e.button seen: none (no field);") > 0, result("right button").detail);
+        P.buttonsSeen = [null, 0]; CapabilitiesProbe.runAll(state);
+        eq(result("right button").status, "warn"); ok(result("right button").detail.indexOf("e.button seen: none (no field), 0;") > 0, result("right button").detail);
+        // a real press with no button field, through the listener
+        P.buttonsSeen = []; P.rightDowns = 0;
+        const nofield = new MouseEvent("mousedown", { bubbles: true }); Object.defineProperty(nofield, "button", { value: undefined });
+        window.dispatchEvent(nofield);
+        eq(JSON.stringify(P.buttonsSeen), "[null]", "a press without e.button is recorded as null");
+        CapabilitiesProbe.runAll(state); eq(result("right button").status, "no", "and named NO");
+        window.dispatchEvent(new MouseEvent("mousedown", { button: 0, buttons: 2, bubbles: true }));
+        eq(P.rightDowns, 0, "e.buttons is not e.button");
+        const clicks = P.rightClicks; window.dispatchEvent(new MouseEvent("click", { button: 0, bubbles: true }));
+        eq(P.rightClicks, clicks, "a left click is not a right click");
+        window.dispatchEvent(new MouseEvent("mousedown", { button: 2, bubbles: true, cancelable: false }));
+        eq(P.rightCancelable, false, "a non-cancelable right press is recorded as such");
+        const ups = P.rightUps; P.rightDowns = 1; P.rightUps = 0; CapabilitiesProbe.runAll(state);
+        eq(result("right button").status, "warn", "right presses but no release reporting button 2"); ok(result("right button").detail.indexOf("releases cannot be told apart") > 0, result("right button").detail);
+        P.rightUps = ups;
+        // a left press whose release says it was the right button: every left drag in the loader would never end
+        const other = P.leftUpsAsOther;
+        P.held = [];
+        window.dispatchEvent(new MouseEvent("mousedown", { button: 0, bubbles: true })); window.dispatchEvent(new MouseEvent("mouseup", { button: 2, bubbles: true }));
+        eq(P.leftUpsAsOther, other + 1, "counted"); CapabilitiesProbe.runAll(state);
+        eq(result("right button").status, "warn", "a left release reported as the right"); ok(result("right button").detail.indexOf("left drags may not end") > 0, result("right button").detail);
+        P.leftUpsAsOther = other;
+        const dn = function (b) { window.dispatchEvent(new MouseEvent("mousedown", { button: b, bubbles: true })); };
+        const upb = function (b) { window.dispatchEvent(new MouseEvent("mouseup", { button: b, bubbles: true })); };
+        dn(2); dn(0); upb(2); upb(0);
+        eq(P.leftUpsAsOther, other, "a chord released right first is two right releases, not a misreport"); eq(P.held.length, 0);
+        upb(2);
+        eq(P.leftUpsAsOther, other, "a right release of a press made before the probe attached is not either");
+        const side = new MouseEvent("mousedown", { bubbles: true }); Object.defineProperty(side, "button", { value: undefined }); window.dispatchEvent(side); upb(2);
+        eq(P.leftUpsAsOther, other + 1, "a press with no field is the loader's left: released as the right, it counts");
+        dn(3); upb(1);
+        eq(P.leftUpsAsOther, other + 2, "so is a side button, released as the middle");
+        dn(0); upb(0); upb(2);
+        eq(P.leftUpsAsOther, other + 2, "a stray right release after a finished left click does not");
+        dn(0); const none = new MouseEvent("mouseup", { bubbles: true }); Object.defineProperty(none, "button", { value: undefined }); window.dispatchEvent(none);
+        eq(P.leftUpsAsOther, other + 2, "a release with no field ends a left drag in the loader: not counted"); eq(P.held.length, 0, "and lets everything go");
+        dn(1); upb(2);
+        eq(P.leftUpsAsOther, other + 2, "a middle press drags nothing: its release is not counted");
+        P.held = [];
+        dn(0); dn(0); upb(2); upb(2);
+        eq(P.leftUpsAsOther, other + 3, "a press repeated without a release is held once: one misreport, not two");
+        P.held = [];
+        dn(0); dn(3); upb(2); upb(2);
+        eq(P.leftUpsAsOther, other + 5, "a misreported release lets only its own press go: the other held left counts too");
+        P.held = [];
+        dn(2); dn(0); upb(2); upb(2);
+        eq(P.leftUpsAsOther, other + 6, "the right let go as the right; then the left, released as the right, counts");
+        P.held = [];
+        dn(1); dn(0); upb(2); upb(1);
+        eq(P.leftUpsAsOther, other + 7, "a left released as the right while the middle is held counts, and the middle's own release is its own");
+        const after = P.clicksAfterRight;
+        dn(2); upb(2); window.dispatchEvent(new MouseEvent("click", { button: 0, bubbles: true }));
+        eq(P.clicksAfterRight, after + 1, "a click in a right release's task counts whatever button it reports");
+        window.dispatchEvent(new MouseEvent("click", { button: 0, bubbles: true }));
+        eq(P.clicksAfterRight, after + 1, "one per release");
+        const realTimeout = window.setTimeout, timers = [];
+        window.setTimeout = function (fn, ms) { timers.push([fn, ms || 0]); return 0; };
+        try { dn(2); upb(2); } finally { window.setTimeout = realTimeout; }
+        eq(timers.length > 0 && timers.every(function (x) { return x[1] === 0; }), true, "the release's window closes at the end of its task");
+        timers.forEach(function (x) { x[0](); });
+        const was = P.clicksAfterRight;
+        window.dispatchEvent(new MouseEvent("click", { button: 0, bubbles: true }));
+        eq(P.clicksAfterRight, was, "a click after the release's task (a browser sends none for the right) is not the release's");
+        window.dispatchEvent(new MouseEvent("mousedown", { button: 0, bubbles: true })); window.dispatchEvent(new MouseEvent("mouseup", { button: 0, bubbles: true }));
+        window.dispatchEvent(new MouseEvent("click", { button: 0, bubbles: true }));
+        eq(P.clicksAfterRight, was, "nor is a left click's, in its own release's task");
+        const rightClicks = P.rightClicks;
+        window.dispatchEvent(new MouseEvent("click", { button: 2, bubbles: true }));
+        eq(P.clicksAfterRight, was, "nor a click reporting the right button with no right release before it");
+        CapabilitiesProbe.runAll(state);
+        eq(result("right button").status, "warn", "a right-button click outside its release's task: the loader's rule cannot catch it"); ok(result("right button").detail.indexOf("came after its release's task") > 0, result("right button").detail);
+        P.rightClicks = rightClicks; P.lateRightClicks = 0;
+        // the releases the loader's click rule arms on: a middle one, and a right one misreported as the left (no left press held)
+        const before = P.clicksAfterRight, late = P.lateRightClicks;
+        P.held = [];
+        dn(1); upb(1); window.dispatchEvent(new MouseEvent("click", { button: 1, bubbles: true }));
+        eq(P.clicksAfterRight, before + 1, "a click in a middle release's task is that release's");
+        dn(2); upb(0); window.dispatchEvent(new MouseEvent("click", { button: 2, bubbles: true }));
+        eq(P.clicksAfterRight, before + 2, "and in the task of a right release misreported as the left");
+        eq(P.lateRightClicks, late, "so its right click is not a late one");
+        P.rightClicks = rightClicks; P.lateRightClicks = 0; P.held = [];
+        // the loader lets its left press go on a blur: so does the probe's model, so a misreported right release after it arms
+        dn(0); window.dispatchEvent(new Event("blur"));
+        eq(P.held.length, 0, "a blur lets the held left press go");
+        const r = new MouseEvent("mouseup", { button: 0, buttons: 1, bubbles: true }); window.dispatchEvent(r);
+        eq(P.lastUpButtons, 1, "e.buttons on a release is recorded");
+        P.held = [];
+        window.dispatchEvent(new MouseEvent("mousedown", { button: 0, bubbles: true })); window.dispatchEvent(new MouseEvent("mouseup", { button: 0, bubbles: true }));
+        eq(P.leftUpsAsOther, other + 7, "a left release reported as the left is not");
+        P.leftUpsAsOther = other; P.held = [];
+        P.buttonsSeen = kept.seen; P.rightDowns = kept.downs; P.rightUps = kept.ups; CapabilitiesProbe.runAll(state);
         eq(result("cursor hidden by the HUD").status, "no", "no HUD here, so the cursor is shown");
         ok(P.fixture && P.fixture.strip.style.pointerEvents === "none" && P.fixture.strip.parentNode === document.body, "the pointer-events fixture is on the body with the inline form under test");
         eq(result("inline pointer-events: none").status, "yes", "a browser lets the hit through: " + result("inline pointer-events: none").detail);
+    });
+
+    t("a count and a press still held at detach, for the next attach to start afresh from", function () {
+        const P = CapabilitiesProbe.pointer;
+        window.dispatchEvent(new MouseEvent("mousedown", { button: 0, bubbles: true })); window.dispatchEvent(new MouseEvent("mouseup", { button: 2, bubbles: true }));
+        window.dispatchEvent(new MouseEvent("mousedown", { button: 0, bubbles: true }));
+        ok(P.leftUpsAsOther > 0, "a count"); eq(P.held.length, 1, "a press held");
+    });
+
+    t("pointer & screen: dragend drops the held left; a blur keeps a held right; a side button held makes a left release no misreport; the last release's e.buttons is shown; a late right click is left for the reset", function () {
+        const P = CapabilitiesProbe.pointer;
+        const dn = function (b) { window.dispatchEvent(new MouseEvent("mousedown", { button: b, bubbles: true })); };
+        const upb = function (b, buttons) { window.dispatchEvent(new MouseEvent("mouseup", { button: b, buttons: buttons || 0, bubbles: true })); };
+        const clk = function (b) { window.dispatchEvent(new MouseEvent("click", { button: b, bubbles: true })); };
+        const keptHeld = P.held.slice(), keptOther = P.leftUpsAsOther;
+        P.held = [];
+        dn(0); window.dispatchEvent(new Event("dragend"));
+        eq(P.held.length, 0, "a dragend lets the held left press go, as the loader's letGo does");
+        P.held = [];
+        const ups = P.rightUps;
+        dn(2); window.dispatchEvent(new Event("blur")); upb(2);
+        eq(P.rightUps, ups + 1, "a right press held across a blur is still matched by its release");
+        P.held = [];
+        clk(0);
+        const after = P.clicksAfterRight;
+        dn(3); upb(0); clk(0);
+        eq(P.clicksAfterRight, after, "a left release while a side button (the loader's left) is held arms nothing, as in the loader");
+        P.held = [];
+        const bare = new MouseEvent("mouseup", { button: 0, bubbles: true }); Object.defineProperty(bare, "buttons", { value: undefined }); window.dispatchEvent(bare);
+        eq(P.lastUpButtons, null, "a release with no e.buttons is recorded as none");
+        dn(0); upb(0, 0);
+        CapabilitiesProbe.runAll(state);
+        const row = state.results[rowIndex("mouse buttons field")];
+        ok(row.detail.indexOf(", 0 on the last release") > 0, "the mouse-buttons row shows the release's e.buttons: " + row.detail);
+        clk(0); clk(2);
+        ok(P.lateRightClicks > 0, "a late right click is counted, for the reset to clear");
+        P.held = keptHeld; P.leftUpsAsOther = keptOther;
     });
 
     t("re-run re-probes, log dumps the report, detach stops the loop", function () {
@@ -131,6 +278,16 @@
     window.engine = fakeEngine;
     const state2 = CapabilitiesProbe.attach(root2);
     const S = ACEUIAppLoader.settings;
+
+    t("attaching again starts the pointer counters afresh, the right button's with them", function () {
+        const P = CapabilitiesProbe.pointer;
+        eq(P.downs, 0); eq(P.rightDowns, 0); eq(P.rightUps, 0); eq(P.rightClicks, 0); eq(P.contextMenus, 0);
+        eq(P.buttonsSeen.length, 0); eq(P.rightCancelable, null); eq(P.leftUpsAsOther, 0); eq(P.held.length, 0); eq(P.clicksAfterRight, 0); eq(P.lateRightClicks, 0); eq(P.lastUpButtons, null);
+        CapabilitiesProbe.runAll(state2);
+        const row = state2.results[rowIndex("right button")];
+        eq(row.status, "warn"); ok(row.detail.indexOf("no mousedown yet") === 0, row.detail);
+    });
+
     const recLines = function () { return window.__log.filter(function (l) { return l.indexOf("[capabilities] rec: ") === 0; }); };
     const recCount = function (text) { return recLines().filter(function (l) { return l.indexOf(text) >= 0; }).length; };
 

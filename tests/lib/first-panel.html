@@ -1,0 +1,38 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<title>the first panel attached on a page</title>
+<!-- the click rule's roots are per page: only a page of its own starts with none listed, so only here can the first
+     root ever listed be seen to leave the rule when its panel is detached -->
+<style> body { margin: 0; background: #222; color: #ddd; font: 12px monospace; } #results { white-space: pre; } .absolutecenter { position: absolute; left: 0; top: 0; width: 800px; height: 600px; } </style>
+<script src="doubles.js"></script>
+<script src="lib.js"></script>
+</head>
+<body>
+<div class="absolutecenter" id="c"></div>
+<pre id="results"></pre>
+<div id="done" hidden></div>
+<script>
+(function () {
+    const H = window.__harness, t = H.t, eq = H.eq;
+    t("panel: the first panel attached on a page is unlisted by its detach (its controls press again after a right press)", function () {
+        const root = document.createElement("div"); document.getElementById("c").appendChild(root);
+        const panel = ACEUIAppLoader.panel.attach(root, { hudId: "hud_first", storageKey: "acetest.first", log: function () {} });
+        const b = document.createElement("button"); root.appendChild(b);
+        let pressed = 0;
+        b.addEventListener("click", function () { pressed += 1; });
+        const rclick = function () {
+            b.dispatchEvent(new MouseEvent("mousedown", { button: 2, bubbles: true, cancelable: true }));
+            window.dispatchEvent(new MouseEvent("mouseup", { button: 2, bubbles: true }));
+            b.dispatchEvent(new MouseEvent("click", { button: 2, bubbles: true, cancelable: true }));
+        };
+        rclick(); eq(pressed, 0, "attached: swallowed");
+        ACEUIAppLoader.panel.detach(panel);
+        rclick(); eq(pressed, 1, "detached: its own again");
+    });
+    H.finish(window.__warn.map(function (w) { return "WARN " + w; }));
+}());
+</script>
+</body>
+</html>

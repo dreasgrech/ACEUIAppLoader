@@ -643,6 +643,10 @@ ACEUIAppLoader.loader = (function () {
          *
          * `stop()` is safe to call twice. The handle carries `panel` for the rare app that
          * needs the panel itself -- to save a position by hand, say.
+         *
+         * A right-click on the panel opens the app's settings window beside it and shuts it
+         * again; `options.rightClick: false` turns that off for this panel (see
+         * ACEUIAppLoader.settings for the other ways).
          */
         const panelFor = function (root, onFrame, options) {
             const opts = options || {};
@@ -650,7 +654,13 @@ ACEUIAppLoader.loader = (function () {
                 hudId: HUD_ID_PREFIX + name,
                 storageKey: key(POSITION_SUFFIX),
                 log: log,
-                onSaved: opts.onSaved || null
+                onSaved: opts.onSaved || null,
+                // a right-click on the app opens its settings beside it, and shuts them (settings.rightClick says when).
+                // `{ rightClick: false }` here, the name define's layout uses, keeps only this panel out: the window's
+                // own right-click follows define
+                onRightClick: opts.rightClick === false ? null : function () {
+                    return Boolean(ACEUIAppLoader.settings) && ACEUIAppLoader.settings.rightClick(name, root);
+                }
             });
             const handle = { panel: panel, loop: null, stopped: false };
 

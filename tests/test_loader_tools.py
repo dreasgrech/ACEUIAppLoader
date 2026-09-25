@@ -252,7 +252,8 @@ class LibrarySourceTests(unittest.TestCase):
     def test_the_drawer_is_built_only_where_an_app_runs(self):
         js = self.files["ACEUIAppLoader.drawer.js"]
         self.assertIn("if (!belongsOn(apps)) {", js, "no hot zone over the stock menus' scrollbars on pages nothing loads on")
-        self.assertIn('const HUD_PAGE = "hud.html";', js)
+        self.assertIn("const HUD_PAGE = ACEUIAppLoader.HUD_PAGE;", js, "the HUD page is core's, shared with the panel module")
+        self.assertIn('const HUD_PAGE = "hud.html";', self.files["ACEUIAppLoader.core.js"])
 
     def test_the_input_reset_on_load_is_conditional(self):
         js = self.files["ACEUIAppLoader.input.js"]

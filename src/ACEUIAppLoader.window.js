@@ -19,7 +19,14 @@
  * have several. It is also the storage key, so a window remembers its own position:
  * prefix it with the app name (`"doom.help"`, `"telemetry.laps"`) to keep them apart.
  *
- * Options, all optional: `title`, `width`, `left`, `top`, `onClose`, `onOpen`.
+ * Options, all optional: `title`, `width`, `left`, `top` (or `right`, `bottom`: the spot measured
+ * from the other edge, for a window placed without knowing its own size; the opening spot only,
+ * as once shown it keeps its left and top and grows right and down), `onClose`, `onOpen`,
+ * `onRightClick(e)` (a right-button press on the window, returning true when it acted; see
+ * ACEUIAppLoader.panel), `placed` (true: left/top/right/bottom were chosen on purpose, so once
+ * laid out it is kept on screen and that spot stored, and the next placed open places it
+ * afresh). A stored position wins over all four; for a placed open, only one the player
+ * dragged the window to (stored marked `dragged`).
  *
  * Dragging and position persistence come from ACEUIAppLoader.panel, which settles a
  * restored position over a few frames, so an open window needs a frame loop. One loop is
@@ -47,6 +54,9 @@ ACEUIAppLoader.window = (function () {
     const DEFAULT_WIDTH = "17rem";
     const DEFAULT_LEFT = "30%";
     const DEFAULT_TOP = "20%";
+    const AUTO = "auto";
+    /** The frame's width, px a side: kept transparent, so the width a caller asks for plus twice this is what it covers. */
+    const BORDER_PX = 2;
     const Z_INDEX = "9100";
 
     const CLOSE_TEXT = "X";
@@ -367,7 +377,13 @@ ACEUIAppLoader.window = (function () {
         if (loop || !ACEUIAppLoader.loop) { return; }
 
         loop = ACEUIAppLoader.loop.start(function (now) {
-            ids().forEach(function (id) { ACEUIAppLoader.panel.update(open_windows[id].panel, now); });
+            // one window's trouble must not stop the rest being placed and shown
+            ids().forEach(function (id) {
+                // one closed by an earlier window's update this frame is simply gone
+                if (!open_windows[id]) { return; }
+
+                ACEUIAppLoader.safely("[window] " + id + " update", function () { ACEUIAppLoader.panel.update(open_windows[id].panel, now); });
+            });
         });
     };
 
@@ -437,13 +453,15 @@ ACEUIAppLoader.window = (function () {
 
         const root = make("div", {
             position: "absolute",
-            left: opts.left || DEFAULT_LEFT,
-            top: opts.top || DEFAULT_TOP,
+            left: opts.left || (opts.right ? AUTO : DEFAULT_LEFT),
+            top: opts.top || (opts.bottom ? AUTO : DEFAULT_TOP),
+            right: opts.left ? AUTO : (opts.right || AUTO),
+            bottom: opts.top ? AUTO : (opts.bottom || AUTO),
             width: opts.width || DEFAULT_WIDTH,
             display: "flex",
             flexDirection: "column",
             background: THEME.panelBg,
-            border: "2px solid transparent",
+            border: BORDER_PX + "px solid transparent",
             borderRadius: "0.25rem",
             color: THEME.ink,
             fontFamily: THEME.font,
@@ -499,7 +517,11 @@ ACEUIAppLoader.window = (function () {
             panel: ACEUIAppLoader.panel.attach(root, {
                 hudId: HUD_PREFIX + id + HUD_SUFFIX,
                 storageKey: LOCAL_PREFIX + id,
-                log: ACEUIAppLoader.log
+                log: ACEUIAppLoader.log,
+                onRightClick: opts.onRightClick || null,
+                // filled after it opens: shown once laid out, kept on screen as its content grows, and at its share of the screen on a resize
+                settle: true,
+                placed: opts.placed === true
             })
         };
 
@@ -545,6 +567,8 @@ ACEUIAppLoader.window = (function () {
         reopen: reopen,
         adopt: adopt,
         toggle: toggle,
+        container: container,
+        BORDER_PX: BORDER_PX,
         isOpen: isOpen,
         get: get,
         ids: ids

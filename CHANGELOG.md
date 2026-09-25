@@ -1,5 +1,44 @@
 # Changelog
 
+## 0.27.0 — 2026-09-25
+
+### Right-click for options
+- Right-click an app to open its options window beside it; right-click the app or the window again to close it.
+- The window opens beside the app each time, kept on screen; after Escape/resume it comes back where it was.
+- Drag the window somewhere and it opens there from then on.
+- A window spot saved by an earlier version no longer pins the window: the next right-click places it beside the app.
+- A window growing past the edge of the screen (a section unfolded) moves back inside, and back where it was when the section folds again.
+- A window keeps its share of the screen when the game window is resized.
+- Hiding the UI in the middle of a drag no longer moves the panel or window.
+- Drawer option "Right-click an app for its options" (on by default) turns it off for every app. While it is on, the drawer's own options close on a right-click too.
+- DOOM before 0.6.1 also opens its options on a right-click on its screen: update DOOM with the loader.
+- The middle and right buttons no longer drag, or end a drag of, panels, windows, scrollbars or order rows, nor open the drawer during a drag.
+- "Click at edge" opens the drawer on a left click only.
+- A click that moves a window by a pixel or two no longer counts as a drag; it goes back where it was.
+
+### For app authors
+- `define(app, specs, { rightClick: false })` turns it off for the app; `{ rightClickCloses: false }` keeps the window open on its own right-click.
+- A later `define` layout that leaves those two out keeps them.
+- `me.panel(root, onFrame, { rightClick: false })` keeps one panel out of it.
+- `data-noright` on an element (or the panel root) keeps its right-clicks, and `preventDefault` in a listener inside the panel keeps its right press.
+- New in settings: `open(app, near)`, `rightClick`, `rightClickable`, `rightClickWindow`, `besideSpot`, `stored`, `BESIDE_GAP_REM`, `WINDOW_WIDTH`.
+- New in window: options `right`, `bottom`, `onRightClick`, `placed`; `container()`, `BORDER_PX`. Windows show once laid out.
+- New in panel: options `onRightClick` (returns true when it acted), `placed`, `settle`; `NO_RIGHT_ATTR`, `DRAG_SLOP_PX`, `leftHeld()`, `guardClicks(root)`.
+- Panel: a position stored after a drag is marked `dragged` (`savePosition(panel, dragged)`, which stores nothing and returns null while the UI is hidden); `moveTo` returns the `{ x, y }` it wrote.
+- New in core: `otherButton(e)`, `RIGHT_BUTTON`, `HUD_PAGE`. New in drawer: `rightClickOn()`.
+- Stored settings and folded sections are read from both stores key by key, so a setting newer than an app's HUD record keeps its value.
+- A damaged settings or folds record is ignored, and one app's cannot keep another's from being adopted.
+- `persist.writeHud` returns false when the HUD store's write throws, logged once per record; `save` and the loader's own writers keep the change in localStorage.
+- The click after a middle or right press on a panel or the drawer presses nothing there, nor where the release came, on every panel (only `data-noright` exempts a part).
+- `errorText` and `safely` no longer throw on an error that cannot be printed.
+- A browser's own drag and drop does not start inside a panel (except in a `data-nodrag` part), nor anywhere while one is being dragged.
+- Off the HUD page a window no longer waits for a HUD store before it shows.
+- A redefine while the app's window is open redraws it: new controls, width and title.
+- 279 library browser cases.
+
+### UI Capabilities Probe 0.6.0
+- New "right button" row: the buttons a press reports, whether a right press is cancelable, right releases and clicks, clicks in a middle or right release's task and after it, left releases reported as another button, and `contextmenu` events; WARN when a right click comes after its release's task.
+
 ## 0.26.0 — 2026-09-24
 
 Includes 0.25.0, which was never published.

@@ -40,20 +40,43 @@ ACEUIAppLoader.persist = (function () {
         return hudElements() !== null;
     };
 
-    /** Stored entry for `id`, or null when the store is not ready or has none. */
+    /** Stored entry for `id`, or null when the store is not ready or has none. An own entry only: an id named like an Object member is just an id. */
     const readHud = function (id) {
         const elements = hudElements();
 
-        return elements && elements[id] ? elements[id] : null;
+        return elements && Object.prototype.hasOwnProperty.call(elements, id) && elements[id] ? elements[id] : null;
     };
 
-    /** Writes through the stock API; false when the HUD object is not there (yet). */
+    /** Records whose failed write was logged this page (no prototype: an id is just an id). */
+    const loggedFailures = Object.create(null);
+
+    /**
+     * Writes through the stock API; false when the HUD object is not there (yet), or when its
+     * write throws, which must not take the caller down: a window half opened, a setting half
+     * set. `save` and the loader's own writers also write localStorage, which keeps the change;
+     * writeHud alone does not. The stock store does not throw once it is readable (its current
+     * layout is "default" from the start), so a throw is a store not loaded yet, whose record the
+     * callers adopt or merge when it is.
+     * Logged once per record, and again after a write of it succeeds: a slider dragged against a
+     * broken store writes on every step.
+     */
     const writeHud = function (id, data) {
         const hud = window.HUD;
 
         if (!hud || typeof hud.elementModified !== "function") { return false; }
 
-        hud.elementModified(id, data);
+        try {
+            hud.elementModified(id, data);
+        } catch (e) {
+            if (!loggedFailures[id]) {
+                loggedFailures[id] = true;
+                ACEUIAppLoader.log("[persist] HUD store write of " + id + " failed: " + ACEUIAppLoader.errorText(e) + " (not in the HUD store)");
+            }
+
+            return false;
+        }
+
+        delete loggedFailures[id];
 
         return true;
     };

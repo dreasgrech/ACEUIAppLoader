@@ -13,6 +13,9 @@
  *     on a moving element is what this renderer charges for;
  *   - a drag listens on the window, not the thumb, or the pointer outruns it.
  *
+ * Only the left button drags the thumb or jumps the track: a right press there is the
+ * panel's (its options), and a middle or right release does not end a drag.
+ *
  *     const scroller = ACEUIAppLoader.scroll.attach({
  *         body: bodyElement,              // the clipped box (overflow: hidden)
  *         track: trackElement,            // the scrollbar gutter
@@ -153,8 +156,13 @@ ACEUIAppLoader.scroll = (function () {
             scrollBy(s, s.drag.startTop + (move.clientY - s.drag.startY) * maxScroll(s.body) / travel
                 - s.body.scrollTop);
         });
-        s.dragBag.on(window, "mouseup", function () { endDrag(s); });
-        s.dragBag.on(document, "mouseup", function () { endDrag(s); });
+        // the middle or right button let go during the drag: the left is still held, the drag goes on
+        const onUp = function (up) {
+            if (!ACEUIAppLoader.otherButton(up)) { endDrag(s); }
+        };
+
+        s.dragBag.on(window, "mouseup", onUp);
+        s.dragBag.on(document, "mouseup", onUp);
         e.preventDefault();
     };
 
@@ -162,6 +170,9 @@ ACEUIAppLoader.scroll = (function () {
     const onTrackDown = function (s, e) {
         const travel = s.track.clientHeight - s.thumbHeight;
         let ratio = 1;
+
+        // a middle or right press is not a jump or a thumb drag (a right one is the panel's right-click)
+        if (ACEUIAppLoader.otherButton(e)) { return; }
 
         if (e.target === s.thumb) {
             startDrag(s, e);

@@ -38,7 +38,7 @@ opened by OPTIONS in the header and applied live without rebuilding a row:
 |---|---|---|---|
 | Opening | `zone` | 2rem (1–10) | how near the edge the pointer must come |
 | | `extent` | full | full / upper / middle / lower third of the edge |
-| | `trigger` | hover | hover / click at edge / hotkey only (with no key bound, hover applies) |
+| | `trigger` | hover | hover / click at edge (a left click) / hotkey only (with no key bound, hover applies) |
 | | `dwell` | 0 ms | how long the pointer must stay in the zone; 0 because a flick to the edge has no dwell to give |
 | | `closeDelay` | 350 ms | |
 | | `toggleKey` | unbound | Delete while the control waits unbinds it |
@@ -52,6 +52,7 @@ opened by OPTIONS in the header and applied live without rebuilding a row:
 | | `scale` | 1 | one font-size on the panel; everything inside is in em |
 | | `opacity` | 0.92 | |
 | | `motion` | slide | slide / fade (moves nothing, for a machine where the slide stutters) / none |
+| Apps | `rightClick` | on | a right-click on an app opens its settings window, and shuts it (see "A settings page per app"); off for every app at once |
 
 While the pane is open the zone itself is drawn on the screen as a red box, so changing the
 zone, the extent, the side or the offset shows the area that opens the drawer rather than a
@@ -111,9 +112,7 @@ ACEUIAppLoader.drawer.registerOpener("telemetry", function () { myWindow.open();
 Declaring settings does this for you, so most apps never call it. If the opener throws,
 the failure is logged and the rest of the drawer keeps working.
 
-API: `open()`, `close()`, `toggle()`, `isVisible(name)`, `setVisible(name, on)`,
-`toggleApp(name)`, `registerOpener(name, open)`, `build(apps)`, `setPinned(on)`, `isPinned()`,
-`resetSettings()`, and for tests `metrics()`, `inZone(x, y)`, `inPanel(x, y)`, `applyLook()`.
+API: `open()`, `close()`, `toggle()`, `isVisible(name)`, `setVisible(name, on)`, `toggleApp(name)`, `registerOpener(name, open)`, `build(apps)`, `setPinned(on)`, `isPinned()`, `rightClickOn()`, `resetSettings()`, and for tests `metrics()`, `inZone(x, y)`, `inPanel(x, y)`, `applyLook()`.
 
 The drawer is styled with inline styles rather than a stylesheet: the loader reaches the
 page by overriding a game file, and every file the package adds changes which layouts win
@@ -148,6 +147,7 @@ ACEUIAppLoader.window.ids();
 | `discard(id)` / `discardAll()` | shut without forgetting, as a page going away does; the tests use it to play a reload |
 | `toggle(id, options)` | returns true when it ended up open |
 | `isOpen(id)` / `get(id)` / `ids()` | |
+| `container()` / `BORDER_PX` | the element windows are placed in (the HUD's `.absolutecenter`), and the width of their frame, for working out a spot |
 
 **Open windows survive the reload.** Which windows are open is kept in both stores, like
 the drawer's switches, so a settings window left open through Escape and resume is there
@@ -164,8 +164,7 @@ it was when opened again.
 The handle is `{ id, root, header, body, close(), setTitle(text), isOpen() }` — put your
 content in `body`.
 
-Options, all optional: `title`, `width`, `left`, `top`, `onOpen(win)`, `onClose(id)`. A
-hook that throws is logged and ignored rather than breaking the window.
+Options, all optional: `title`, `width`, `left`, `top` (or `right`, `bottom`, measured from the far edge: the opening spot only, as once shown the window keeps its left and top and grows right and down, pushed back at the screen's edge), `onOpen(win)`, `onClose(id)`, `onRightClick(e)` (a right press on the window, returning true when it acted), `placed` (the spot was chosen on purpose: once laid out it is kept on screen and stored, and the next placed open places it afresh). A stored position wins over all of them; for a `placed` open, only one the player dragged the window to (stored marked `dragged`). Every window stays hidden until it is laid out (a read does not force layout in the game; off the HUD page it does not wait for a HUD store) and is moved back inside the screen when its content grows past an edge, back to its own spot when the content shrinks again (not while the UI is hidden); a windowed resize puts it at the same share of the screen (where a reload puts a restored, placed or dragged window; one opened at rem, px or `right`/`bottom` spots with nothing stored keeps its share, while a reload measures those spots again). Nothing is stored while the UI is hidden, and a drag released then counts for nothing. A HUD store write that throws is logged and the change is in localStorage only; the stock store does not throw once it is loaded, so this is a store not there yet, whose record is adopted when it is. A hook that throws is logged and ignored rather than breaking the window.
 
 **The id is per window, not per app** — an app can have several. It is also the storage
 key, so each window remembers its own position; prefix it with the app name
@@ -203,14 +202,23 @@ goes for `me.remember` / `me.recall`, which keep a small value under the app's o
 both stores -- console filters, profiler bands, DOOM's open state -- so they, too, survive a
 game restart, not only the HUD reload.
 
-Declaring settings is all it takes for a way in to appear on that app's drawer row.
-Clicking it opens **that app's own settings window** — an `ACEUIAppLoader.window`, so it
-is a normal draggable panel with an [X] at its top right, whose position is remembered per
-app. It can also be driven directly: `settings.open(app)`, `.close(app)`, `.toggle(app)`,
-`.isOpen(app)`. Settings deliberately do *not*
-unfold inside the drawer: with more than a couple of apps an inline pane pushes every row
-below it down the list and the drawer stops being usable. An app with something more
-bespoke than a settings page registers what to open itself, with `registerOpener`.
+Declaring settings is all it takes for a way in to appear on that app's drawer row. Clicking it opens **that app's own settings window** — an `ACEUIAppLoader.window`, so it is a normal draggable panel with an [X] at its top right, whose position is remembered per app. It can also be driven directly: `settings.open(app, near)` (`near`, optional, an element to open it beside), `.close(app)`, `.toggle(app)`, `.isOpen(app)`. Settings deliberately do *not* unfold inside the drawer: with more than a couple of apps an inline pane pushes every row below it down the list and the drawer stops being usable. An app with something more bespoke than a settings page registers what to open itself, with `registerOpener`.
+
+A **right-click on the app itself** opens the same window, beside the app on the side with room for it, and a right-click on the app or on the window shuts it again. Once laid out it is kept on screen and that spot is stored: the reopen after a reload brings it back there, and the next right-click places it afresh beside the app wherever the app is by then. A position the player drags it to (stored marked `dragged`) wins from then on; a position stored without that mark, as every one before 0.27 was, does not. It comes with every panel made by `me.panel` in an app that declares settings; the log says `[settings] <app>: opened by a right-click on the app`. It opens the settings window only, never what an app registered with `registerOpener`. While the player's switch is on, the drawer's own settings pane closes on a right-click too.
+
+Only the left button drags a panel, a window, a scrollbar or an order row, and a middle or right release does not end a left drag. A window moved no more than two pixels is a click and goes back where it was; an app panel keeps any move. A right-click is a press reporting `e.button === 2`, as DOOM's right-click "use" is; the `contextmenu` event is not used (after a right press that opened or shut a window, or one made while the left button is held, a browser's menu is kept off; one that did nothing keeps it). The click that follows the release of a middle or right press made on a panel (outside `data-noright` parts) or on the app drawer presses nothing inside it, nor inside the panel the release came on, nor anywhere when the press shut the window it was on: an engine that sends one would otherwise press the control under the pointer too, so an app that wants a right-click uses the press, as DOOM does. That rule holds on every panel whatever the options below; only `data-noright` exempts a part from it. One press acts once, even on a root attached twice. A right press that a listener inside the panel handled with `preventDefault` (a listener on a child, or a capture listener; one added on the root after `me.panel` runs too late), or one tapped while the left button is held anywhere on the page, is left alone. Ways out, from the widest:
+
+| | how | what it stops |
+|---|---|---|
+| the player | the drawer's *Right-click an app for its options* (`rightClick`) | a right-click opening or shutting any window, for every app |
+| the app | `define(app, specs, { rightClick: false })` | a right-click opening or shutting the window, for this app |
+| the app | `me.panel(root, onFrame, { rightClick: false })` | a right-click on that panel opening or shutting the window; the window's own right-click follows `define` |
+| the app | `define(app, specs, { rightClickCloses: false })` | only the right-click on the window shutting it |
+| a part of the app | a `data-noright` attribute (`ACEUIAppLoader.panel.NO_RIGHT_ATTR`) on the element, or on the panel's root for all of it | a right-click inside it: DOOM's screen, where it is "use" |
+
+A redefine whose layout does not name `rightClick` or `rightClickCloses` keeps them as they were, so a later `define` for a wider pane cannot switch back on what the app turned off. A panel an app builds itself with `ACEUIAppLoader.panel.attach` gets it by passing `onRightClick: function () { return ACEUIAppLoader.settings.rightClick(name, root); }` (return whether it acted).
+
+`settings.rightClick(app, near)` is what the panel calls and returns whether it opened or shut the window, `settings.rightClickWindow(app)` is the window's own, `settings.rightClickable(app)` says whether a right-click on the app would act, and `settings.besideSpot(element, width)` is the placement: window options (`left` or `right`, `top` or `bottom`, in px) `BESIDE_GAP_REM` from the app, or null when there is nothing to go by (a hidden app, no drawer to say what 1rem is, or a width not in rem: define's `width` must be rem for the window to open beside the app, `WINDOW_WIDTH` when it gives none). `settings.stored(app)` reads an app's stored values, key by key (the HUD store's where it has the key, localStorage's for one it lacks), as a copy.
 
 Besides the value types there are two that carry no value: **`action`** is a button the
 app handles (`{ type: "action", label, button, press: fn }`) and **`info`** is a line the
@@ -249,11 +257,7 @@ ACEUIAppLoader.settings.define("betterdeltabar", [
 ], { width: "36rem", hints: "footer" });
 ```
 
-- `define`'s third argument sets the pane's **width** (the window opens at it) and puts the
-  **hints in a footer**: one line at the foot of the pane showing the hint of whatever row
-  the pointer is over, with the reset button beside it, instead of a line under every row.
-  Its **`title`** names the window for a surface that is not an app row (the drawer's own
-  pane reads "App drawer settings").
+- `define`'s third argument sets the pane's **width** (the window opens at it) and puts the **hints in a footer**: one line at the foot of the pane showing the hint of whatever row the pointer is over, with the reset button beside it, instead of a line under every row. Its **`title`** names the window for a surface that is not an app row (the drawer's own pane reads "App drawer settings"). It also carries the two right-click switches, `rightClick` and `rightClickCloses` (above).
 - A `range` with **`unit`** shows it after the number ("2 rem", "350 ms"). A `key` with the
   value `""` is **unbound**: the control says so (or the spec's own `empty` word), the hotkey
   never fires, and pressing Delete while the control waits for a key stores `""`.

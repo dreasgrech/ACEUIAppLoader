@@ -36,6 +36,15 @@
  *     ACEUIAppLoader.settings.toggle("devconsole");
  *     ACEUIAppLoader.settings.isOpen("devconsole");
  *
+ * A right-click on the app's own panel (anything made with `me.panel`) opens the window
+ * beside it, and a right-click on the app or on the window shuts it again. An app turns
+ * that off with `define(app, specs, { rightClick: false })`, keeps the right-click that opens
+ * but not the one on the window that shuts with `{ rightClickCloses: false }`, and keeps a
+ * part of its panel that uses the right button itself out of it with a `data-noright`
+ * attribute on that element (on the panel's root, it covers the whole panel). The player can
+ * switch it off for every app in the drawer's OPTIONS. A redefine whose layout does not name
+ * the two switches keeps them as they were.
+ *
  * A page with more than a handful of rows is a wall; `section` breaks it up. A section
  * spec is a header that every spec after it belongs to, until the next one. Clicking
  * the header folds the section and the loader remembers which are folded, per app. A
@@ -125,6 +134,11 @@ ACEUIAppLoader.settings = (function () {
     /** The settings window is an ACEUIAppLoader.window; this is its id and default width (define's `width` overrides). */
     const WINDOW_ID_SUFFIX = ".settings";
     const WINDOW_WIDTH = "17rem";
+    /** A window opened by a right-click sits this far from the app, on the side with room for it. */
+    const BESIDE_GAP_REM = 0.5;
+    const REM_SUFFIX = "rem";
+    /** The layout keys that are behaviour, not looks: a redefine that leaves them out keeps them. */
+    const RIGHT_CLICK_KEYS = ["rightClick", "rightClickCloses"];
 
     const THEME = ACEUIAppLoader.dom.THEME;
 
@@ -135,6 +149,7 @@ ACEUIAppLoader.settings = (function () {
 
     const css = ACEUIAppLoader.dom.css;
     const make = ACEUIAppLoader.dom.make;
+    const clear = ACEUIAppLoader.dom.clear;
 
     const hudId = function (app) {
         return HUD_PREFIX + app + HUD_SUFFIX;
@@ -176,9 +191,35 @@ ACEUIAppLoader.settings = (function () {
         persist.save(hudId(app), localKey(app), held.values);
     };
 
-    /** Stored values for an app, HUD store first because it outlives the session. */
+    /** A key a stored record may carry (a hand-edited store) that must not become a merged object's prototype. */
+    const PROTO_KEY = "__proto__";
+
+    /** A stored record, or an empty one for anything that is not a plain object. */
+    const recordOf = function (value) {
+        return value && typeof value === "object" && !Array.isArray(value) ? value : {};
+    };
+
+    /**
+     * Two stores' records, key by key: the HUD store's where it has the key (it outlives the
+     * session), localStorage's for a key it lacks (a record written before that key existed), so
+     * what is read does not depend on which store turned up first. A copy, lists included: the
+     * HUD one is the store's own record. A damaged record adds nothing.
+     */
+    const mergeStores = function (local, hud) {
+        const merged = {};
+
+        [recordOf(local), recordOf(hud)].forEach(function (record) {
+            Object.keys(record).forEach(function (key) {
+                if (key !== PROTO_KEY) { merged[key] = Array.isArray(record[key]) ? record[key].slice() : record[key]; }
+            });
+        });
+
+        return merged;
+    };
+
+    /** Stored values for an app, both stores merged (see `mergeStores`). */
     const stored = function (app) {
-        return persist.readHud(hudId(app)) || persist.readLocal(localKey(app)) || {};
+        return mergeStores(persist.readLocal(localKey(app)), persist.readHud(hudId(app)));
     };
 
     /**
@@ -194,10 +235,9 @@ ACEUIAppLoader.settings = (function () {
         return localKey(app) + SECTIONS_SUFFIX;
     };
 
+    /** The folds, both stores merged like the values (see `mergeStores`). */
     const storedFolds = function (app) {
-        const folds = persist.readHud(foldsHudId(app)) || persist.readLocal(foldsLocalKey(app));
-
-        return folds && typeof folds === "object" ? folds : {};
+        return mergeStores(persist.readLocal(foldsLocalKey(app)), persist.readHud(foldsHudId(app)));
     };
 
     const isCollapsed = function (app, key) {
@@ -353,20 +393,22 @@ ACEUIAppLoader.settings = (function () {
      * far. An app whose settings the player already changed this session has a newer
      * value than the disk does, so its values are written *to* the store instead, the way
      * the drawer treats a switch flipped before the store existed. Apps that declare
-     * later read the store directly in `define`. Returns the apps whose values changed.
+     * later read both stores, key by key, in `define` (see `stored`). The folds are taken the
+     * same way, key by key. A record that is not a plain object (a damaged store) is ignored.
+     * Returns the keys whose values changed.
      */
     const adoptOne = function (app) {
         const held = entry(app);
-        const fromHud = persist.readHud(hudId(app));
+        const fromHud = recordOf(persist.readHud(hudId(app)));
         const changed = [];
 
         if (!held) { return changed; }
 
         if (held.touched) {
             save(app);
-        } else if (fromHud) {
+        } else if (Object.keys(fromHud).length > 0) {
             held.specs.forEach(function (spec) {
-                if (VALUE_TYPES.indexOf(spec.type) < 0 || !(spec.key in fromHud)) { return; }
+                if (VALUE_TYPES.indexOf(spec.type) < 0 || !Object.prototype.hasOwnProperty.call(fromHud, spec.key)) { return; }
 
                 const next = coerce(spec, fromHud[spec.key]);
 
@@ -379,17 +421,26 @@ ACEUIAppLoader.settings = (function () {
             if (changed.length > 0) { persist.writeLocal(localKey(app), held.values); }
         }
 
-        const folds = persist.readHud(foldsHudId(app));
+        const folds = recordOf(persist.readHud(foldsHudId(app)));
+        let foldsChanged = false;
 
         if (held.touchedFolds) {
             persist.save(foldsHudId(app), foldsLocalKey(app), held.collapsed);
-        } else if (folds && typeof folds === "object") {
-            held.collapsed = folds;
-            persist.writeLocal(foldsLocalKey(app), folds);
+        } else {
+            // into the folds define read (a copy): a fold only localStorage has is kept, as define keeps it
+            Object.keys(folds).forEach(function (key) {
+                if (key !== PROTO_KEY && held.collapsed[key] !== folds[key]) {
+                    held.collapsed[key] = folds[key];
+                    foldsChanged = true;
+                }
+            });
+
+            if (foldsChanged) { persist.writeLocal(foldsLocalKey(app), held.collapsed); }
         }
 
+        if (changed.length > 0 || foldsChanged) { held.repaint.forEach(function (fn) { fn(); }); }
+
         if (changed.length > 0) {
-            held.repaint.forEach(function (fn) { fn(); });
             changed.forEach(function (key) { notify(app, key, held.values[key]); });
             ACEUIAppLoader.log("[settings] " + app + ": adopted from the HUD store: " + changed.join(", "));
         }
@@ -400,8 +451,9 @@ ACEUIAppLoader.settings = (function () {
     const adopt = function () {
         const adopted = {};
 
+        // one app's trouble must not keep the apps after it from their stored values
         Object.keys(declared).forEach(function (app) {
-            const changed = adoptOne(app);
+            const changed = ACEUIAppLoader.safely("[settings] " + app + " adopt", function () { return adoptOne(app); }) || [];
 
             if (changed.length > 0) { adopted[app] = changed; }
         });
@@ -922,8 +974,10 @@ ACEUIAppLoader.settings = (function () {
             }
         };
 
-        const finish = function () {
-            if (!drag.key) { return; }
+        // also the pane's teardown, with no event: that ends it too
+        const finish = function (e) {
+            // the middle or right button let go during the drag: the left is still held, the drag goes on
+            if (!drag.key || ACEUIAppLoader.otherButton(e)) { return; }
 
             const done = drag.order;
 
@@ -936,7 +990,8 @@ ACEUIAppLoader.settings = (function () {
         };
 
         const start = function (key, e) {
-            if (drag.key) { return; }
+            // a middle or right press on a row is not a reorder (a right one is the window's own right-click)
+            if (drag.key || ACEUIAppLoader.otherButton(e)) { return; }
 
             const box = list.getBoundingClientRect();
 
@@ -1136,16 +1191,80 @@ ACEUIAppLoader.settings = (function () {
         return ACEUIAppLoader.window.close(windowId(app));
     };
 
-    const open = function (app) {
+    /** What 1rem is, in px, as the drawer reads it (it knows what the stock publishes); 0 without one, and then no spot is worked out. */
+    const pxPerRem = function () {
+        const drawer = ACEUIAppLoader.drawer;
+
+        return drawer && typeof drawer.pxPerRem === "function" ? drawer.pxPerRem() : 0;
+    };
+
+    const px = function (n) { return Math.round(n) + "px"; };
+
+    /**
+     * Where a window `width` wide (a rem length, as define's layout gives it; any other unit
+     * gives no spot, and the window opens where a plain open would) goes beside
+     * `anchor`: on the side of it with more room, when the window fits there, its top lined up
+     * with the app's in the upper half of the screen and its bottom in the lower half; with no
+     * room on either side, under the app (over it in the lower half). As window options, the
+     * lower-half and left-side spots measured from the far edge, so the window's own height
+     * and width need not be known; once it is laid out the panel module keeps it on screen
+     * and stores it (`placed`). Null when there is nothing to go by (a hidden app).
+     */
+    const besideSpot = function (anchor, width) {
+        if (!anchor || typeof anchor.getBoundingClientRect !== "function") { return null; }
+
+        const box = anchor.getBoundingClientRect();
+        const frame = ACEUIAppLoader.window.container().getBoundingClientRect();
+        const rem = pxPerRem();
+        const gap = BESIDE_GAP_REM * rem;
+        const text = String(width);
+        // the window's frame is on top of the width asked for
+        const wide = text.slice(-REM_SUFFIX.length) === REM_SUFFIX ? parseFloat(text) * rem + 2 * ACEUIAppLoader.window.BORDER_PX : 0;
+
+        if (!(box.width > 0) || !(frame.width > 0) || !(rem > 0) || !(wide > 0)) { return null; }
+
+        const roomLeft = box.left - frame.left;
+        const roomRight = frame.right - box.right;
+        const upper = box.top + box.height / 2 - frame.top < frame.height / 2;
+        const spot = {};
+
+        if (Math.max(roomLeft, roomRight) >= wide + gap) {
+            if (roomRight >= roomLeft) { spot.left = px(box.right - frame.left + gap); } else { spot.right = px(frame.right - box.left + gap); }
+
+            if (upper) { spot.top = px(box.top - frame.top); } else { spot.bottom = px(frame.bottom - box.bottom); }
+
+            return spot;
+        }
+
+        spot.left = px(ACEUIAppLoader.clamp(roomLeft, 0, Math.max(0, frame.width - wide)));
+
+        if (upper) { spot.top = px(box.bottom - frame.top + gap); } else { spot.bottom = px(frame.bottom - box.top + gap); }
+
+        return spot;
+    };
+
+    /**
+     * Open the app's window. `near` (optional) is an element to open it beside, each time: a
+     * position the player dragged the window to is restored over it all the same.
+     */
+    const open = function (app, near) {
         const held = entry(app);
 
         if (!held) { return null; }
 
-        const win = ACEUIAppLoader.window.open(windowId(app), {
+        const width = held.layout.width || WINDOW_WIDTH;
+        const spot = near ? besideSpot(near, width) : null;
+        const options = {
             title: titleFor(app) + " settings",
-            width: held.layout.width || WINDOW_WIDTH,
-            onClose: function () { teardown(app); }
-        });
+            width: width,
+            onClose: function () { teardown(app); },
+            onRightClick: function () { return rightClickWindow(app); },
+            placed: Boolean(spot)
+        };
+
+        if (spot) { Object.assign(options, spot); }
+
+        const win = ACEUIAppLoader.window.open(windowId(app), options);
 
         if (win && !win.body.childNodes.length) { render(app, win.body); }
 
@@ -1166,13 +1285,82 @@ ACEUIAppLoader.settings = (function () {
     };
 
     /**
+     * Whether a right-click opens and shuts this app's window: it has settings, it did not
+     * declare `rightClick: false`, and the player has not switched it off in the drawer.
+     */
+    const rightClickable = function (app) {
+        const held = entry(app);
+        const drawer = ACEUIAppLoader.drawer;
+
+        if (!held || !held.specs.length || held.layout.rightClick === false) { return false; }
+
+        if (drawer && typeof drawer.rightClickOn === "function") { return drawer.rightClickOn(); }
+
+        return true;
+    };
+
+    /**
+     * A right-click on the app's panel (me.panel wires it): the window opens beside `near`,
+     * or shuts when it is open. Returns true when it did either.
+     */
+    const rightClick = function (app, near) {
+        if (!rightClickable(app)) { return false; }
+
+        if (isOpen(app)) {
+            close(app);
+            ACEUIAppLoader.log("[settings] " + app + ": closed by a right-click on the app");
+
+            return true;
+        }
+
+        open(app, near);
+        ACEUIAppLoader.log("[settings] " + app + ": opened by a right-click on the app");
+
+        return true;
+    };
+
+    /** A right-click on the window itself shuts it, unless the app declared `rightClickCloses: false`. */
+    const rightClickWindow = function (app) {
+        const held = entry(app);
+
+        if (!rightClickable(app) || held.layout.rightClickCloses === false || !isOpen(app)) { return false; }
+
+        close(app);
+        ACEUIAppLoader.log("[settings] " + app + ": closed by a right-click on its window");
+
+        return true;
+    };
+
+    /**
+     * define's layout: a new one replaces the last, except that the right-click switches carry
+     * over when it does not name them, so a redefine for a wider pane cannot quietly switch back
+     * on what the app turned off.
+     */
+    const layoutFor = function (next, last) {
+        if (!next) { return last || {}; }
+
+        const out = Object.assign({}, next);
+
+        if (last) {
+            RIGHT_CLICK_KEYS.forEach(function (key) {
+                if (!Object.prototype.hasOwnProperty.call(out, key) && Object.prototype.hasOwnProperty.call(last, key)) { out[key] = last[key]; }
+            });
+        }
+
+        return out;
+    };
+
+    /**
      * Declare an app's settings. Returns the live values object: stored values are already
      * merged in, so an app can read it immediately. Calling again replaces the schema.
      *
      * `layout`, optional, is how the pane is drawn: `{ width: "36rem" }` for a wider window
      * (sections with `columns: 2` or `3` and segmented choices want the room) and
      * `{ hints: "footer" }` to show hints in one line at the foot, for the row under the
-     * pointer, instead of a line under every row. Left out, a redefine keeps the last one.
+     * pointer, instead of a line under every row. `{ rightClick: false }` turns right-click
+     * off for this app, opening and shutting alike; `{ rightClickCloses: false }` stops only a
+     * right-click on the window shutting it (see the top of this file). Left out, a redefine
+     * keeps the last one.
      */
     const define = function (app, specs, layout) {
         // a mistyped `type` used to drop the control with nothing said, which reads in
@@ -1189,18 +1377,27 @@ ACEUIAppLoader.settings = (function () {
 
             return usable;
         });
+        const last = entry(app);
+        // an app that declares in its attach, switched off and on in the drawer with its window open: the old
+        // controls let go of what they bound while the entry that lists it is still here, and are drawn again after.
+        // Before the stored values are read, so what letting go commits (an order drag under way) is read back
+        const redraw = Boolean(last) && isOpen(app);
+
+        if (redraw) { teardown(app); }
+
         const saved = stored(app);
         const values = {};
 
         list.forEach(function (spec) {
-            if (VALUE_TYPES.indexOf(spec.type) >= 0) { values[spec.key] = coerce(spec, saved[spec.key]); }
+            // own keys only: a spec named like an Object member ("toString") must not read the member as its value
+            if (VALUE_TYPES.indexOf(spec.type) >= 0) { values[spec.key] = coerce(spec, Object.prototype.hasOwnProperty.call(saved, spec.key) ? saved[spec.key] : undefined); }
         });
 
         declared[app] = {
             specs: list,
             values: values,
-            layout: layout || (declared[app] && declared[app].layout) || {},
-            listeners: (declared[app] && declared[app].listeners) || [],
+            layout: layoutFor(layout, last ? last.layout : null),
+            listeners: (last && last.listeners) || [],
             collapsed: storedFolds(app),
             touched: false,     // set() or reset() ran this session: newer than the disk
             touchedFolds: false,
@@ -1218,6 +1415,17 @@ ACEUIAppLoader.settings = (function () {
         // window module remembers it was open, and this is how it is opened again
         if (ACEUIAppLoader.window && typeof ACEUIAppLoader.window.reopen === "function") {
             ACEUIAppLoader.window.reopen(windowId(app), function () { open(app); });
+        }
+
+        if (redraw) {
+            const win = ACEUIAppLoader.window.get(windowId(app));
+
+            if (win) {
+                win.root.style.width = declared[app].layout.width || WINDOW_WIDTH;
+                win.setTitle(titleFor(app) + " settings");
+                clear(win.body);
+                render(app, win.body);
+            }
         }
 
         return values;
@@ -1245,6 +1453,13 @@ ACEUIAppLoader.settings = (function () {
         open: open,
         close: close,
         toggle: toggle,
+        rightClick: rightClick,
+        rightClickable: rightClickable,
+        rightClickWindow: rightClickWindow,
+        besideSpot: besideSpot,
+        stored: stored,
+        BESIDE_GAP_REM: BESIDE_GAP_REM,
+        WINDOW_WIDTH: WINDOW_WIDTH,
         isOpen: isOpen,
         windowId: windowId,
         hudId: hudId,

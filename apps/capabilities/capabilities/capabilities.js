@@ -185,6 +185,18 @@ const CapabilitiesProbe = (function () {
         docOuts: 0,         // mouseout on document with no relatedTarget: the pointer left the page
         downs: 0,
         lastButtons: null,  // e.buttons on the last press, or null when the engine has no such field
+        lastUpButtons: null,  // e.buttons on the last release (whether a button still held is reported), or null
+        buttonsSeen: [],    // every e.button a press has reported, in the order first seen
+        rightDowns: 0,      // presses with e.button 2: the right button, which the loader's right-click for options needs
+        rightUps: 0,        // releases with e.button 2: what the drawer's held-button flag and DOOM's "use" wait for
+        held: [],           // e.button of every press not yet released (null for no field)
+        leftUpsAsOther: 0,  // releases of a left press (as the loader counts it) that reported the middle or right button: a left drag would never end
+        rightClicks: 0,     // click events with e.button 2
+        clicksAfterRight: 0,  // click events in the task of a release the loader's click rule arms on (a middle or right one, or one with no left press held), whatever button they report
+        afterRight: false,  // such a release's task is running
+        lateRightClicks: 0,  // click events with e.button 2 outside such a task: ones the loader's click rule cannot keep off a control
+        rightCancelable: null,  // e.cancelable on the last right press: whether an app's preventDefault can mark it handled
+        contextMenus: 0,    // contextmenu events: whether the engine sends one for a right-click at all
         jumps: 0,           // samples more than JUMP_FRACTION of the screen from the previous one
         lastJump: "",
         fixture: null       // the pointer-events fixture, see buildPointerFixture
@@ -202,6 +214,10 @@ const CapabilitiesProbe = (function () {
     const JUMP_FRACTION = 0.25;
     /** The stock HUD's class for a cursor it has hidden (BaseHud.mouseToggler). */
     const HUD_HIDE_MOUSE_CLASS = "hide-mouse";
+    /** MouseEvent.button for the middle and right buttons, and what a press with no button field is listed as. */
+    const MIDDLE_BUTTON = 1;
+    const RIGHT_BUTTON = 2;
+    const NO_BUTTON_TEXT = "none (no field)";
     const FALLBACK_PX_PER_REM = 16;
     const PX_DECIMALS = 2;
 
@@ -218,6 +234,18 @@ const CapabilitiesProbe = (function () {
         pointer.docOuts = 0;
         pointer.downs = 0;
         pointer.lastButtons = null;
+        pointer.lastUpButtons = null;
+        pointer.buttonsSeen = [];
+        pointer.rightDowns = 0;
+        pointer.rightUps = 0;
+        pointer.held = [];
+        pointer.leftUpsAsOther = 0;
+        pointer.rightClicks = 0;
+        pointer.clicksAfterRight = 0;
+        pointer.afterRight = false;
+        pointer.lateRightClicks = 0;
+        pointer.rightCancelable = null;
+        pointer.contextMenus = 0;
         pointer.jumps = 0;
         pointer.lastJump = "";
     };
@@ -240,6 +268,70 @@ const CapabilitiesProbe = (function () {
     const onPointerDown = function (e) {
         pointer.downs += 1;
         pointer.lastButtons = typeof e.buttons === "number" ? e.buttons : null;
+
+        const button = typeof e.button === "number" ? e.button : null;
+
+        if (pointer.buttonsSeen.indexOf(button) < 0) { pointer.buttonsSeen.push(button); }
+
+        if (pointer.held.indexOf(button) < 0) { pointer.held.push(button); }
+
+        if (button === RIGHT_BUTTON) {
+            pointer.rightDowns += 1;
+            pointer.rightCancelable = typeof e.cancelable === "boolean" ? e.cancelable : null;
+        }
+    };
+
+    /** The loader's left button: anything but the middle and right (a side button, a press with no field). */
+    const isLeft = function (button) {
+        return button !== MIDDLE_BUTTON && button !== RIGHT_BUTTON;
+    };
+
+    /**
+     * The loader ends a left drag on a left release only: one reported as another button would leave it stuck.
+     * A release is matched to the press it ends; one reporting a middle or right button that is not held while a
+     * left one is, is that left one misreported. Any other unmatched release (a press from before the probe
+     * attached, a release with no field) lets everything go, as the loader's drags do.
+     */
+    const onPointerUp = function (e) {
+        const button = typeof e.button === "number" ? e.button : null;
+        const at = pointer.held.indexOf(button);
+
+        pointer.lastUpButtons = typeof e.buttons === "number" ? e.buttons : null;
+        const left = pointer.held.filter(isLeft);
+
+        // what follows in this task is the release's own click, if the engine sends one: the releases the loader's
+        // click rule arms on, a middle or right one, or any with no left press held (a right one misreported)
+        if ((!isLeft(button) || left.length === 0) && window.setTimeout) {
+            pointer.afterRight = true;
+            window.setTimeout(function () { pointer.afterRight = false; }, 0);
+        }
+
+        if (at >= 0) {
+            if (button === RIGHT_BUTTON) { pointer.rightUps += 1; }
+
+            pointer.held.splice(at, 1);
+
+            return;
+        }
+
+        if (!isLeft(button) && left.length > 0) {
+            pointer.leftUpsAsOther += 1;
+            pointer.held.splice(pointer.held.indexOf(left[0]), 1);
+
+            return;
+        }
+
+        pointer.held = [];
+    };
+
+    const onPointerClick = function (e) {
+        if (e.button === RIGHT_BUTTON) { pointer.rightClicks += 1; }
+
+        if (e.button === RIGHT_BUTTON && !pointer.afterRight) { pointer.lateRightClicks += 1; }
+
+        if (pointer.afterRight) { pointer.clicksAfterRight += 1; }
+
+        pointer.afterRight = false;
     };
 
     const onDocumentOut = function (e) {
@@ -250,7 +342,15 @@ const CapabilitiesProbe = (function () {
     const watchPointer = function (bag) {
         bag.on(window, "mousemove", onPointerMove);
         bag.on(window, "mousedown", onPointerDown, true);
-        bag.on(window, "blur", function () { pointer.blurs += 1; });
+        bag.on(window, "contextmenu", function () { pointer.contextMenus += 1; }, true);
+        bag.on(window, "mouseup", onPointerUp, true);
+        bag.on(window, "click", onPointerClick, true);
+        bag.on(window, "blur", function () {
+            pointer.blurs += 1;
+            // the loader lets its left press go on a blur (panel.js letGo): so does this model of it
+            pointer.held = pointer.held.filter(function (b) { return !isLeft(b); });
+        });
+        bag.on(window, "dragend", function () { pointer.held = pointer.held.filter(function (b) { return !isLeft(b); }); }, true);
         bag.on(window, "focus", function () { pointer.focuses += 1; });
         bag.on(document, "mouseleave", function () { pointer.docLeaves += 1; });
         bag.on(document, "mouseout", onDocumentOut);
@@ -384,7 +484,46 @@ const CapabilitiesProbe = (function () {
 
         if (pointer.lastButtons === null) { return { status: NO, detail: "e.buttons undefined on mousedown: track held buttons yourself" }; }
 
-        return { status: YES, detail: "e.buttons = " + pointer.lastButtons + " on the last press" };
+        const onRelease = pointer.lastUpButtons === null ? "" : ", " + pointer.lastUpButtons + " on the last release";
+
+        return { status: YES, detail: "e.buttons = " + pointer.lastButtons + " on the last press" + onRelease };
+    };
+
+    /** Whether a right-click reaches the page as a press with e.button 2 (what the loader's right-click for options rests on). */
+    const rightButtonCheck = function () {
+        const listed = pointer.buttonsSeen.map(function (b) { return b === null ? NO_BUTTON_TEXT : String(b); });
+        const seen = "e.button seen: " + (listed.length ? listed.join(", ") : "none") + "; right releases " + pointer.rightUps
+            + ", left releases reported as another button " + pointer.leftUpsAsOther
+            + ", right clicks " + pointer.rightClicks + ", clicks after a middle or right release " + pointer.clicksAfterRight
+            + ", right clicks after their release's task " + pointer.lateRightClicks + ", contextmenu events " + pointer.contextMenus;
+
+        if (pointer.lateRightClicks) {
+            // the loader's click rule holds only until the release's task is over: a click the engine sends later passes
+            return { status: WARN, detail: "a right-button click came after its release's task: the loader's click rule cannot keep it off a control. " + seen };
+        }
+
+        if (pointer.leftUpsAsOther) {
+            // the loader tells a left release by its button: one reported as the middle or right would never end a drag
+            return { status: WARN, detail: "a left release reported the middle or right button: left drags may not end. " + seen };
+        }
+
+        if (pointer.rightDowns && !pointer.rightUps) {
+            // releases that do not say which button leave anything that reads the release (DOOM's "use") unable to tell
+            return { status: WARN, detail: pointer.rightDowns + " right-button press(es) but no release reported e.button 2: releases cannot be told apart. " + seen };
+        }
+
+        if (pointer.rightDowns) {
+            return { status: YES, detail: pointer.rightDowns + " right-button press(es), cancelable " + pointer.rightCancelable + ". " + seen };
+        }
+
+        if (!pointer.downs) { return { status: WARN, detail: "no mousedown yet: right-click somewhere, then re-run" }; }
+
+        // presses came, none said which button: asking for another right-click would not help
+        if (pointer.buttonsSeen.length === 1 && pointer.buttonsSeen[0] === null) {
+            return { status: NO, detail: "e.button is not populated on a press: nothing can tell the right button. " + seen };
+        }
+
+        return { status: WARN, detail: "no press with e.button 2 yet: right-click somewhere, then re-run. " + seen };
     };
 
     const pointerEventsCheck = function () {
@@ -1050,6 +1189,7 @@ const CapabilitiesProbe = (function () {
             f("window blur / focus", focusCheck),
             f("pointer leaving the document", leaveCheck),
             f("mouse buttons field", buttonsCheck),
+            f("right button", rightButtonCheck),
             f("inline pointer-events: none", pointerEventsCheck)
         ] },
         { cat: "Telemetry models (live)", checks: [

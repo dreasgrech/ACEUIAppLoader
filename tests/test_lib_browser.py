@@ -14,7 +14,7 @@ sys.path.insert(0, os.path.join(ROOT, "tools"))
 import headless  # noqa: E402
 
 HARNESS = os.path.join(ROOT, "tests", "lib", "harness.html")
-MIN_CASES = 127
+MIN_CASES = 270
 # the library loading on a fresh page, twice over: after Escape and resume (localStorage full,
 # no HUD store yet) and after a game restart (localStorage empty, the HUD store arriving later);
 # module state is per page, so these cannot be played inside the one big harness
@@ -24,6 +24,8 @@ RELOAD_DISK = os.path.join(ROOT, "tests", "lib", "reload-disk.html")
 RELOAD_OPS = os.path.join(ROOT, "tests", "lib", "reload-ops.html")
 # and a reload that came before the HUD store was adopted, with changes made on the load before it
 RELOAD_PENDING = os.path.join(ROOT, "tests", "lib", "reload-pending.html")
+# the click rule's first root, which only a page of its own starts with
+FIRST_PANEL = os.path.join(ROOT, "tests", "lib", "first-panel.html")
 
 
 class LibraryBrowserTests(unittest.TestCase):
@@ -41,6 +43,9 @@ class LibraryBrowserTests(unittest.TestCase):
 
     def test_changes_made_before_the_store_survive_a_reload(self):
         headless.check_harness(self, RELOAD_PENDING, 2)
+
+    def test_the_first_panel_on_a_page_leaves_the_click_rule(self):
+        headless.check_harness(self, FIRST_PANEL, 1)
 
 
 if __name__ == "__main__":

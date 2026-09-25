@@ -37,10 +37,11 @@
  * so a hidden cursor no longer means aiming blind.
  *
  * All of that is the player's to set, in the drawer's own settings pane (OPTIONS in its
- * header): zone width, which part of the edge, hover or click or hotkey, dwell, close delay,
+ * header): zone width, which part of the edge, hover or a left click or hotkey, dwell, close delay,
  * the hotkey, pinning, the hint, the side, an offset for triple screens, the panel's width,
- * insets, scale and opacity, and whether it animates. Values are clamped again when they are
- * applied, so no stored value can put the drawer where it cannot be reached or cover the HUD.
+ * insets, scale and opacity, whether it animates, and whether a right-click on an app opens
+ * its options. Values are clamped again when they are applied, so no stored value can put the
+ * drawer where it cannot be reached or cover the HUD.
  *
  * Styling note: everything here is styled with inline styles rather than a stylesheet.
  * The loader ships as a single overriding file inside a package whose layout is delicate
@@ -104,7 +105,8 @@ ACEUIAppLoader.drawer = (function () {
         zone: "zone", extent: "extent", trigger: "trigger", dwell: "dwell", closeDelay: "closeDelay",
         toggleKey: "toggleKey", pinned: "pinned", hint: "hint",
         side: "side", triple: "triple", offset: "offset", width: "width", top: "top", bottom: "bottom",
-        scale: "scale", opacity: "opacity", motion: "motion"
+        scale: "scale", opacity: "opacity", motion: "motion",
+        rightClick: "rightClick"
     };
 
     const SIDE_RIGHT = "right";
@@ -238,7 +240,7 @@ ACEUIAppLoader.drawer = (function () {
      * loads, and a zone there sat over the stock menus' own scrollbars at the right edge
      * and opened a drawer whose every row said "not-for-this-page".
      */
-    const HUD_PAGE = "hud.html";
+    const HUD_PAGE = ACEUIAppLoader.HUD_PAGE;
     const LOADED_STATUS = "loaded";
 
     /** One palette for every surface the loader draws; see ACEUIAppLoader.dom. */
@@ -272,7 +274,7 @@ ACEUIAppLoader.drawer = (function () {
             hint: "which part of the edge opens it: the whole height or one third of it" },
         { key: KEY.trigger, type: "choice", label: "Open with", value: TRIGGER_HOVER, options: [TRIGGER_HOVER, TRIGGER_CLICK, TRIGGER_HOTKEY], segmented: true,
             labels: { hover: "Hover", click: "Click at edge", hotkey: "Hotkey only" },
-            hint: "hover: reaching the zone opens it; click: a press in the zone; hotkey only: the key below (with no key bound, hover applies)" },
+            hint: "hover: reaching the zone opens it; click: a left click in the zone; hotkey only: the key below (with no key bound, hover applies)" },
         { key: KEY.dwell, type: "range", label: "Dwell", value: DWELL_MS, min: 0, max: DWELL_MAX_MS, step: DELAY_STEP_MS, unit: "ms", digits: DIGITS_MS,
             // shown whenever hover is the trigger in force, which "hotkey only" with no key bound also is (triggerNow)
             when: function (app) {
@@ -306,7 +308,10 @@ ACEUIAppLoader.drawer = (function () {
         { key: KEY.opacity, type: "range", label: "Opacity", value: OPACITY_DEFAULT, min: OPACITY_MIN, max: OPACITY_MAX, step: OPACITY_STEP, digits: DIGITS_FACTOR },
         { key: KEY.motion, type: "choice", label: "Motion", value: MOTION_SLIDE, options: [MOTION_SLIDE, MOTION_FADE, MOTION_NONE], segmented: true,
             labels: { slide: "Slide", fade: "Fade", none: "None" },
-            hint: "how it appears: slide in from the edge, fade in place, or at once. Fade moves nothing, if the slide stutters on your machine" }
+            hint: "how it appears: slide in from the edge, fade in place, or at once. Fade moves nothing, if the slide stutters on your machine" },
+        { key: "apps", type: "section", label: "Apps", columns: SECTION_COLUMNS },
+        { key: KEY.rightClick, type: "toggle", label: "Right-click an app for its options", value: true,
+            hint: "a right-click on an app opens its options beside it (or where you last dragged them); another, on the app or the options, shuts them; a right-click on this pane shuts it too. For every app that has options and does not turn it off itself" }
     ];
 
     /** Defaults by key, read from SPECS so there is one copy of each. */
@@ -320,6 +325,7 @@ ACEUIAppLoader.drawer = (function () {
         built: false,
         open: false,
         panel: null,
+        unguardClicks: null,
         header: null,
         list: null,
         count: null,
@@ -344,6 +350,7 @@ ACEUIAppLoader.drawer = (function () {
         introTimer: 0,
         intro: false,           // the hint is showing at full strength after a build
         buttonHeld: false,      // a mouse button is down: a drag to the edge is not a request to open
+        leftDown: false,        // the left one is: a middle or right release meanwhile lets nothing go
         opts: null,             // the settings as last read, a plain object (see readOptions)
         look: null,             // the metrics last applied, for the log and the tests
         wired: false,           // the window listeners are on (once per page)
@@ -952,6 +959,17 @@ ACEUIAppLoader.drawer = (function () {
         return Boolean(options().pinned);
     };
 
+    /** The player's switch for a right-click on an app opening its options (ACEUIAppLoader.settings.rightClick asks). */
+    const rightClickOn = function () {
+        const settings = ACEUIAppLoader.settings;
+
+        // apps attach as their scripts load and the drawer declares its settings in build(), once they all have:
+        // until then the stored choice, not the default, or a player who switched it off is overruled meanwhile
+        if (settings && !settings.specs(DRAWER_APP).length) { return settings.stored(DRAWER_APP)[KEY.rightClick] !== false; }
+
+        return options().rightClick !== false;
+    };
+
     const paintPin = function () {
         if (!state.pin) { return; }
 
@@ -1024,6 +1042,7 @@ ACEUIAppLoader.drawer = (function () {
             logJump(last, x, y);
             // the pointer went elsewhere and came back: a button released out there never reached us
             state.buttonHeld = false;
+            state.leftDown = false;
         }
 
         last.x = x;
@@ -1099,6 +1118,9 @@ ACEUIAppLoader.drawer = (function () {
      */
     const onDown = function (e) {
         state.buttonHeld = true;
+
+        if (!ACEUIAppLoader.otherButton(e)) { state.leftDown = true; }
+
         cancelDwell();
 
         if (!state.panel || ACEUIAppLoader.hudHidden()) { return; }
@@ -1106,7 +1128,8 @@ ACEUIAppLoader.drawer = (function () {
         const m = metrics();
 
         if (!state.open) {
-            if (triggerNow() === TRIGGER_CLICK && inZone(e.clientX, e.clientY, m)) { open(); }
+            // a left click: a right-click there is an app's, a middle one nobody's
+            if (triggerNow() === TRIGGER_CLICK && !ACEUIAppLoader.otherButton(e) && inZone(e.clientX, e.clientY, m)) { open(); }
 
             return;
         }
@@ -1116,13 +1139,20 @@ ACEUIAppLoader.drawer = (function () {
         if (!inPanel(e.clientX, e.clientY, m) && !inZone(e.clientX, e.clientY, m) && !isPinned() && !paneOpen()) { close(); }
     };
 
-    const onUp = function () {
+    const onUp = function (e) {
+        // a middle or right release while the left is still held (a panel being dragged) lets nothing go. The drawer's
+        // own record of the left, which its jump and blur recovery clears, so a left release lost off screen does not
+        // leave hover dead after the next right-click
+        if (ACEUIAppLoader.otherButton(e) && state.leftDown) { return; }
+
         state.buttonHeld = false;
+        state.leftDown = false;
     };
 
     /** The window lost focus (if the engine ever says so): the pointer is elsewhere. */
     const onBlur = function () {
         state.buttonHeld = false;
+        state.leftDown = false;
 
         if (state.open && !isPinned()) { closeSoon(); }
     };
@@ -1550,6 +1580,9 @@ ACEUIAppLoader.drawer = (function () {
         container.appendChild(panel);
 
         state.panel = panel;
+        // a right-click's click on a row would switch its app off: the click rule covers the drawer as it does a panel
+        if (state.unguardClicks) { state.unguardClicks(); }
+        state.unguardClicks = ACEUIAppLoader.panel ? ACEUIAppLoader.panel.guardClicks(panel) : null;
         state.header = header;
         state.count = count;
         state.hint = hint;
@@ -1641,6 +1674,7 @@ ACEUIAppLoader.drawer = (function () {
         resetSettings: resetSettings,
         setPinned: setPinned,
         isPinned: isPinned,
+        rightClickOn: rightClickOn,
         isVisible: isVisible,
         applyStored: applyStored,
         adoptHudStore: adoptHudStore,

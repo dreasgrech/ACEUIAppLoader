@@ -2,13 +2,13 @@
 
 A capability probe for the Assetto Corsa EVO HUD. One of the loader's **developer apps**: it ships inside `ACEUIAppLoader.kspkg`, and the app drawer keeps it behind the `DEVELOPER APPS` switch that is off by default.
 
-It exists to answer one question before anything ambitious gets built on the HUD: **what can JavaScript actually do inside the game's Cohtml/V8?** The game runs V8 9.4 started with `--noexpose_wasm`, in a Cohtml sandbox with no Web Audio and no video demuxers — so the browser is not a reliable guide. This runs 137 feature detections in the real in-game engine and reports each as **yes / no / partial / warn**, both in a draggable panel and in the game log.
+It exists to answer one question before anything ambitious gets built on the HUD: **what can JavaScript actually do inside the game's Cohtml/V8?** The game runs V8 9.4 started with `--noexpose_wasm`, in a Cohtml sandbox with no Web Audio and no video demuxers — so the browser is not a reliable guide. This runs 138 feature detections in the real in-game engine and reports each as **yes / no / partial / warn**, both in a draggable panel and in the game log.
 
 The findings themselves belong in the [`ACEGameInternals`](https://github.com/dreasgrech/ACEGameInternals) notes; this is the instrument that produces them, and the place to prototype the next capability worth leaning on — the pixel path ACEDOOM uses, a track-map renderer, networked overlays.
 
 ## What it probes
 
-Twelve categories, 137 checks:
+Twelve categories, 138 checks:
 
 - **Language & engine** — WebAssembly (expected absent), `new Function`/eval, async
   functions, Promise, BigInt, Proxy, typed arrays, TextEncoder, `structuredClone`, Intl.
@@ -33,12 +33,7 @@ Twelve categories, 137 checks:
   `customElements`, `getComputedStyle`, `matchMedia`.
 - **Input & events** — `PointerEvent`, `KeyboardEvent`, `WheelEvent`, `TouchEvent`,
   `EventTarget`, `navigator.getGamepads` and `Gamepad`.
-- **Pointer & screen** — the viewport in css px, px per rem (`window.FontSize`, written by
-  the stock `resize()`), `window.screen` and `devicePixelRatio`, whether the HUD has hidden
-  the cursor right now, and counters the probe fills from the moment it attaches: mousemove
-  (last and highest x), the pointer at the right edge, window `blur`/`focus`, `mouseleave` and
-  `mouseout` on the document, `e.buttons` on a press, and a hit test of an inline
-  `pointer-events: none`. See below for how to read them.
+- **Pointer & screen** — the viewport in css px, px per rem (`window.FontSize`, written by the stock `resize()`), `window.screen` and `devicePixelRatio`, whether the HUD has hidden the cursor right now, and counters the probe fills from the moment it attaches: mousemove (last and highest x), the pointer at the right edge, window `blur`/`focus`, `mouseleave` and `mouseout` on the document, `e.buttons` on a press, the right button and `contextmenu`, and a hit test of an inline `pointer-events: none`. See below for how to read them.
 - **Gameface bridge & telemetry** — `window.engine` and its `on`/`off`/`trigger`/
   `call`/`BindingsReady`, `cohtml`, and a scan of the `Model*` telemetry globals the
   game publishes on `window` (so you can see, live, exactly which models exist).
@@ -64,12 +59,7 @@ the log for the full record.
 
 ### The pointer and the screen
 
-Two things about the pointer cannot be learned from the stock bundle or from a browser, and
-the app drawer (which opens from a screen edge) needs both: **does any event fire when the
-pointer leaves the game window** — onto a second monitor — and **is the cursor confined to
-the game in fullscreen**. The *Pointer & screen* rows are counters that fill while the probe
-is attached, so the answers take one deliberate session: open the probe, push the mouse hard
-off the right edge and keep moving it, alt-tab away and back, click once, then **Re-run**.
+Two things about the pointer cannot be learned from the stock bundle or from a browser, and the app drawer (which opens from a screen edge) needs both: **does any event fire when the pointer leaves the game window** — onto a second monitor — and **is the cursor confined to the game in fullscreen**. The *Pointer & screen* rows are counters that fill while the probe is attached, so the answers take one deliberate session: open the probe, push the mouse hard off the right edge and keep moving it, alt-tab away and back, click once and right-click once (anywhere; on the probe it also opens its options), then **Re-run**.
 
 - *pointer at the right edge*: if the count of `x = width − 1` kept rising while you pushed
   further, the cursor is confined and every flick to the edge lands in the drawer's zone. If
@@ -81,8 +71,9 @@ off the right edge and keep moving it, alt-tab away and back, click once, then *
   hand produces. The engine reports the pointer at `0,0` as it leaves the game window and at
   its real place as it comes back (measured 2026-09-23, recorded in gameface-notes.md); the
   last jump's coordinates show it.
-- *mouse buttons field*: whether `e.buttons` is populated on a press (the stock never reads
+- *mouse buttons field*: whether `e.buttons` is populated on a press (and what the last release reported) (the stock never reads
   it; a surface that wants to know a button is held must otherwise track it).
+- *right button*: whether a right-click reaches the page as a press with `e.button` 2, which the loader's right-click for an app's options rests on; whether that press is cancelable (an app's `preventDefault` marking it handled rests on it); the buttons seen so far ("none (no field)" when a press carries no `e.button`); how many right-button releases and clicks arrived (the drawer's held-button flag and DOOM's "use" wait for the release), and how many clicks came in the task of a middle or right release (or one with no left press held) whatever button they reported (what the loader's click rule swallows on its panels); how many left presses were released as the middle or right button; and how many `contextmenu` events (the loader does not rely on them). WARN when right presses come with no release reporting `e.button` 2 (releases cannot be told apart), or when a left press (as the loader counts it: any button but the middle and right) is released as the middle or right one (the loader ends a left drag on a left release only), or when a right-button click comes after its release's task (the loader's click rule holds only for that task).
 - *inline pointer-events: none*: the stock stylesheets use the property; this hit-tests the
   inline form, which the drawer's edge hint relies on, beside a control pair that has the
   property from the stylesheet. If neither lets the hit through, the check says so rather

@@ -66,7 +66,7 @@ me.toggle(function () { return options.toggleKey; });   // shows and hides the a
 | `hudId`, `storageKey`, `key(suffix)` | `hud_<name>`, `ace<name>.pos`, `ace<name>.<suffix>`: the HUD layout id and storage keys for `ACEUIAppLoader.panel` / `.persist` |
 | `base`, `loaded` | the app folder's URL — whichever root it came from, bundled or installed; whether this loader instance loaded it |
 | `developer` | whether its `app.json` calls it a developer tool |
-| `panel(root, onFrame)` | the whole widget lifecycle: a draggable panel that remembers its position plus the frame loop that drives it. Returns a handle with `panel`, `loop` and `stop()` (safe to call twice) |
+| `panel(root, onFrame, options)` | the whole widget lifecycle: a draggable panel that remembers its position plus the frame loop that drives it. `options` (optional): `onSaved(position)`, `rightClick: false`. Returns a handle with `panel`, `loop` and `stop()` (safe to call twice) |
 | `scale(root, {min, max, step, onScale})` | panel scale: one `font-size` in rem on the root, everything inside in em. Applies it, clamps it, follows the app's own `scale` setting when it declared one — so a −/+ button and the settings window move the same value — and remembers it either way. Returns `{ value, set, nudge, bounds, stop }` |
 | `scaleSpec({label, value, min, max, step})` | the settings spec for that scale, to drop into the app's own `define` call |
 | `recall(key, fallback)`, `remember(key, value)`, `forget(key)` | a small value under the app's own key, for state that must survive the HUD reload on Escape/resume |
@@ -97,6 +97,8 @@ Five things every panel in this project needed, and that two or three apps had e
 | keep a small value across the Escape/resume reload | `me.remember(key, value)` / `me.recall(key, fallback)` |
 
 The last one matters most: a declared setting is stored in both stores, drawn in the app's own window, reachable from the app drawer, and announced to the app when it changes. A hand-built toggle is markup, a class, a click handler and a storage key that you then have to keep in step — which is what PedalGraph's attract mode was until it became four lines of `define`.
+
+A panel made with `me.panel` also opens your settings window on a right-click and shuts it on another. If your app uses the right button itself, put `data-noright` on that element (DOOM's screen does; on your root it covers the whole panel): only that keeps the click after a right release from being swallowed. To keep the right-click from opening your window, pass `{ rightClick: false }` as the third argument of `define` to turn it off for the app (as the third argument of `me.panel` it keeps just that panel out); `{ rightClickCloses: false }` in `define` keeps only the right-click on the window from shutting it. See [ui.md](ui.md#a-settings-page-per-app).
 
 ## Naming your own work
 

@@ -51,7 +51,7 @@ The alternate zip contains the **same loader**, packed a different way, so that 
 2. If the drawer never appears **and** the newest log in `Saved Games\ACE\Logs` has no `ACEUIAppLoader` lines, delete `mods\ACEUIAppLoader.kspkg` and install the alternate zip the same way.
 3. If the drawer disappears again after you install another mod, swap back.
 
-The loader's first log line tells you which one you have: `loader 0.26.0 on /hud.html (64 records)` is the normal zip, `(32 records)` the alternate. Nothing else differs; apps, settings and everything on this page work the same with either.
+The loader's first log line tells you which one you have: `loader 0.27.0 on /hud.html (64 records)` is the normal zip, `(32 records)` the alternate. Nothing else differs; apps, settings and everything on this page work the same with either.
 </details>
 
 </td></tr>
@@ -97,6 +97,8 @@ Three ways to open it, all in **OPTIONS** at the top of the drawer:
 - **A click at the edge**, for those who would rather nothing opened by itself.
 
 The drawer can also live on the **left edge**, be **pinned** open, fade in instead of sliding (if the slide stutters on your machine), and have its width, height, scale and opacity set. 
+
+**Right-click an app** on the screen to open its options beside it (or where you last dragged them); right-click the app or its options again to close them. Don't want that? Switch off *Right-click an app for its options* in the drawer's OPTIONS. An app can also turn it off for itself, or for a part of it that uses the right button (DOOM's screen, where right-click is "use", from DOOM 0.6.1: update DOOM along with the loader).
 
 <p align="center">
 <img width="2560" height="1440" alt="image" src="https://github.com/user-attachments/assets/dd56d4e9-b7ad-4843-81a4-cd79b44df6f2" />
@@ -193,7 +195,7 @@ The file carries two of the game's own pages from the version it was built for. 
 First, open the newest file in `%USERPROFILE%\Saved Games\ACE\Logs` and search it for `ACEUIAppLoader`. **Lines found** means the loader ran and the problem is with an app: see the next section. **No lines at all** means the game never used the file, for one of these reasons:
 
 1. **The game updated.** By far the most common cause. See above.
-2. **The file is in the wrong place.** It must be exactly `Saved Games\ACE\mods\ACEUIAppLoader.kspkg`, with that name. The usual way this goes wrong is Windows' *Extract All*, which puts everything in a folder named after the zip (`ACE\ACEUIAppLoader-0.26.0-…\mods\…`); drag the `mods` folder itself into `Saved Games\ACE` instead.
+2. **The file is in the wrong place.** It must be exactly `Saved Games\ACE\mods\ACEUIAppLoader.kspkg`, with that name. The usual way this goes wrong is Windows' *Extract All*, which puts everything in a folder named after the zip (`ACE\ACEUIAppLoader-0.27.0-…\mods\…`); drag the `mods` folder itself into `Saved Games\ACE` instead.
 3. **Two copies.** Exactly one `ACEUIAppLoader…kspkg` in `mods` — an older copy left beside the new one (`ACEUIAppLoader (1).kspkg`, say) can win instead of it.
 4. **Your other mods.** With several other `.kspkg` mods installed, the game very occasionally uses its own file instead of ours. That is what the **`…-alternate.zip`** is for: delete `ACEUIAppLoader.kspkg`, install the alternate zip the same way, and read [why there are two zips](#why-there-are-two-zips) if you want to know what is going on.
 

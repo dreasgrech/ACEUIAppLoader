@@ -13,13 +13,20 @@
 const ACEUIAppLoader = (function () {
 
     /** Loader/library version -- keep in step with the VERSION file at the repo root. */
-    const VERSION = "0.26.0";
+    const VERSION = "0.27.0";
 
     /** Prefix of every loader log line; the game log and check_ingame_log.py grep for it. */
     const LOG_PREFIX = "[ACEUIAppLoader]";
 
     /** The stock HUD toggles this class on <body> when the HUD is hidden. */
     const HUD_HIDDEN_CLASS = "hide-hud";
+
+    /** The page the stock HUD layout store lives on; other pages never get one. */
+    const HUD_PAGE = "hud.html";
+
+    /** MouseEvent.button for the middle and the right button. The stock UI never reads it; DOOM's right-click "use" does. */
+    const MIDDLE_BUTTON = 1;
+    const RIGHT_BUTTON = 2;
 
     const PERCENT_SCALE = 100;
 
@@ -65,17 +72,25 @@ const ACEUIAppLoader = (function () {
         return Math.round(value * PERCENT_SCALE) + "%";
     };
 
+    /** What errorText says of a thrown value that cannot be printed. */
+    const UNPRINTABLE_ERROR = "(an error that cannot be printed)";
+
     /**
      * What to print when something throws. `(e && e.message ? e.message : e)` was written
      * out in eight places across the library before this existed, and a caught error that
      * is not an Error at all (a string, a DOMException) still has to read sensibly.
      */
     const errorText = function (e) {
-        if (!e) { return String(e); }
+        // called inside catch blocks: a thrown value that cannot be printed must not throw again from there
+        try {
+            if (!e) { return String(e); }
 
-        if (e.message) { return e.name ? e.name + ": " + e.message : e.message; }
+            if (e.message) { return e.name ? e.name + ": " + e.message : String(e.message); }
 
-        return String(e);
+            return String(e);
+        } catch (ignore) { /* an object with no string form, a getter that throws */ }
+
+        return UNPRINTABLE_ERROR;
     };
 
     /**
@@ -122,6 +137,15 @@ const ACEUIAppLoader = (function () {
         return location.pathname.split("/").pop() || "";
     };
 
+    /**
+     * An event (a press or a release) of the middle or the right button. Anything else counts as the left one: what
+     * the engine reports for the left button is unmeasured, and a press with no button field
+     * at all must still drag and click as it always did.
+     */
+    const otherButton = function (e) {
+        return Boolean(e) && (e.button === MIDDLE_BUTTON || e.button === RIGHT_BUTTON);
+    };
+
     /** Walk up from `node` to `root` looking for an attribute; null when absent. */
     const closestWithAttribute = function (node, attribute, root) {
         let current = node;
@@ -139,6 +163,8 @@ const ACEUIAppLoader = (function () {
         VERSION: VERSION,
         LOG_PREFIX: LOG_PREFIX,
         HUD_HIDDEN_CLASS: HUD_HIDDEN_CLASS,
+        HUD_PAGE: HUD_PAGE,
+        RIGHT_BUTTON: RIGHT_BUTTON,
         page: pageName(),
         log: log,
         logger: logger,
@@ -158,6 +184,7 @@ const ACEUIAppLoader = (function () {
         errorText: errorText,
         safely: safely,
         hudHidden: hudHidden,
+        otherButton: otherButton,
         closestWithAttribute: closestWithAttribute
     };
 }());
